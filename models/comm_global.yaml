@@ -1,0 +1,7 @@
+connection:
+  ip: 192.168.0.50
+  port: 2000
+handshake:
+  enabled: true
+  ping: PING
+  reply: PONG

@@ -1,0 +1,20 @@
+password: '1234'
+locked: false
+ui:
+  frame_scale: 0.6
+scanner:
+  test_timeout_s: 10
+qr:
+  timeout_s: 6.0
+  scene_timeout_s: 3.0
+  min_agree: 2
+  trigger_wait_s: 60
+  max_tries: 10
+  retry_delay_s: 1.5
+  save_failed: true
+mes_upload:
+  max_width: 1024
+  jpeg_quality: 75
+  include_camera_view: true
+retention:
+  days: 2
