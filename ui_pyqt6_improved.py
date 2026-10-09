@@ -1214,6 +1214,14 @@ class CameraFeed:
         try:
             self._cams = _init_cameras()
             self._cams[0].get_things(exposure=34005, work_mode="Exposure")
+            self._cams[0].get_things(exposure=34005, work_mode="Exposure")
+            self._cams[0].get_things(exposure=74005,work_mode="Exposure") 
+            self._cams[0].get_things(gain=4,work_mode="Gain")
+            self._cams[0].get_things(rGain=187, gGain=100, bGain=169,work_mode="ColorGain")
+            self._cams[0].get_things(saturation=130,work_mode="Saturation")
+            self._cams[0].get_things(sharpnes=30,work_mode="Sharpness")
+            self._cams[0].get_things(work_mode="auto_balance")
+
 
         except Exception as e:
             self._error = f"Camera init failed: {e}"
@@ -3147,7 +3155,7 @@ class HeadScreen(BaseScreen):
                 il.setWordWrap(True)
                 il.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
                 sblay.addWidget(il)
-                self.scan_btn_qr = styled_btn(sbox, "📷  SCAN QR  (F2)",
+                self.scan_btn_qr = styled_btn(sbox, "📷  SCAN QR  ",
                                               self.qr_button_pressed,
                                               color="#3b6ef5")
                 sblay.addWidget(self.scan_btn_qr)
@@ -3532,6 +3540,21 @@ class HeadScreen(BaseScreen):
                                 
                                     self._try_send_barcode()
                 return
+            if state == "fail":
+                                        # MES says the board already cleared every stage. That is a
+                                        # PASS, not a failure — carry on and report as normal.
+                                        self._set_mes_status("fail", msg)
+                                        # self.log(f"[MES] ✔ all stages already passed — {msg}")
+                                        # self.log("[MES] treating as PASS — running this unit and "
+                                        #          "updating MES as usual")
+                                        # self.app.comm_log.add("EVT", f"MES prev-stage ALL-PASSED "
+                                        #                              f"'{serial}': {msg}")
+                                        if self.scanner_cfg.get("send_to_client", False):
+                                                        
+                                                            self._try_send_barcode(st="ng")
+                                                            
+                                    
+                                        return
             self._set_mes_status("error" if state == "error" else "fail", msg)
             self.log(f"[MES] ✖ {msg}")
             self.app.comm_log.add("EVT", f"MES prev-stage "
@@ -4211,10 +4234,15 @@ class HeadScreen(BaseScreen):
         #         if self.mes_prev_state in ("pass", "all_passed"):
         #             self._try_send_barcode()
 
-    def _try_send_barcode(self):
+    def _try_send_barcode(self,st=None):
         if not self.scan_value:
             return
-        signal = str(self.scanner_cfg.get("prefix", "")) + self.scan_value
+        if st is None:
+            signal = str(self.scanner_cfg.get("prefix", "")) + self.scan_value
+        else: 
+            signal = "ng" + self.scan_value
+
+
         if self.app.engine.enabled:
             n = self.app.engine.send(signal, why="scanner data")
             self.scan_sent = n > 0
@@ -4731,6 +4759,7 @@ class HeadScreen(BaseScreen):
                         "EVT", f"cycle complete on model '{self.head}': "
                                f"{'OK' if cycle_ok else 'NG'}")
                     self._end_cycle(cycle_ok)
+                    self.back_to_live()
                 elif all_scenes:
                     left = sorted(all_scenes
                                   - set(self.cycle_scene_results))

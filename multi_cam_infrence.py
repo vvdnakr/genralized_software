@@ -78,7 +78,7 @@ class CameraWrapper:
             mvsdk.CameraSetTriggerMode(self.h, 0)
             mvsdk.CameraSetAeState(self.h, 0)
             mvsdk.CameraSetExposureTime(self.h, self.exposure)
-            # mvsdk.CameraSetGain(self.h,iRGain=self.rgain,iGGain=self.ggain,iBGain=self.bgain) # Optional: set gain to 0
+            mvsdk.CameraSetGain(self.h,iRGain=self.rgain,iGGain=self.ggain,iBGain=self.bgain) # Optional: set gain to 0
             mvsdk.CameraSetAnalogGain(self.h,self.gain)
             mvsdk.CameraSetOnceWB(self.h)
             mvsdk.CameraPlay(self.h)
@@ -213,6 +213,10 @@ class CameraWrapper:
 
         if work_mode=="auto_balance":
             mvsdk.CameraSetOnceWB(self.h)
+            d=mvsdk.CameraGetUserClrTempGain(self.h)
+            print(d)
+            mvsdk.CameraSetOnceBB(self.h)
+            mvsdk.CameraSetGain(self.h,iRGain=187,iGGain=100,iBGain=169)
         # print(mvsdk.CameraGetFrameSpeed(self.h) ) # 
         #Ensure frame speed is set
         
@@ -297,8 +301,8 @@ def main():
                 if k ==ord("c"):
                 
                             cams[0].get_things(work_mode="auto_balance")
-                            print("auto_balances")
-                       
+                            # print("auto_balances")
+                            
                 if frame is None:
                     # skip display if no data
                     continue
