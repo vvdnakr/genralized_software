@@ -1,0 +1,7 @@
+Log file created at: 2026/10/13 17:20:37
+Running on machine: 39746--TNA--MCP7
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+E1013 17:20:37.396175  8933 CameraU3VBase.cpp:2178] Function:WhiteBalanceOnce, Code:set_wb_once_command(1), Error:-19
+E1013 17:20:37.396399  8933 CameraU3VBase.cpp:2123] Function:SetRgbGain, Code:set_rgb_gain(RGB_GAIN_VAL(fRGain, fGGain, fBGain)), Error:-19
+E1013 17:20:47.265360  8933 CameraU3VBase.cpp:2178] Function:WhiteBalanceOnce, Code:set_wb_once_command(1), Error:-19
+E1013 17:20:47.265493  8933 CameraU3VBase.cpp:2123] Function:SetRgbGain, Code:set_rgb_gain(RGB_GAIN_VAL(fRGain, fGGain, fBGain)), Error:-19

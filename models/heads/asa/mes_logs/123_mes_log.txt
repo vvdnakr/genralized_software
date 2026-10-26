@@ -1,0 +1,45 @@
+======================================================================
+Time     : 2026-10-26 08:51:57 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 08:52:11 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 08:52:36 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+

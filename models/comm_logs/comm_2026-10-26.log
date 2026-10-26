@@ -1,0 +1,1165 @@
+2026-10-26 13:33:06 | EVT | data buffer: 1 file(s) older than 2 day(s) deleted
+2026-10-26 13:35:00 | EVT | communication ENABLED
+2026-10-26 13:35:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:13 | EVT | model 'test' selected in UI (no Select-signal configured)
+2026-10-26 13:35:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:22 | ERR | Camera NOT connected: Camera init failed: argument 1: TypeError: Don't know how to convert parameter 1
+2026-10-26 13:35:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:34 | IN  | [SIM] '7'
+2026-10-26 13:35:34 | EVT | '7' matches no configured signal
+2026-10-26 13:35:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:35:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:41 | EVT | model 'test' selected in UI (no Select-signal configured)
+2026-10-26 13:36:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 13:36:51 | EVT | communication DISABLED
+2026-10-26 13:50:13 | EVT | scanner config saved for model 'asa' (enabled=True, source=camera, auto_popup=True, require_operator=False)
+2026-10-26 13:50:16 | EVT | model 'asa' selected in UI (no Select-signal configured)
+2026-10-26 13:50:25 | ERR | Camera NOT connected: Camera init failed: argument 1: TypeError: Don't know how to convert parameter 1
+2026-10-26 13:52:21 | EVT | model 'asa' selected in UI (no Select-signal configured)
+2026-10-26 14:02:57 | EVT | model 'asa' selected in UI (no Select-signal configured)
+2026-10-26 14:11:24 | EVT | MES config saved for model 'asa' (enabled=True)
+2026-10-26 14:11:39 | EVT | communication ENABLED
+2026-10-26 14:11:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:11:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:18 | EVT | scanner config saved for model 'asa' (enabled=False, source=camera, auto_popup=True, require_operator=False)
+2026-10-26 14:12:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:19 | EVT | scanner config saved for model 'asa' (enabled=False, source=camera, auto_popup=True, require_operator=False)
+2026-10-26 14:12:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:12:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:30 | EVT | barcode scanned: '123'
+2026-10-26 14:13:30 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:13:30 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 14:13:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:13:57 | IN  | [SIM] 's1'
+2026-10-26 14:13:58 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:14:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:09 | IN  | [SIM] 's2'
+2026-10-26 14:14:09 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:14:09 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:14:09 | EVT | VALIDATION cycle '123' NG — not sent to MES
+2026-10-26 14:14:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:21 | EVT | UI LOCKED (operator mode)
+2026-10-26 14:14:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:33 | EVT | UI UNLOCKED (controls open)
+2026-10-26 14:14:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:46 | IN  | [SIM] 's1'
+2026-10-26 14:14:46 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:14:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:50 | IN  | [SIM] 's2'
+2026-10-26 14:14:50 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:14:50 | EVT | cycle complete on model 'asa': OK
+2026-10-26 14:14:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:14:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:22 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 14:15:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:15:56 | EVT | barcode scanned: '123'
+2026-10-26 14:15:56 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:15:56 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 14:15:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:16 | IN  | [SIM] 's1'
+2026-10-26 14:16:16 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:16:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:23 | IN  | [SIM] 's2'
+2026-10-26 14:16:24 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:16:24 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:16:24 | EVT | VALIDATION cycle '123' NG — not sent to MES
+2026-10-26 14:16:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:54 | IN  | [SIM] 's1'
+2026-10-26 14:16:54 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:16:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:57 | IN  | [SIM] 's2'
+2026-10-26 14:16:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:16:57 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:16:57 | EVT | cycle complete on model 'asa': OK
+2026-10-26 14:17:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:04 | IN  | [SIM] 's1'
+2026-10-26 14:17:04 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:17:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:08 | IN  | [SIM] 's2'
+2026-10-26 14:17:08 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:17:08 | EVT | cycle complete on model 'asa': OK
+2026-10-26 14:17:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:17:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:38 | EVT | scanner config saved for model 'asa' (enabled=False, source=scanner, auto_popup=True, require_operator=False)
+2026-10-26 14:18:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:50 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 14:18:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:18:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:07 | IN  | [SIM] 's1'
+2026-10-26 14:19:08 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:19:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:13 | IN  | [SIM] 's2'
+2026-10-26 14:19:14 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:19:14 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:19:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:28 | IN  | [SIM] 's2'
+2026-10-26 14:19:29 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:19:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:34 | IN  | [SIM] 's2'
+2026-10-26 14:19:34 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:19:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:40 | IN  | [SIM] 's1'
+2026-10-26 14:19:40 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:19:40 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:19:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:47 | IN  | [SIM] 's1'
+2026-10-26 14:19:47 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:19:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:50 | IN  | [SIM] 's1'
+2026-10-26 14:19:51 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:19:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:19:55 | IN  | [SIM] 's1'
+2026-10-26 14:19:55 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:19:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:00 | IN  | [SIM] 's2'
+2026-10-26 14:20:00 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:20:00 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:20:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:52 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 14:20:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:20:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:16 | EVT | scanner config saved for model 'asa' (enabled=True, source=scanner, auto_popup=True, require_operator=False)
+2026-10-26 14:21:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:22 | EVT | barcode scanned: '234'
+2026-10-26 14:21:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:26 | EVT | MES prev-stage ERROR '234': 234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:21:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:46 | EVT | UI LOCKED (operator mode)
+2026-10-26 14:21:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:50 | EVT | barcode scanned: '234'
+2026-10-26 14:21:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:53 | EVT | MES prev-stage ERROR '234': 234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:21:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:57 | EVT | barcode scanned: '123'
+2026-10-26 14:21:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:21:59 | EVT | MES prev-stage ERROR '123': 123: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:11 | EVT | barcode scanned: '123'
+2026-10-26 14:22:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:13 | EVT | MES prev-stage ERROR '123': 123: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:20 | EVT | barcode scanned: '12345'
+2026-10-26 14:22:20 | EVT | MES prev-stage ERROR '12345': 12345: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:27 | EVT | barcode scanned: '12345'
+2026-10-26 14:22:29 | EVT | MES prev-stage ERROR '12345': 12345: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:36 | EVT | barcode scanned: '123'
+2026-10-26 14:22:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:37 | EVT | MES prev-stage ERROR '123': 123: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:41 | EVT | barcode scanned: '123w4'
+2026-10-26 14:22:42 | EVT | MES prev-stage ERROR '123w4': 123w4: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:49 | EVT | barcode scanned: '1234'
+2026-10-26 14:22:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:53 | EVT | MES prev-stage ERROR '1234': 1234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:22:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:22:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:02 | EVT | barcode scanned: '1234'
+2026-10-26 14:23:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:03 | EVT | MES prev-stage ERROR '1234': 1234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:23:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:08 | EVT | barcode scanned: '1234'
+2026-10-26 14:23:09 | EVT | MES prev-stage ERROR '1234': 1234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:23:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:14 | EVT | barcode scanned: '1234'
+2026-10-26 14:23:15 | EVT | UI UNLOCKED (controls open)
+2026-10-26 14:23:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:19 | EVT | barcode scanned: '1234'
+2026-10-26 14:23:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:24 | EVT | MES prev-stage ERROR '1234': 1234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:23:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:23:57 | EVT | barcode scanned: '1234'
+2026-10-26 14:23:57 | EVT | VALIDATION part '1234' — MES disabled, nothing will be sent
+2026-10-26 14:23:57 | OUT | 'qr1234'  [scanner data]  (no client connected, logged only)
+2026-10-26 14:23:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:09 | IN  | [SIM] 's1'
+2026-10-26 14:24:09 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:24:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:15 | IN  | [SIM] 's2'
+2026-10-26 14:24:16 | OUT | 'ng'  [s2 NG]  (no client connected, logged only)
+2026-10-26 14:24:16 | EVT | cycle complete on model 'asa': NG
+2026-10-26 14:24:16 | EVT | VALIDATION cycle '1234' NG — not sent to MES
+2026-10-26 14:24:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:24 | EVT | barcode scanned: '1234'
+2026-10-26 14:24:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:28 | EVT | MES prev-stage ERROR '1234': 1234: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:24:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:24:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:25:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:26:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:27:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:28:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:29:22 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 14:29:29 | EVT | barcode scanned: '1233'
+2026-10-26 14:29:32 | EVT | MES prev-stage ERROR '1233': 1233: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:30:07 | EVT | MES config saved for model 'asa' (enabled=True)
+2026-10-26 14:30:15 | EVT | barcode scanned: '123'
+2026-10-26 14:30:15 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:30:15 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 14:30:33 | IN  | [SIM] 's1'
+2026-10-26 14:30:33 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 14:30:43 | IN  | [SIM] 's1'
+2026-10-26 14:30:43 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:30:48 | IN  | [SIM] 's2'
+2026-10-26 14:30:48 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:30:48 | EVT | cycle complete on model 'asa': OK
+2026-10-26 14:30:48 | EVT | VALIDATION cycle '123' OK — not sent to MES
+2026-10-26 14:30:56 | EVT | barcode scanned: '567'
+2026-10-26 14:30:56 | EVT | VALIDATION part '567' — MES disabled, nothing will be sent
+2026-10-26 14:30:56 | EVT | barcode 'qr567' NOT sent (comm OFF)
+2026-10-26 14:31:13 | IN  | [SIM] 's1'
+2026-10-26 14:31:14 | OUT | 'ok'  [s1 OK]  (no client connected, logged only)
+2026-10-26 14:31:20 | IN  | [SIM] 's2'
+2026-10-26 14:31:20 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 14:31:20 | EVT | cycle complete on model 'asa': OK
+2026-10-26 14:31:20 | EVT | VALIDATION cycle '567' OK — not sent to MES
+2026-10-26 14:31:29 | EVT | barcode scanned: '2344'
+2026-10-26 14:31:32 | EVT | MES prev-stage ERROR '2344': 2344: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 14:31:35 | EVT | UI LOCKED (operator mode)
+2026-10-26 14:31:38 | EVT | barcode scanned: '123'
+2026-10-26 14:31:38 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:31:38 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 14:31:53 | EVT | barcode scanned: '123'
+2026-10-26 14:31:53 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:31:53 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 14:32:12 | EVT | UI UNLOCKED (controls open)
+2026-10-26 14:32:15 | EVT | barcode scanned: '123'
+2026-10-26 14:32:15 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:32:15 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 14:32:23 | EVT | communication ENABLED
+2026-10-26 14:32:23 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:26 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:29 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:32 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:35 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:38 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:41 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:44 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:47 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:49 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 14:32:50 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:52 | EVT | barcode scanned: '123'
+2026-10-26 14:32:52 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 14:32:52 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 14:32:53 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:56 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:32:59 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:02 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:05 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:08 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:11 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:14 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:17 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:20 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:23 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:26 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:29 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:32 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:35 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:38 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:41 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:44 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:47 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 14:33:49 | EVT | communication DISABLED
+2026-10-26 15:32:21 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 15:32:42 | EVT | barcode scanned: '123'
+2026-10-26 15:32:42 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 15:32:42 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 15:40:33 | EVT | communication ENABLED
+2026-10-26 15:40:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:40:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:41:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:42:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:43:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:37 | ERR | Ethernet NOT connected
+2026-10-26 15:44:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:41 | EVT | Ethernet connection restored
+2026-10-26 15:44:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:44:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:45:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:46:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:47:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:48:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:49:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:50:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:51:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:52:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:53:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:54:46 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 15:54:51 | EVT | barcode scanned: '123'
+2026-10-26 15:54:51 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 15:54:51 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 15:55:18 | EVT | barcode scanned: '123'
+2026-10-26 15:55:18 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 15:55:18 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 15:55:42 | EVT | barcode scanned: '123'
+2026-10-26 15:55:42 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 15:55:42 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 15:55:46 | EVT | communication ENABLED
+2026-10-26 15:55:46 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:55:49 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:55:52 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:55:55 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:55:58 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:00 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 15:56:01 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:04 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:06 | EVT | barcode scanned: '567'
+2026-10-26 15:56:06 | EVT | VALIDATION part '567' — MES disabled, nothing will be sent
+2026-10-26 15:56:06 | OUT | 'qr567'  [scanner data]  (no client connected, logged only)
+2026-10-26 15:56:07 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:10 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:12 | OUT | 'ng'  [s1 NG]  (no client connected, logged only)
+2026-10-26 15:56:12 | OUT | 'ok'  [s2 OK]  (no client connected, logged only)
+2026-10-26 15:56:12 | OUT | 'ng'  [MODEL NG]  (no client connected, logged only)
+2026-10-26 15:56:12 | EVT | cycle complete on model 'asa': NG
+2026-10-26 15:56:12 | EVT | VALIDATION cycle '567' NG — not sent to MES
+2026-10-26 15:56:13 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:16 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:19 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:22 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:25 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:28 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:31 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:34 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:37 | EVT | barcode scanned: '123'
+2026-10-26 15:56:37 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 15:56:37 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 15:56:37 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:40 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:43 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:46 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:49 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:52 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:55 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:56:58 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:02 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:05 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:08 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:11 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:14 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:17 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:20 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:23 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:26 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:29 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:32 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:35 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:35 | ERR | Ethernet NOT connected
+2026-10-26 15:57:37 | EVT | Ethernet connection restored
+2026-10-26 15:57:38 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:41 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 15:57:42 | EVT | communication DISABLED
+2026-10-26 16:06:23 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:23 | EVT | communication ENABLED
+2026-10-26 16:06:26 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:28 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 16:06:29 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:31 | EVT | barcode scanned: '123'
+2026-10-26 16:06:31 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:06:31 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 16:06:32 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:35 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:38 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:41 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:44 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:47 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:50 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:53 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:56 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:06:59 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:07:01 | EVT | communication DISABLED
+2026-10-26 16:07:07 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 16:07:09 | EVT | barcode scanned: '123'
+2026-10-26 16:07:09 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:07:09 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:07:43 | EVT | UI LOCKED (operator mode)
+2026-10-26 16:07:47 | EVT | barcode scanned: '123'
+2026-10-26 16:07:47 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:07:47 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:07:58 | EVT | UI UNLOCKED (controls open)
+2026-10-26 16:08:14 | EVT | barcode scanned: '123'
+2026-10-26 16:08:14 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:08:14 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:09:15 | EVT | barcode scanned: '123'
+2026-10-26 16:09:15 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:09:15 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:09:39 | EVT | scanner config saved for model '35fg' (enabled=True, source=camera, auto_popup=True, require_operator=False)
+2026-10-26 16:09:41 | EVT | model '35fg' selected in UI (no Select-signal configured)
+2026-10-26 16:13:26 | ERR | Ethernet NOT connected
+2026-10-26 16:13:28 | EVT | Ethernet connection restored
+2026-10-26 16:18:06 | EVT | communication ENABLED
+2026-10-26 16:18:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:10 | EVT | handshake DISABLED
+2026-10-26 16:18:11 | EVT | handshake ENABLED
+2026-10-26 16:18:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:22 | OUT | '1'  [model 'asa' selected in UI]  (no client connected, logged only)
+2026-10-26 16:18:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:29 | EVT | barcode scanned: '123'
+2026-10-26 16:18:29 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:18:29 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 16:18:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:18:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:11 | EVT | UI LOCKED (operator mode)
+2026-10-26 16:19:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:14 | EVT | barcode scanned: '232'
+2026-10-26 16:19:15 | EVT | MES prev-stage ERROR '232': 232: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 16:19:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:19:55 | EVT | barcode scanned: '123'
+2026-10-26 16:19:55 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:19:55 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 16:19:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:42 | EVT | barcode scanned: '122'
+2026-10-26 16:20:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:44 | EVT | MES prev-stage ERROR '122': 122: Please try again! The entered input does not contain any valid serial number.
+2026-10-26 16:20:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:50 | EVT | barcode scanned: '123'
+2026-10-26 16:20:50 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:20:50 | OUT | 'qr123'  [scanner data]  (no client connected, logged only)
+2026-10-26 16:20:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:20:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:21:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:00 | ERR | Ethernet NOT connected
+2026-10-26 16:22:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:22:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:23:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:52 | EVT | Ethernet connection restored
+2026-10-26 16:24:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:24:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:00 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:03 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:06 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:09 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:12 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:15 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:18 | ERR | Ethernet NOT connected
+2026-10-26 16:25:18 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:20 | EVT | Ethernet connection restored
+2026-10-26 16:25:21 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:24 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:27 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:30 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:33 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:36 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:39 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:42 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:45 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:48 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:51 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:54 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:25:57 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-10-26 16:26:07 | EVT | UI UNLOCKED (controls open)
+2026-10-26 16:26:16 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 16:26:42 | EVT | barcode scanned: '123'
+2026-10-26 16:26:42 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:26:42 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:40:09 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 16:40:23 | EVT | barcode scanned: '123'
+2026-10-26 16:40:23 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:40:23 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:40:41 | EVT | barcode scanned: '123'
+2026-10-26 16:40:41 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:40:41 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:41:17 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-26 16:41:22 | EVT | barcode scanned: '123'
+2026-10-26 16:41:22 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-26 16:41:22 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-26 16:41:47 | EVT | barcode scanned: '234'
+2026-10-26 16:41:49 | EVT | MES prev-stage ERROR '234': 234: Please try again! The entered input does not contain any valid serial number.

@@ -1,0 +1,15 @@
+======================================================================
+Time     : 2026-10-26 10:50:42 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/122/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+

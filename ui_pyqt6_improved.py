@@ -1,4 +1,3 @@
-
 import os
 
 os.environ["QT_XCB_FORCE_SOFTWARE_OPENGL"] = "1"
@@ -18,6 +17,11 @@ import cv2
 import numpy as np
 import yaml
 
+try:                      # optional: precise Ethernet link detection
+    import psutil
+except ImportError:       # pip install psutil
+    psutil = None
+
 from PyQt6.QtCore import Qt, QTimer, QRectF, pyqtSignal
 from PyQt6.QtGui import (QImage, QPixmap, QPainter, QColor, QPen, QFont,
                          QBrush, QCursor, QShortcut, QKeySequence)
@@ -25,7 +29,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QDialog, QLabel, QPushButton,
     QLineEdit, QTextEdit, QCheckBox, QComboBox, QVBoxLayout, QHBoxLayout,
     QGridLayout, QGroupBox, QMessageBox, QInputDialog, QTreeWidget,
-    QTreeWidgetItem, QScrollArea, QSizePolicy)
+    QTreeWidgetItem, QScrollArea, QSizePolicy, QListWidget)
 
 from two_point import (
     ParentModelManager,
@@ -49,6 +53,9 @@ class AppConfig:
     def __init__(self):
         self.data = {
             "password": "1234",          # change it here (models/app_config.yaml)
+            # DIFFERENT password: needed to register a VALIDATION part
+            # (a part that is run but NEVER reported to MES)
+            "validation_password": "5678",
             "locked": False,
             "ui": {"frame_scale": 0.6},  # same 0.6 resize as two_point.py
             "scanner": {"test_timeout_s": 10},
@@ -66,6 +73,13 @@ class AppConfig:
             # saved data (MES logs/reports/images, comm logs, failed QR
             # images) is kept this many days, then deleted
             "retention": {"days": 2},
+            # popups for lost Ethernet / lost camera, and the cycle-result popup
+            "health": {"check_ethernet": True, "check_camera": True,
+                       "interval_s": 2,
+                       "comm_no_client_s": 10},   # popup if no client after
+                                                  # Comm ON (0 = never)
+            "cycle_popup": {"enabled": True,
+                            "auto_close_s": 5},   # 0 = stay until OK pressed
         }
         self.load()
 
@@ -74,7 +88,7 @@ class AppConfig:
             try:
                 with open(APP_CONFIG_PATH) as f:
                     saved = yaml.safe_load(f) or {}
-                for k in ("password", "locked"):
+                for k in ("password", "validation_password", "locked"):
                     if k in saved:
                         self.data[k] = saved[k]
                 self.data["ui"].update(saved.get("ui") or {})
@@ -82,6 +96,8 @@ class AppConfig:
                 self.data["qr"].update(saved.get("qr") or {})
                 self.data["mes_upload"].update(saved.get("mes_upload") or {})
                 self.data["retention"].update(saved.get("retention") or {})
+                self.data["health"].update(saved.get("health") or {})
+                self.data["cycle_popup"].update(saved.get("cycle_popup") or {})
             except yaml.YAMLError:
                 pass
         self.save()   # make sure the file exists with all parameters
@@ -392,6 +408,7 @@ class HeadManager:
             "block_on_prev_fail": True,   # honoured in LOCKED (production) mode
             "upload_images": True,
             "defect_type": "Pin Bend",
+            "validation_serials": [],     # MES disabled for these serials
         }
         p = self.mes_path(head)
         if os.path.isfile(p):
@@ -998,6 +1015,28 @@ class CommEngine:
         self._clients = []
         self._lock = threading.Lock()
         self._gen = 0
+        self._listen_alerted = False
+
+    # -- popups (thread-safe: always marshalled onto the UI thread) ---------
+    def _popup(self, key, title, text):
+        self.app.after(0, lambda: self.app.alert(key, title, text))
+
+    def _popup_clear(self, *keys):
+        def go():
+            for k in keys:
+                self.app.clear_alert(k)
+        self.app.after(0, go)
+
+    def _check_no_client(self, gen):
+        if self.enabled and gen == self._gen and self.client_count() == 0 \
+                and not self._listen_alerted:
+            conn = self.settings.data["connection"]
+            self.log.add("ERR", "no client connected")
+            self._popup("comm_noclient", "Communication - no client",
+                        "Connection failed - no client connected.\n\n"
+                        "Reason: client cable disconnected, client powered "
+                        "off, or its IP / port changed.\n"
+                        f"(server {conn.get('ip')}:{conn.get('port')})")
 
     def client_count(self):
         with self._lock:
@@ -1021,6 +1060,11 @@ class CommEngine:
         threading.Thread(target=self._serve, args=(self._gen,),
                          daemon=True).start()
         self.log.add("EVT", "communication ENABLED")
+        wait = float(self.app.app_config.data["health"]
+                     .get("comm_no_client_s", 10))
+        if wait > 0:
+            g = self._gen
+            self.app.after(int(wait * 1000), lambda: self._check_no_client(g))
 
     def stop(self):
         if not self.enabled:
@@ -1040,6 +1084,8 @@ class CommEngine:
                     pass
             self._clients = []
         self._srv = None
+        self._listen_alerted = False
+        self._popup_clear("comm_listen", "comm_client", "comm_noclient")
         self.log.add("EVT", "communication DISABLED")
 
     def _serve(self, gen):
@@ -1061,12 +1107,20 @@ class CommEngine:
             except OSError as e:
                 self.log.add("ERR", f"cannot listen on {ip}:{port} ({e}) — "
                                     f"retrying in {self.RETRY_S}s")
+                if not self._listen_alerted:
+                    self._listen_alerted = True
+                    self._popup("comm_listen", "Communication connection failed",
+                                "Connection failed.\n\n"
+                                f"Reason: {COMM_REASON}\n"
+                                f"(cannot use {ip}:{port})")
                 for _ in range(self.RETRY_S * 2):
                     if not (self.enabled and gen == self._gen):
                         return
                     time.sleep(0.5)
                 continue
             self._srv = srv
+            self._listen_alerted = False
+            self._popup_clear("comm_listen")
             self.log.add("EVT", f"listening on {ip}:{port}")
             try:
                 while self.enabled and gen == self._gen:
@@ -1080,6 +1134,7 @@ class CommEngine:
                         self._clients.append(conn)
                     self.log.add("EVT",
                                  f"client connected from {addr[0]}:{addr[1]}")
+                    self._popup_clear("comm_client", "comm_noclient")
                     threading.Thread(target=self._client_loop,
                                      args=(conn, addr, gen),
                                      daemon=True).start()
@@ -1120,6 +1175,11 @@ class CommEngine:
             pass
         self.log.add("EVT", f"client {addr[0]} disconnected "
                             "(will accept reconnection)")
+        if self.enabled and gen == self._gen:
+            self._popup("comm_client", "Communication lost",
+                        f"Connection lost - client {addr[0]} disconnected."
+                        "\n\nReason: client cable loose / disconnected, "
+                        "client powered off, or its IP changed.")
 
     def handle_incoming(self, text, source="SIM"):
         if not text:
@@ -1203,6 +1263,39 @@ class CameraFeed:
         self.keep_raw = False
         self._latest_raw = None
         self._raw_seq = 0
+        self._reset_cb = None
+        self._reset_req = False
+
+    def is_usb(self):
+        return bool(self._cams) and getattr(self._cams[0], "camtype",
+                                            "") == "usbcam"
+
+    def reset_camera(self, cb=None):
+        """Ask the grab thread to reset the camera to its default settings.
+        cb(ok, message) is called from that thread when done."""
+        if not self._running or not self._cams:
+            if cb:
+                cb(False, "camera is not running")
+            return
+        self._reset_cb = cb
+        self._reset_req = True
+
+    def _do_reset(self):
+        cam = self._cams[0]
+        try:
+            if getattr(cam, "camtype", "") == "usbcam":
+                ok, msg = cam.reset_settings()
+            else:
+                self._cams = self._open()          # MindVision: re-apply
+                ok, msg = True, "camera settings re-applied"
+        except Exception as e:
+            ok, msg = False, f"reset failed: {e}"
+        cb, self._reset_cb = self._reset_cb, None
+        if cb:
+            try:
+                cb(ok, msg)
+            except Exception:
+                pass
 
     def start(self):
         if self._running:
@@ -1210,24 +1303,40 @@ class CameraFeed:
         self._running = True
         threading.Thread(target=self._loop, daemon=True).start()
 
+    def _open(self):
+        """Open the camera and apply the fixed settings (raises if absent)."""
+        cams = _init_cameras()
+        if not cams:
+            raise IndexError("no camera")
+        cams[0].get_things(exposure=34005, work_mode="Exposure")
+        cams[0].get_things(exposure=34005, work_mode="Exposure")
+        cams[0].get_things(exposure=74005, work_mode="Exposure")
+        cams[0].get_things(gain=4, work_mode="Gain")
+        cams[0].get_things(rGain=187, gGain=100, bGain=169,
+                           work_mode="ColorGain")
+        cams[0].get_things(saturation=130, work_mode="Saturation")
+        cams[0].get_things(sharpnes=30, work_mode="Sharpness")
+        cams[0].get_things(work_mode="auto_balance")
+        return cams
+
     def _loop(self):
         try:
-            self._cams = _init_cameras()
-            self._cams[0].get_things(exposure=34005, work_mode="Exposure")
-            self._cams[0].get_things(exposure=34005, work_mode="Exposure")
-            self._cams[0].get_things(exposure=74005,work_mode="Exposure") 
-            self._cams[0].get_things(gain=4,work_mode="Gain")
-            self._cams[0].get_things(rGain=187, gGain=100, bGain=169,work_mode="ColorGain")
-            self._cams[0].get_things(saturation=130,work_mode="Saturation")
-            self._cams[0].get_things(sharpnes=30,work_mode="Sharpness")
-            self._cams[0].get_things(work_mode="auto_balance")
-
-
+            self._cams = self._open()
+            self._error = None
         except Exception as e:
-            self._error = f"Camera init failed: {e}"
+            if isinstance(e, IndexError):
+                self._error = ("Camera NOT connected - no camera detected.\n"
+                               "Check the camera power and its Ethernet cable.")
+            else:
+                self._error = f"Camera init failed: {e}"
             self._running = False
             return
+        fails = 0
+        last_reopen = 0.0
         while self._running:
+            if self._reset_req:
+                self._reset_req = False
+                self._do_reset()
             try:
                 frame = self._cams[0].grab()
                 raw = frame.copy() if self.keep_raw else None
@@ -1238,8 +1347,24 @@ class CameraFeed:
                     if raw is not None:
                         self._latest_raw = raw
                         self._raw_seq += 1
+                fails = 0
+                self._error = None            # camera is (back) OK
             except Exception as e:
-                self._error = f"Camera grab failed: {e}"
+                fails += 1
+                if fails >= 3:
+                    # stop serving a stale picture as if it were live
+                    self._error = (f"Camera DISCONNECTED - grab failed: {e}\n"
+                                   "Check the camera power and its Ethernet "
+                                   "cable.")
+                    with self._lock:
+                        self._latest = None
+                    # try to re-open the camera every few seconds
+                    if time.time() - last_reopen > 3.0:
+                        last_reopen = time.time()
+                        try:
+                            self._cams = self._open()
+                        except Exception:
+                            pass
                 time.sleep(0.2)
 
     def get_frame(self):
@@ -1818,6 +1943,76 @@ def zoom_controls(master, canvas):
 # ============================================================================
 # MAIN APP  (global comm engine + lock management)
 # ============================================================================
+# ============================================================================
+# HEALTH CHECKS + POPUPS
+# ============================================================================
+ETH_REASON = ("Ethernet cable disconnected, switch/router off, "
+              "or IP address changed.")
+CAM_REASON = ("camera cable or power disconnected, camera IP changed, "
+              "or another program is using the camera.")
+COMM_REASON = ("Ethernet cable disconnected, or the IP address changed.")
+_NOT_ETHERNET = ("loopback", "wi-fi", "wifi", "wlan", "wireless", "bluetooth",
+                 "vethernet", "vmware", "virtualbox", "vbox", "docker",
+                 "veth", "tailscale", "zerotier", "tun", "tap", "br-")
+
+
+def ethernet_connected():
+    """True when at least one wired network adapter is up and has an IPv4
+    address (the camera, the MES server and the client all sit on it).
+    Needs psutil for a real link check (pip install psutil); without it
+    only 'has a non-loopback IP' can be tested."""
+    try:
+        if psutil is not None:
+            stats = psutil.net_if_stats()
+            addrs = psutil.net_if_addrs()
+            for name, st in stats.items():
+                low = name.lower()
+                if not st.isup or low == "lo" or any(
+                        w in low for w in _NOT_ETHERNET):
+                    continue
+                for a in addrs.get(name, []):
+                    if (a.family == socket.AF_INET
+                            and not a.address.startswith(("127.", "169.254."))):
+                        return True
+            return False
+        ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        return any(not ip.startswith(("127.", "169.254.")) for ip in ips)
+    except Exception:
+        return True       # cannot tell -> do not raise a false alarm
+
+
+class ResultPopup(QDialog):
+    """Non-modal, always-on-top, colour-coded popup (cycle result, validation
+    part notice).  Non-modal so a client-triggered run is never stalled."""
+
+    def __init__(self, parent, title, headline, lines=(), color="#2f9e44",
+                 auto_ms=0):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setModal(False)
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        h = QLabel(headline)
+        h.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h.setWordWrap(True)
+        h.setStyleSheet(f"background: {color}; color: white;"
+                        " font-size: 30pt; font-weight: bold;"
+                        " padding: 14px; border-radius: 8px;")
+        lay.addWidget(h)
+        if lines:
+            t = QLabel("\n".join(lines))
+            t.setWordWrap(True)
+            t.setStyleSheet("font-size: 11pt; padding: 6px;")
+            lay.addWidget(t)
+        b = QPushButton("OK")
+        b.setMinimumHeight(36)
+        b.clicked.connect(self.close)
+        lay.addWidget(b)
+        if auto_ms > 0:
+            QTimer.singleShot(auto_ms, self.close)
+
+
 class App(QMainWindow):
     _invoke = pyqtSignal(int, object)     # cross-thread 'after' (ms, fn)
 
@@ -1848,7 +2043,98 @@ class App(QMainWindow):
         self._nav = ("home",)
         self._operator_head = None
         self._operator_id = None
+        self._alerts = {}                      # key -> open popup
+        self._health = {"ethernet": True, "camera": True}
+        self._health_timer = QTimer(self)      # Ethernet / camera watchdog
+        self._health_timer.timeout.connect(self._health_tick)
+        self._health_timer.start(max(500, int(float(
+            self.app_config.data["health"].get("interval_s", 2)) * 1000)))
+        QTimer.singleShot(800, self._health_tick)
         self.show_home()
+
+    # -- popups: lost Ethernet / lost camera ----------------------------------
+    def alert(self, key, title, text, retry=None):
+        """Non-modal warning popup (one per key).  retry = optional callback
+        behind a 'Retry' button."""
+        old = self._alerts.pop(key, None)
+        if old is not None:
+            old.close()
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setWindowTitle(title)
+        box.setText(text)
+        box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        if retry is not None:
+            rb = box.addButton("Retry", QMessageBox.ButtonRole.ActionRole)
+            rb.clicked.connect(retry)
+        box.setWindowModality(Qt.WindowModality.NonModal)
+        box.show()
+        self._alerts[key] = box
+
+    def clear_alert(self, key):
+        box = self._alerts.pop(key, None)
+        if box is not None:
+            box.close()
+
+    def _health_tick(self):
+        cfg = self.app_config.data["health"]
+        if cfg.get("check_ethernet", True):
+            ok = ethernet_connected()
+            if ok != self._health["ethernet"]:
+                self._health["ethernet"] = ok
+                if ok:
+                    self.clear_alert("ethernet")
+                    self.comm_log.add("EVT", "Ethernet connection restored")
+                else:
+                    self.comm_log.add("ERR", "Ethernet NOT connected")
+                    self.alert("ethernet", "Ethernet not connected",
+                               "Connection failed.\n\n"
+                               f"Reason: {ETH_REASON}")
+        if cfg.get("check_camera", True):
+            err = self.camera.error      # only set once the camera was started
+            ok = not err
+            if ok != self._health["camera"]:
+                self._health["camera"] = ok
+                if ok:
+                    self.clear_alert("camera")
+                    self.comm_log.add("EVT", "Camera connection restored")
+                else:
+                    self.comm_log.add("ERR", f"Camera NOT connected: {err}")
+                    self.alert("camera", "Camera not connected",
+                               "Camera connection failed.\n\n"
+                               f"Reason: {CAM_REASON}",
+                               retry=self.camera.start)
+
+    def hardware_ok(self, parent=None):
+        """Re-raise the popup for anything still broken (used before a run).
+        Returns (ethernet_ok, camera_ok)."""
+        eth = ethernet_connected() if self.app_config.data["health"].get(
+            "check_ethernet", True) else True
+        cam = not self.camera.error
+        if not eth:
+            self._health["ethernet"] = False
+            self.alert("ethernet", "Ethernet not connected",
+                       f"Connection failed.\n\nReason: {ETH_REASON}")
+        if not cam:
+            self._health["camera"] = False
+            self.alert("camera", "Camera not connected",
+                       "Camera connection failed.\n\n"
+                       f"Reason: {CAM_REASON}",
+                       retry=self.camera.start)
+        return eth, cam
+
+    def ask_validation_password(self, parent):
+        pw, ok = QInputDialog.getText(parent, "Validation part",
+                                      "Enter the VALIDATION password:",
+                                      QLineEdit.EchoMode.Password)
+        if not ok:
+            return False
+        if pw == str(self.app_config.data.get("validation_password", "5678")):
+            return True
+        QMessageBox.critical(parent, "Wrong password",
+                             "Incorrect validation password.")
+        return False
 
     def purge_now(self):
         days = self.app_config.data.get("retention", {}).get("days", 2)
@@ -2509,6 +2795,45 @@ class MesDialog(QDialog):
         scroll.setWidget(inner)
         lay.addWidget(scroll, stretch=1)
 
+        # ---- validation serials: MES is DISABLED for these (password)
+        self._val_serials = [str(x).strip() for x in
+                             (cfg.get("validation_serials") or [])
+                             if str(x).strip()]
+        self._val_unlocked = False
+        vbox = QGroupBox(" 🧪 VALIDATION SERIAL NUMBERS (MES disabled for "
+                         "these) ")
+        vlay = QVBoxLayout(vbox)
+        vnote = QLabel("A scanned serial found in this list runs normally "
+                       "but is NEVER sent to MES (no check, no report). "
+                       "Any other serial uses MES as usual.")
+        vnote.setWordWrap(True)
+        vnote.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
+        vlay.addWidget(vnote)
+        self.val_list = QListWidget()
+        self.val_list.setFixedHeight(90)
+        vlay.addWidget(self.val_list)
+        vrow = QHBoxLayout()
+        self.val_edit = QLineEdit()
+        self.val_edit.setPlaceholderText("type or scan a serial no, then "
+                                         "Enter")
+        self.val_edit.setStyleSheet(f"background: {C_FIELD}; color: white;"
+                                    " padding: 5px; border-radius: 4px;")
+        self.val_edit.returnPressed.connect(self._val_add)
+        vrow.addWidget(self.val_edit, stretch=1)
+        self.val_add_btn = styled_btn(vbox, "+ Add", self._val_add,
+                                      color="#2f9e44")
+        vrow.addWidget(self.val_add_btn)
+        self.val_del_btn = styled_btn(vbox, "Remove selected",
+                                      self._val_remove, color="#c92a2a")
+        vrow.addWidget(self.val_del_btn)
+        vlay.addLayout(vrow)
+        self.val_unlock_btn = styled_btn(
+            vbox, "🔑 Unlock with validation password", self._val_unlock,
+            color="#f59f00")
+        vlay.addWidget(self.val_unlock_btn)
+        lay.addWidget(vbox)
+        self._val_refresh()
+
         self.var_block = BVar(QCheckBox(
             "Block the run when the previous stage did NOT pass "
             "(applies in 🔒 locked / production mode)"))
@@ -2543,8 +2868,47 @@ class MesDialog(QDialog):
         lay.addLayout(brow)
 
     # ------------------------------------------------------------------
+    def _val_refresh(self):
+        self.val_list.clear()
+        self.val_list.addItems(self._val_serials)
+        for w in (self.val_edit, self.val_add_btn, self.val_del_btn):
+            w.setEnabled(self._val_unlocked)
+        self.val_unlock_btn.setVisible(not self._val_unlocked)
+
+    def _val_unlock(self):
+        if self.app.ask_validation_password(self):
+            self._val_unlocked = True
+            self._val_refresh()
+            self.val_edit.setFocus()
+
+    def _val_add(self):
+        if not self._val_unlocked:
+            return
+        code = self.val_edit.text().strip()
+        self.val_edit.clear()
+        if not code:
+            return
+        if code in self._val_serials:
+            QMessageBox.information(self, "Already added",
+                                    f"'{code}' is already in the list.")
+        else:
+            self._val_serials.append(code)
+            self._val_refresh()
+            self.val_list.scrollToBottom()
+        self.val_edit.setFocus()
+
+    def _val_remove(self):
+        if not self._val_unlocked:
+            return
+        sel = [i.text() for i in self.val_list.selectedItems()]
+        if sel:
+            self._val_serials = [x for x in self._val_serials
+                                 if x not in sel]
+            self._val_refresh()
+
     def _collect(self):
         d = {k: self.vars[k].get().strip() for k, _, _ in self.FIELDS}
+        d["validation_serials"] = list(self._val_serials)
         d["enabled"] = bool(self.var_enabled.get())
         d["block_on_prev_fail"] = bool(self.var_block.get())
         d["upload_images"] = bool(self.var_imgs.get())
@@ -2869,6 +3233,10 @@ class HeadScreen(BaseScreen):
         self.mes_prev_state = "idle"   # idle | checking | pass | fail | error
         self.mes_prev_msg = ""
         self.mes_busy = False          # a cycle submission is in flight
+        # VALIDATION part: serial typed/scanned via the password-protected
+        # button; run normally but NEVER sent to MES (no check, no report)
+        self.validation_mode = False
+        self._popups = {}              # key -> open ResultPopup
         self.cycle_images = []         # [(label, ndarray)] collected per cycle
         # MES gets ONLY the current unit: runs are kept per scope and a
         # re-run replaces the older run (see _mes_collect); a new serial
@@ -2926,6 +3294,8 @@ class HeadScreen(BaseScreen):
         if not locked:
             top.addWidget(styled_btn(self, "Auto Balance", self.auto_balance,
                                      color="#44444e"))
+            top.addWidget(styled_btn(self, "⟲ Reset Camera",
+                                     self.reset_camera, color="#e8590c"))
             top.addWidget(styled_btn(self, "+ Add Scene", self.add_parent,
                                      color="#2f9e44"))
             top.addWidget(styled_btn(self, "Scanner",
@@ -3081,6 +3451,22 @@ class HeadScreen(BaseScreen):
         rlay.addWidget(self.status_sub)
         self.set_big_status(None)
 
+        # overall CYCLE result (all scenes of the unit) - separate from the
+        # big status above, which shows the LAST RUN only
+        self.cycle_result_lbl = QLabel("CYCLE RESULT:  —")
+        self.cycle_result_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cycle_result_lbl.setWordWrap(True)
+        rlay.addWidget(self.cycle_result_lbl)
+        self._set_cycle_result(None)
+        self.val_banner = QLabel("🧪 VALIDATION PART\n"
+                                 "data is NOT sent to MES")
+        self.val_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.val_banner.setStyleSheet(
+            "background: #1971c2; color: white; font-weight: bold;"
+            " font-size: 12pt; padding: 6px; border-radius: 6px;")
+        self.val_banner.setVisible(False)
+        rlay.addWidget(self.val_banner)
+
         # -- OK/NG counters (cycle first; arranged vertically)
         cbox = QGroupBox(" OK / NG COUNTER ")
         cblay = QVBoxLayout(cbox)
@@ -3203,6 +3589,14 @@ class HeadScreen(BaseScreen):
             mrow.addWidget(styled_btn(mbox, "Re-check",
                                       self.mes_recheck, color="#44444e"))
             mblay.addLayout(mrow)
+            nv = len(self.mes_cfg.get("validation_serials") or [])
+            if nv:
+                vh = QLabel(f"🧪 {nv} validation serial(s) registered - "
+                            "MES is skipped for them (MES button → "
+                            "validation list)")
+                vh.setWordWrap(True)
+                vh.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
+                mblay.addWidget(vh)
             rlay.addWidget(mbox)
         else:
             self.mes_status_lbl = None
@@ -3278,6 +3672,11 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     def destroy_screen(self):
         self._qr_stop.set()
+        for pp in list(getattr(self, "_popups", {}).values()):
+            try:
+                pp.close()
+            except Exception:
+                pass
         if self.mes:
             m, self.mes = self.mes, None
             threading.Thread(target=m.logout, daemon=True).start()
@@ -3289,6 +3688,73 @@ class HeadScreen(BaseScreen):
         self.log_box.append(html.escape(msg, quote=False))
         self.log_box.verticalScrollBar().setValue(
             self.log_box.verticalScrollBar().maximum())
+
+    # ------------------------------------------------------------------
+    # CYCLE RESULT (overall OK/NG of every scene) + popups
+    # ------------------------------------------------------------------
+    def _set_cycle_result(self, ok, sub=""):
+        base = ("font-size: 15pt; font-weight: bold; border-radius: 6px;"
+                " padding: 6px;")
+        if ok is None:
+            self.cycle_result_lbl.setText("CYCLE RESULT:  " + (sub or "—"))
+            self.cycle_result_lbl.setStyleSheet(
+                f"background: #2e2e38; color: #8f8f9a; {base}")
+        else:
+            self.cycle_result_lbl.setText(
+                f"CYCLE RESULT:  {'OK' if ok else 'NG'}"
+                + (f"\n{sub}" if sub else ""))
+            self.cycle_result_lbl.setStyleSheet(
+                f"background: {'#2f9e44' if ok else '#c92a2a'};"
+                f" color: white; {base}")
+
+    def _show_popup(self, key, title, headline, lines, color, auto_ms=0):
+        old = self._popups.pop(key, None)
+        if old is not None:
+            old.close()
+        pp = ResultPopup(self, title, headline, lines, color, auto_ms)
+        pp.show()
+        pp.raise_()
+        self._popups[key] = pp
+
+    def _popup_cycle_result(self, cycle_ok, scene_results, serial,
+                            validation):
+        cp = self.app.app_config.data.get("cycle_popup", {})
+        if not cp.get("enabled", True):
+            return
+        lines = []
+        if serial:
+            lines.append(f"Serial:  {serial}")
+        lines.append(f"Model:  {self.head}")
+        for sc in sorted(scene_results):
+            lines.append(f"   {'✔' if scene_results[sc] else '✖'}  scene "
+                         f"{sc}:  {'OK' if scene_results[sc] else 'NG'}")
+        if validation:
+            lines.append("\n🧪 VALIDATION PART — result NOT sent to MES")
+        auto = int(float(cp.get("auto_close_s", 5)) * 1000)
+        self._show_popup("cycle", "Cycle complete",
+                         f"CYCLE  {'OK' if cycle_ok else 'NG'}", lines,
+                         "#2f9e44" if cycle_ok else "#c92a2a", auto)
+
+    # ------------------------------------------------------------------
+    # VALIDATION PART  (MES disabled for this unit)
+    # ------------------------------------------------------------------
+    def _is_validation_serial(self, code):
+        """MES in use and this serial is in the model's validation list."""
+        if not self.mes_active:
+            return False
+        lst = [str(x).strip() for x in
+               (self.mes_cfg.get("validation_serials") or [])]
+        return str(code).strip() in lst
+
+    def _validation_notice(self, why):
+        self._show_popup(
+            "validation", "VALIDATION PART",
+            "🧪 VALIDATION PART",
+            [f"Serial:  {self.scan_value}", "",
+             "This part is for VALIDATION.",
+             "Its data is NOT sent to MES (no previous-stage check,",
+             "no images, no stage report).", "", why],
+            "#1971c2", 4000)
 
     def set_big_status(self, ok=None, sub=""):
         base = ("font-size: 34pt; font-weight: bold; border-radius: 8px;"
@@ -3409,6 +3875,29 @@ class HeadScreen(BaseScreen):
                       on_close=lambda: self.app.show_head(
                           self.head, announce=False)).show()
 
+    def reset_camera(self):
+        """Reset the camera to its own default settings (USB camera: the raw
+        feed, nothing applied; resizing is the only processing)."""
+        if not self.app.camera._cams:
+            self.app.alert("camera", "Camera not connected",
+                           "Camera connection failed - nothing to reset."
+                           f"\n\nReason: {CAM_REASON}",
+                           retry=self.app.camera.start)
+            return
+        self.log("[camera] resetting camera settings…")
+
+        def done(ok, msg):
+            def ui():
+                if not self._alive:
+                    return
+                self.log(f"[camera] {'✔' if ok else '✖'} {msg}")
+                self.app.comm_log.add("EVT" if ok else "ERR",
+                                      f"camera reset: {msg}")
+                (QMessageBox.information if ok else QMessageBox.warning)(
+                    self, "Reset camera", msg)
+            self.app.after(0, ui)
+        self.app.camera.reset_camera(done)
+
     def switch_operator(self):
         """End the operator session and ask for a new ID, without having to
         go back to the model list."""
@@ -3498,6 +3987,7 @@ class HeadScreen(BaseScreen):
             "sending":  ("⟳ sending report to MES…", "#ffd43b"),
             "sent":     ("✔ report sent to MES", "#69db7c"),
             "senderr":  ("⚠ MES report FAILED", "#ff6b6b"),
+            "validation": ("🧪 VALIDATION PART — MES DISABLED", "#74c0fc"),
         }.get(state, (state, "#9a9aa5"))
         self.mes_status_lbl.setText(text)
         self.mes_status_lbl.setStyleSheet(f"color: {color};"
@@ -3578,6 +4068,9 @@ class HeadScreen(BaseScreen):
         self.mes.check_previous_async(serial, done)
 
     def mes_recheck(self):
+        if self.validation_mode:
+            self.log("[MES] validation part — MES is disabled for it")
+            return
         if not self.scan_value:
             self.log("[MES] nothing to check — scan a barcode first")
             return
@@ -3589,6 +4082,8 @@ class HeadScreen(BaseScreen):
             return True, ""
         if self.mes_busy:
             return False, "MES is still submitting the previous cycle — wait"
+        if self.validation_mode and self.scan_value:
+            return True, ""          # validation part: MES not involved
         if self.mes_prev_state == "checking":
             return False, "previous-stage check still running — wait a moment"
         if not self.scan_active:
@@ -3626,7 +4121,7 @@ class HeadScreen(BaseScreen):
         ONLY CURRENT DATA: a run replaces every older run it covers (a
         re-run of a scene, or a whole-model run), so a failed first attempt
         never reaches MES once the part was re-run."""
-        if not self.mes_active:
+        if not self.mes_active or self.validation_mode:
             return
         stamp = datetime.datetime.now().strftime("%H:%M:%S")
         name = ("MODEL (all scenes)" if scope[0] == "head"
@@ -4208,6 +4703,7 @@ class HeadScreen(BaseScreen):
         self._qr_gen += 1              # drop any pending retry / wait timer
         self._qr_close_toast()
         self._update_scan_panel()
+        self._set_validation(False)
         self._set_mes_status("idle", "")
         self._mes_reset_cycle_data()
         if self.qr_scan_active:
@@ -4217,10 +4713,17 @@ class HeadScreen(BaseScreen):
             if self.scanner_cfg.get("auto_popup", True):
                 QTimer.singleShot(300, self.open_quick_scan)
 
-    def _handle_barcode(self, code):
+    def _set_validation(self, on):
+        self.validation_mode = bool(on)
+        self.val_banner.setVisible(self.validation_mode)
+
+    def _handle_barcode(self, code, validation=False):
         # a new serial = a new unit: nothing of the previous one may reach MES
         self._mes_reset_cycle_data()
         self.cycle_scene_results = {}
+        validation = validation or self._is_validation_serial(code)
+        self._set_validation(validation)
+        self._set_cycle_result(None, "cycle in progress…")
         self.scan_value = code
         self.scan_time = datetime.datetime.now().strftime("%H:%M:%S")
         self.scan_sent = False
@@ -4229,6 +4732,19 @@ class HeadScreen(BaseScreen):
         self.log(f"[scanner] scanned '{code}'{op_info}")
         
         self._update_scan_panel()
+        if validation:
+            self.app.comm_log.add("EVT", f"VALIDATION part '{code}' — MES "
+                                         "disabled, nothing will be sent")
+            self.log(f"[validation] '{code}' is a VALIDATION part — MES check "
+                     "skipped, nothing will be sent to MES")
+            self._set_mes_status("validation", f"serial '{code}' — NOT sent "
+                                               "to MES")
+            self._validation_notice("Serial found in the validation list.\n"
+                                    "Run it as usual.")
+            if self.scanner_cfg.get("send_to_client", True):
+                self._try_send_barcode()
+                self._update_scan_panel()
+            return
         self.mes_check_previous(code)
         # if self.scanner_cfg.get("send_to_client", True):
         #         if self.mes_prev_state in ("pass", "all_passed"):
@@ -4265,6 +4781,8 @@ class HeadScreen(BaseScreen):
     def clear_barcode(self):
         self.scan_value = None
         self.scan_sent = False
+        self._set_validation(False)
+        self._set_mes_status("idle", "")
         self._mes_reset_cycle_data()
         self.log("[scanner] cleared — scan next barcode")
         self._update_scan_panel()
@@ -4328,8 +4846,22 @@ class HeadScreen(BaseScreen):
 
     def _end_cycle(self, all_ok):
         """Called when EVERY scene of the model has been run once."""
+        scenes = dict(self.cycle_scene_results)
         self.cycle_scene_results = {}
         serial = self.scan_value
+        validation = self.validation_mode
+        # overall CYCLE result: on the UI and in a popup
+        self._set_cycle_result(all_ok, ("🧪 validation part - not sent to MES"
+                                        if validation else ""))
+        self._popup_cycle_result(all_ok, scenes, serial, validation)
+        if validation:
+            self.log(f"[validation] cycle {'OK' if all_ok else 'NG'} for "
+                     f"'{serial}' — NOT sent to MES")
+            self.app.comm_log.add("EVT", f"VALIDATION cycle '{serial}' "
+                                         f"{'OK' if all_ok else 'NG'} — not "
+                                         "sent to MES")
+            self._start_next_cycle()
+            return
         # MES first: the next unit may only be scanned once this one has been
         # reported.  _mes_submit_cycle() calls _start_next_cycle() when the
         # upload finishes (pass or fail).
@@ -4554,13 +5086,20 @@ class HeadScreen(BaseScreen):
                 else:
                     QMessageBox.warning(self, "Cannot run", reason)
             return
+        eth_ok, cam_ok = self.app.hardware_ok(self)   # popup if broken
+        if not eth_ok:
+            self.log("⚠ Ethernet is NOT connected")
         frame = self.app.camera.get_frame()
         if frame is None:
             self.log(f"No camera frame — cannot run {scope} ({source})")
-            if source == "MANUAL":
-                QMessageBox.critical(self, "No camera",
-                                     "No camera frame available yet.")
+            if cam_ok:      # camera not reported broken, just no frame yet
+                self.app.alert("camera", "No camera frame",
+                               "No image from the camera.\n\n"
+                               f"Reason: {CAM_REASON}",
+                               retry=self.app.camera.start)
             return
+        if self.validation_mode:
+            self._validation_notice("This run is NOT sent to MES.")
         if scope[0] == "head":
             plan = [(p, None) for p in self.app.heads.list_parents(self.head)]
         elif scope[0] == "parent":

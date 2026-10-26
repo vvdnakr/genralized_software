@@ -1,0 +1,19 @@
+enabled: true
+mes_ip: 172.17.192.237
+username: pt2user
+password: vvdntech
+login_stage_name: pt2
+stage_id: '99'
+stage_name: Pin Bend Testing
+product_id: 901-1-04216
+product_name: 901-1-04216-UPP
+operator_id: vvdn6789
+created_by: ak
+machine_no: '2'
+file_format: txt
+block_on_prev_fail: true
+upload_images: true
+defect_type: Pin Bend
+validation_serials:
+- '123'
+- '567'
