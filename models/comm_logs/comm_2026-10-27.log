@@ -1,0 +1,12 @@
+2026-10-27 09:36:17 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-27 14:50:49 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-27 14:51:06 | EVT | barcode scanned: '##**!'
+2026-10-27 14:51:08 | EVT | MES prev-stage ERROR '##**!': ##**!: HTTP 404
+2026-10-27 14:52:28 | EVT | barcode scanned: '123'
+2026-10-27 14:52:28 | EVT | VALIDATION part '123' — MES disabled, nothing will be sent
+2026-10-27 14:52:28 | EVT | barcode 'qr123' NOT sent (comm OFF)
+2026-10-27 14:54:29 | EVT | barcode scanned: 'cuire]'
+2026-10-27 14:55:06 | EVT | model 'asa' selected in UI (comm OFF — '1' not sent)
+2026-10-27 14:55:08 | EVT | barcode scanned: 'ed'
+2026-10-27 14:55:13 | EVT | MES prev-stage ERROR 'ed': ed: Please try again! The entered input does not contain any valid serial number.
+2026-10-27 14:55:18 | EVT | barcode scanned: 'cd'

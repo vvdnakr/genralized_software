@@ -1,0 +1,89 @@
+======================================================================
+Time     : 2026-10-26 11:43:22 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/2323/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 11:43:28 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/2323/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 11:43:34 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/2323/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 11:43:39 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/2323/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 11:43:43 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/2323/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-26 11:43:45 UTC
+URL      : http://172.17.192.237/user/user_logout/
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "message": "User logged out successfully",
+    "status": 200
+  }
+}
+

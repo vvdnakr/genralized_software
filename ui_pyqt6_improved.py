@@ -502,10 +502,15 @@ class QuickScanInput(QDialog):
     just cannot lock other apps out.  Under Xorg / XWayland the grab is real.
     """
 
+    UNLOCK_CODE = "##**1"     # scan/type this to close the box, like Esc —
+                              # for stations with a scanner but no keyboard
+    last_unlocked = False     # set by ask() after the box closes
+
     def __init__(self, parent=None, prompt="SCAN BARCODE",
                  sub="", timeout_s=0, width=620, initial=""):
         super().__init__(parent)
         self.value = None
+        self.unlocked = False
         self._deadline = (time.time() + timeout_s) if timeout_s else 0.0
         self._timeout_s = timeout_s
 
@@ -591,6 +596,10 @@ class QuickScanInput(QDialog):
         txt = self.entry.text().strip()
         if not txt:
             return
+        if txt == self.UNLOCK_CODE:
+            self.unlocked = True
+            self._cancel()
+            return
         self.value = txt
         self._release()
         self.accept()
@@ -630,6 +639,7 @@ class QuickScanInput(QDialog):
         dlg = QuickScanInput(parent, prompt=prompt, sub=sub,
                              timeout_s=timeout_s, initial=initial)
         dlg.exec()
+        QuickScanInput.last_unlocked = dlg.unlocked
         return dlg.value
 
 
@@ -1032,11 +1042,8 @@ class CommEngine:
                 and not self._listen_alerted:
             conn = self.settings.data["connection"]
             self.log.add("ERR", "no client connected")
-            self._popup("comm_noclient", "Communication - no client",
-                        "Connection failed - no client connected.\n\n"
-                        "Reason: client cable disconnected, client powered "
-                        "off, or its IP / port changed.\n"
-                        f"(server {conn.get('ip')}:{conn.get('port')})")
+            self._popup("comm_noclient", "MACHINE NOT CONNECTED",
+                        "Reason: machine is off or its cable is out.")
 
     def client_count(self):
         with self._lock:
@@ -1044,12 +1051,13 @@ class CommEngine:
 
     def status_text(self):
         if not self.enabled:
-            return "communication OFF"
+            return "Machine connection is OFF"
         conn = self.settings.data["connection"]
         hs = self.settings.data["handshake"]
         n = self.client_count()
-        cl = f"{n} client connected" if n else "waiting for client…"
-        return (f"listening {conn.get('ip')}:{conn.get('port')}  ·  {cl}"
+        cl = (f"{n} machine connected" if n
+              else "waiting for the machine to connect")
+        return (f"{cl}  ·  {conn.get('ip')}:{conn.get('port')}"
                 f"  ·  handshake {'ON' if hs.get('enabled') else 'OFF'}")
 
     def start(self):
@@ -1109,10 +1117,9 @@ class CommEngine:
                                     f"retrying in {self.RETRY_S}s")
                 if not self._listen_alerted:
                     self._listen_alerted = True
-                    self._popup("comm_listen", "Communication connection failed",
-                                "Connection failed.\n\n"
-                                f"Reason: {COMM_REASON}\n"
-                                f"(cannot use {ip}:{port})")
+                    self._popup("comm_listen", "CONNECTION FAILED",
+                                "Reason: network cable is out or the IP "
+                                f"address changed ({ip}).")
                 for _ in range(self.RETRY_S * 2):
                     if not (self.enabled and gen == self._gen):
                         return
@@ -1176,10 +1183,8 @@ class CommEngine:
         self.log.add("EVT", f"client {addr[0]} disconnected "
                             "(will accept reconnection)")
         if self.enabled and gen == self._gen:
-            self._popup("comm_client", "Communication lost",
-                        f"Connection lost - client {addr[0]} disconnected."
-                        "\n\nReason: client cable loose / disconnected, "
-                        "client powered off, or its IP changed.")
+            self._popup("comm_client", "MACHINE DISCONNECTED",
+                        "Reason: machine is off or its cable is out.")
 
     def handle_incoming(self, text, source="SIM"):
         if not text:
@@ -1325,10 +1330,12 @@ class CameraFeed:
             self._error = None
         except Exception as e:
             if isinstance(e, IndexError):
-                self._error = ("Camera NOT connected - no camera detected.\n"
-                               "Check the camera power and its Ethernet cable.")
+                self._error = ("No camera found.\n"
+                               "Please check the camera cable and power.")
             else:
-                self._error = f"Camera init failed: {e}"
+                self._error = ("The camera could not be started.\n"
+                               "Please check the camera cable and power.\n"
+                               f"({e})")
             self._running = False
             return
         fails = 0
@@ -1353,9 +1360,9 @@ class CameraFeed:
                 fails += 1
                 if fails >= 3:
                     # stop serving a stale picture as if it were live
-                    self._error = (f"Camera DISCONNECTED - grab failed: {e}\n"
-                                   "Check the camera power and its Ethernet "
-                                   "cable.")
+                    self._error = ("No picture from the camera.\n"
+                                   "Please check the camera cable and "
+                                   "power.")
                     with self._lock:
                         self._latest = None
                     # try to re-open the camera every few seconds
@@ -1547,60 +1554,107 @@ def draw_pin_overlay(img, pins, off_x, off_y, dist_thr):
 # ============================================================================
 # Qt STYLE HELPERS  (professional dark theme)
 # ============================================================================
-C_BG = "#1c1c22"
-C_PANEL = "#22222a"
-C_FIELD = "#15151a"
-C_TEXT = "#e2e2e6"
-C_MUTED = "#9a9aa5"
-C_FAINT = "#6b6b75"
+# -- palette: graphite + teal (industrial inspection look) -------------------
+C_BG      = "#0d1117"      # window
+C_PANEL   = "#161b22"      # panels / group boxes
+C_ELEV    = "#1c232d"      # raised rows
+C_LINE    = "#232b35"      # borders
+C_FIELD   = "#0a0e13"      # inputs
+C_TEXT    = "#e6edf3"
+C_MUTED   = "#8b98a5"
+C_FAINT   = "#5c6773"
+C_ACCENT  = "#12a594"      # primary action (teal)
+C_BLUE    = "#3d6ff5"
+C_OK      = "#1f9d55"
+C_NG      = "#d93a3a"
+C_WARN    = "#c9821a"
+C_NEUTRAL = "#242c38"
+
+# THE WHOLE UI USES FOUR BUTTON COLOURS, NOTHING ELSE:
+#   teal  = the main action of the screen
+#   grey  = every ordinary action
+#   amber = something that needs attention / a decision
+#   red   = deletes and resets
+# The call sites still pass the old colour names; they are mapped here, so
+# the look of the whole program is decided in this one place.
+# Only 3 button colours in the whole app: teal = the one main action in a
+# panel, grey = an ordinary button, red = delete / reset. Nothing else.
+_BTN_MAP = {
+    "#2f9e44": C_ACCENT,      # save / confirm / add  -> main action
+    "#e8590c": C_ACCENT,      # run
+    "#0ca678": C_ACCENT,
+    "#f59f00": C_ACCENT,      # finish / unlock -> same as main action
+    "#e03131": C_NG,          # delete / reset
+    "#c92a2a": C_NG,
+    "#3b6ef5": C_NEUTRAL,     # everything else is grey
+    "#44444e": C_NEUTRAL,
+    "#845ef7": C_NEUTRAL,
+    "#1971c2": C_NEUTRAL,
+    "#74c0fc": C_NEUTRAL,
+}
 
 GLOBAL_QSS = f"""
-* {{ font-family: 'Segoe UI', 'Noto Sans', sans-serif; }}
+* {{ font-family: 'Inter', 'Segoe UI', 'Noto Sans', sans-serif; }}
 QMainWindow, QDialog {{ background: {C_BG}; }}
 QWidget {{ color: {C_TEXT}; font-size: 10pt; }}
-QLabel {{ background: transparent; }}
+QLabel {{ background: transparent; border: none; }}
+QFrame#card {{
+    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 10px;
+}}
 QGroupBox {{
-    background: {C_PANEL}; border: 1px solid #2e2e38; border-radius: 8px;
-    margin-top: 12px; padding: 6px 4px 4px 4px;
-    font-weight: 600; color: {C_MUTED}; font-size: 9pt;
+    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 10px;
+    margin-top: 14px; padding: 10px 8px 8px 8px;
+    font-weight: 700; color: {C_MUTED}; font-size: 8pt;
 }}
 QGroupBox::title {{
-    subcontrol-origin: margin; left: 10px; padding: 0 4px;
+    subcontrol-origin: margin; left: 12px; padding: 0 6px;
+    letter-spacing: 1px;
 }}
 QLineEdit, QComboBox {{
-    background: {C_FIELD}; color: white; border: 1px solid #33333d;
-    border-radius: 6px; padding: 4px 8px; selection-background-color: #3b6ef5;
+    background: {C_FIELD}; color: {C_TEXT}; border: 1px solid #2b333e;
+    border-radius: 6px; padding: 7px 10px; font-size: 10pt;
+    selection-background-color: {C_ACCENT};
 }}
-QLineEdit:focus, QComboBox:focus {{ border: 1px solid #3b6ef5; }}
+QLineEdit:focus, QComboBox:focus {{ border: 1px solid {C_ACCENT}; }}
+QLineEdit:disabled {{ background: #10151b; color: {C_FAINT}; }}
 QComboBox QAbstractItemView {{
-    background: {C_FIELD}; color: white; border: 1px solid #33333d;
-    selection-background-color: #3b6ef5;
+    background: {C_PANEL}; color: {C_TEXT}; border: 1px solid {C_LINE};
+    selection-background-color: {C_ACCENT};
 }}
 QTextEdit {{
-    background: {C_FIELD}; color: #c8c8d0; border: 1px solid #2b2b34;
-    border-radius: 6px; font-family: 'Consolas', 'DejaVu Sans Mono', monospace;
+    background: {C_FIELD}; color: #b9c4cf; border: 1px solid #222a34;
+    border-radius: 8px;
+    font-family: 'Consolas', 'DejaVu Sans Mono', monospace; font-size: 9pt;
 }}
-QCheckBox {{ color: #c8c8d0; spacing: 8px; }}
+QCheckBox {{ color: #c3ccd6; spacing: 9px; font-size: 10pt; }}
 QCheckBox::indicator {{
-    width: 16px; height: 16px; border-radius: 4px;
-    border: 1px solid #44444e; background: {C_FIELD};
+    width: 17px; height: 17px; border-radius: 4px;
+    border: 1px solid #39424e; background: {C_FIELD};
 }}
-QCheckBox::indicator:checked {{ background: #3b6ef5; border-color: #3b6ef5; }}
-QTreeWidget {{
-    background: {C_FIELD}; border: 1px solid #2b2b34; border-radius: 6px;
+QCheckBox::indicator:checked {{
+    background: {C_ACCENT}; border-color: {C_ACCENT};
+}}
+QListWidget, QTreeWidget {{
+    background: {C_FIELD}; border: 1px solid #222a34; border-radius: 8px;
     font-size: 10pt;
 }}
-QTreeWidget::item {{ height: 26px; }}
-QTreeWidget::item:selected {{ background: #2e3a5c; }}
-QScrollBar:vertical {{
-    background: {C_BG}; width: 10px; margin: 0;
+QListWidget::item, QTreeWidget::item {{ height: 26px; padding-left: 4px; }}
+QListWidget::item:selected, QTreeWidget::item:selected {{
+    background: #1d3a4d; color: white;
 }}
+QScrollBar:vertical {{ background: transparent; width: 11px; margin: 2px; }}
 QScrollBar::handle:vertical {{
-    background: #3a3a44; border-radius: 5px; min-height: 24px;
+    background: #333c48; border-radius: 5px; min-height: 28px;
 }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+QScrollBar::handle:vertical:hover {{ background: #414c5a; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollArea {{ border: none; background: transparent; }}
-QMessageBox, QInputDialog {{ background: {C_PANEL}; }}
+QMessageBox, QInputDialog {{ background: {C_PANEL}; font-size: 11pt; }}
+QMessageBox QLabel {{ font-size: 12pt; }}
+QToolTip {{
+    background: {C_ELEV}; color: {C_TEXT}; border: 1px solid {C_LINE};
+    padding: 5px;
+}}
 """
 
 
@@ -1611,37 +1665,285 @@ def _shade(hexcolor, f):
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def fit_size(want_w, want_h, min_w=420, min_h=320):
+    """Shrink (w, h) so a window / dialog always fits on the screen it is
+    opened on, however small that screen is.  Never used to grow a window
+    bigger than what was asked for."""
+    screen = QApplication.primaryScreen()
+    if screen is None:
+        return want_w, want_h
+    geo = screen.availableGeometry()
+    margin = 40
+    w = min(want_w, max(min_w, geo.width() - margin))
+    h = min(want_h, max(min_h, geo.height() - margin))
+    return w, h
+
+
 def apply_btn_color(btn, color):
+    color = _BTN_MAP.get(str(color).lower(), color)
+    border = ("1px solid #2f3a46" if color == C_NEUTRAL
+              else f"1px solid {_shade(color, 0.86)}")
     btn.setStyleSheet(
-        f"QPushButton {{ background: {color}; color: white; border: none;"
-        f" border-radius: 6px; padding: 6px 12px; font-weight: 600;"
+        f"QPushButton {{ background: {color}; color: white;"
+        f" border: {border};"
+        f" border-radius: 6px; padding: 8px 14px; font-weight: 600;"
         f" font-size: 10pt; }}"
-        f" QPushButton:hover {{ background: {_shade(color, 1.18)}; }}"
-        f" QPushButton:pressed {{ background: {_shade(color, 0.82)}; }}"
-        f" QPushButton:disabled {{ background: #2c2c34; color: #6b6b75; }}")
+        f" QPushButton:hover {{ background: {_shade(color, 1.16)}; }}"
+        f" QPushButton:pressed {{ background: {_shade(color, 0.84)}; }}"
+        f" QPushButton:disabled {{ background: #141a21;"
+        f" border: 1px solid #1e252d; color: #46505b; }}")
+
+
+class FitButton(QPushButton):
+    """A button that can never be squeezed narrower than its own text: the
+    layout must give it at least the width of the words plus the padding,
+    and it re-measures itself whenever its text changes."""
+    PAD = 34
+
+    def _text_w(self):
+        lines = (self.text() or " ").split("\n")
+        fm = self.fontMetrics()
+        return max(fm.horizontalAdvance(t) for t in lines) + self.PAD
+
+    def minimumSizeHint(self):
+        h = super().minimumSizeHint()
+        h.setWidth(max(h.width(), self._text_w()))
+        return h
+
+    def sizeHint(self):
+        h = super().sizeHint()
+        h.setWidth(max(h.width(), self._text_w()))
+        return h
+
+    def setText(self, text):
+        super().setText(text)
+        self.updateGeometry()
 
 
 def styled_btn(master, text, cmd, color="#3b6ef5", **kw):
     """Same signature as the Tkinter version (master kept for call-site
     compatibility; Qt parenting is done by the layouts)."""
-    b = QPushButton(text)
+    b = FitButton(text)
+    b.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
     b.clicked.connect(lambda *_: cmd())
     b.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
     # A barcode scanner ends every scan with Enter.  If a button ever holds
     # keyboard focus that Enter *activates the button* — which is how a second
-    # scan used to press '← Models' and throw you back to the model list.
+    # scan used to press '<- Models' and throw you back to the model list.
     # Buttons here are mouse/touch driven, so they never need focus.
     b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     b.setAutoDefault(False)
     b.setDefault(False)
+    b.setMinimumHeight(36)
     apply_btn_color(b, color)
     return b
 
 
-def panel(bg=C_PANEL, radius=8):
+def section_title(text, size=8):
+    """Small upper-case caption used above a group of controls."""
+    l = QLabel(text.upper())
+    l.setStyleSheet(f"color: {C_FAINT}; font-size: {size}pt;"
+                    " font-weight: 700; letter-spacing: 1px;")
+    l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return l
+
+
+def screen_title(text):
+    l = QLabel(text)
+    l.setStyleSheet(f"color: {C_TEXT}; font-size: 15pt; font-weight: 700;"
+                    " letter-spacing: 0.3px;")
+    return l
+
+
+def hint_label(text, color=None):
+    l = QLabel(text)
+    l.setWordWrap(True)
+    l.setStyleSheet(f"color: {color or C_MUTED}; font-size: 9pt;")
+    return l
+
+
+def btn_group(buttons, spacing=6, pad=(6, 5, 6, 5)):
+    """Several buttons shown as ONE block, so a toolbar never looks like
+    loose buttons scattered over the screen."""
+    f = QFrame()
+    f.setStyleSheet(f"QFrame {{ background: {C_ELEV};"
+                    f" border: 1px solid {C_LINE}; border-radius: 8px; }}")
+    lay = QHBoxLayout(f)
+    lay.setContentsMargins(*pad)
+    lay.setSpacing(spacing)
+    for b in buttons:
+        lay.addWidget(b)
+    return f
+
+
+def caption(text):
+    """Small grey upper-case caption above a group of controls."""
+    l = QLabel(str(text).upper())
+    l.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt; font-weight: 700;"
+                    " letter-spacing: 1px; background: transparent;"
+                    " border: none;")
+    return l
+
+
+def card(title=None, name="card", bg=None):
+    """Rounded panel with an optional caption.  The style is bound to the
+    frame's object name, so it never leaks onto the widgets inside."""
+    f = QFrame()
+    f.setObjectName(name)
+    f.setStyleSheet(f"QFrame#{name} {{ background: {bg or C_PANEL};"
+                    f" border: 1px solid {C_LINE}; border-radius: 10px; }}"
+                    " QLabel { background: transparent; border: none; }")
+    lay = QVBoxLayout(f)
+    lay.setContentsMargins(12, 10, 12, 12)
+    lay.setSpacing(8)
+    if title:
+        lay.addWidget(caption(title))
+    return f, lay
+
+
+def vline():
+    l = QFrame()
+    l.setFixedWidth(1)
+    l.setStyleSheet(f"background: {C_LINE}; border: none;")
+    return l
+
+
+def simulate_group(app, master):
+    """Compact 'send a test signal' box, for the main screen (the Monitor
+    window has the same send box plus the full connect/handshake controls)."""
+    w = QWidget()
+    v = QVBoxLayout(w)
+    v.setContentsMargins(0, 0, 0, 0)
+    v.setSpacing(4)
+    v.addWidget(caption("Simulate Machine Signal"))
+    h = QHBoxLayout()
+    h.setSpacing(6)
+    e = QLineEdit()
+    e.setPlaceholderText("signal text")
+    e.setFixedWidth(150)
+
+    def send():
+        text = e.text().strip()
+        if not text:
+            return
+        e.clear()
+        app.engine.simulate(text)
+    e.returnPressed.connect(send)
+    h.addWidget(e)
+    h.addWidget(styled_btn(master, "Send", send, color="#44444e"))
+    v.addLayout(h)
+    w.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+    return w
+
+
+def tool_group(title, buttons):
+    """Caption + a row of buttons: one block of the toolbar."""
+    w = QWidget()
+    v = QVBoxLayout(w)
+    v.setContentsMargins(0, 0, 0, 0)
+    v.setSpacing(4)
+    v.addWidget(caption(title))
+    h = QHBoxLayout()
+    h.setSpacing(6)
+    for b in buttons:
+        h.addWidget(b)
+    v.addLayout(h)
+    w.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+    return w
+
+
+class StatusChip(QFrame):
+    """Pill with a coloured dot: green = working, red = problem,
+    grey = off / not known yet."""
+
+    def __init__(self, name):
+        super().__init__()
+        self.setObjectName("chip")
+        self.setStyleSheet(f"QFrame#chip {{ background: {C_ELEV};"
+                           f" border: 1px solid {C_LINE};"
+                           " border-radius: 14px; }"
+                           " QLabel { background: transparent; border: none; }")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 5, 12, 5)
+        lay.setSpacing(7)
+        self.dot = QLabel()
+        self.dot.setFixedSize(10, 10)
+        lay.addWidget(self.dot)
+        self.lbl = QLabel(name)
+        lay.addWidget(self.lbl)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.state = "init"
+        self.set(None)
+
+    def set(self, state, tip=""):
+        if state == self.state:
+            return
+        self.state = state
+        col = {True: C_OK, False: C_NG}.get(state, C_FAINT)
+        self.dot.setStyleSheet(f"background: {col}; border-radius: 5px;")
+        self.lbl.setStyleSheet(
+            f"color: {C_TEXT if state is not None else C_MUTED};"
+            " font-size: 9pt; font-weight: 600;")
+        if tip:
+            self.setToolTip(tip)
+
+
+def btn_row(buttons, spacing=6):
+    """One row of equally wide buttons."""
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(spacing)
+    for b in buttons:
+        lay.addWidget(b, stretch=1)
+    return w
+
+
+def step_bar(steps, current):
+    """A '1 2 3' guide strip: the step the user is on is highlighted and
+    carries the instruction.  steps = [(short name, what to do), ...]"""
+    f = QFrame()
+    f.setStyleSheet(f"QFrame {{ background: {C_PANEL};"
+                    f" border: 1px solid {C_LINE}; border-radius: 10px; }}"
+                    " QLabel { background: transparent; border: none; }")
+    lay = QVBoxLayout(f)
+    lay.setContentsMargins(14, 10, 14, 10)
+    lay.setSpacing(8)
+    row = QHBoxLayout()
+    row.setSpacing(8)
+    for i, (name, _) in enumerate(steps):
+        done = i < current
+        here = i == current
+        chip = QLabel(f"  {i + 1}.  {name}  ")
+        chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if here:
+            chip.setStyleSheet(f"background: {C_ACCENT}; color: white;"
+                               " font-size: 10pt; font-weight: 700;"
+                               " padding: 7px 10px; border-radius: 6px;")
+        elif done:
+            chip.setStyleSheet(f"background: #16323a; color: {C_ACCENT};"
+                               " font-size: 10pt; font-weight: 600;"
+                               " padding: 7px 10px; border-radius: 6px;")
+        else:
+            chip.setStyleSheet(f"background: {C_ELEV}; color: {C_FAINT};"
+                               " font-size: 10pt; padding: 7px 10px;"
+                               " border-radius: 6px;")
+        row.addWidget(chip, stretch=1)
+    lay.addLayout(row)
+    if 0 <= current < len(steps):
+        tip = QLabel(steps[current][1])
+        tip.setWordWrap(True)
+        tip.setStyleSheet(f"color: {C_TEXT}; font-size: 11pt;")
+        lay.addWidget(tip)
+    return f
+
+
+def panel(bg=C_PANEL, radius=10):
     w = QFrame()
-    w.setStyleSheet(f"QFrame {{ background: {bg}; border-radius: {radius}px; }}"
-                    f" QLabel {{ background: transparent; }}")
+    w.setStyleSheet(f"QFrame {{ background: {bg};"
+                    f" border: 1px solid {C_LINE};"
+                    f" border-radius: {radius}px; }}"
+                    " QLabel { background: transparent; border: none; }")
     return w
 
 
@@ -1930,11 +2232,16 @@ def zoom_controls(master, canvas):
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(4)
     lay.addStretch()
-    lay.addWidget(styled_btn(row, "－", canvas.zoom_out, color="#44444e"))
-    lay.addWidget(styled_btn(row, "Fit", canvas.fit, color="#44444e"))
-    lay.addWidget(styled_btn(row, "＋", canvas.zoom_in, color="#44444e"))
-    hint = QLabel("  wheel = zoom · right-drag = pan")
-    hint.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
+    zb = []
+    for txt, cmd in (("-", canvas.zoom_out), ("Fit", canvas.fit),
+                     ("+", canvas.zoom_in)):
+        b = styled_btn(row, txt, cmd, color="#44444e")
+        b.setFixedWidth(64 if txt == "Fit" else 44)
+        zb.append(b)
+    lay.addWidget(btn_group(zb, spacing=4))
+    hint = QLabel("wheel = zoom · right-drag = pan")
+    hint.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;"
+                       " padding-left: 10px;")
     lay.addWidget(hint)
     lay.addStretch()
     return row
@@ -1981,36 +2288,315 @@ def ethernet_connected():
         return True       # cannot tell -> do not raise a false alarm
 
 
-class ResultPopup(QDialog):
-    """Non-modal, always-on-top, colour-coded popup (cycle result, validation
-    part notice).  Non-modal so a client-triggered run is never stalled."""
+def ask_text(parent, headline, body="", placeholder="", password=False):
+    """Big, clear text box.  Returns the typed text, or None if cancelled."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(headline)
+    dlg.setModal(True)
+    dlg.setMinimumWidth(560)
+    accent = C_ACCENT
+    dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
+                      f" border: 2px solid {accent}; border-radius: 12px; }}")
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+    band = QLabel(headline)
+    band.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    band.setWordWrap(True)
+    band.setStyleSheet(f"background: {accent}; color: white;"
+                       " font-size: 22pt; font-weight: 800; padding: 20px;"
+                       " border-top-left-radius: 10px;"
+                       " border-top-right-radius: 10px;")
+    lay.addWidget(band)
+    inner = QVBoxLayout()
+    inner.setContentsMargins(26, 22, 26, 22)
+    inner.setSpacing(14)
+    if body:
+        t = QLabel(body)
+        t.setWordWrap(True)
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t.setStyleSheet(f"color: {C_MUTED}; font-size: 12pt;")
+        inner.addWidget(t)
+    edit = QLineEdit()
+    edit.setPlaceholderText(placeholder)
+    edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    edit.setMinimumHeight(54)
+    if password:
+        edit.setEchoMode(QLineEdit.EchoMode.Password)
+    edit.setStyleSheet(f"background: {C_FIELD}; color: white;"
+                       f" border: 1px solid {C_LINE}; border-radius: 8px;"
+                       " font-size: 18pt;"
+                       + (" letter-spacing: 6px;" if password else ""))
+    edit.returnPressed.connect(dlg.accept)
+    inner.addWidget(edit)
+    row = QHBoxLayout()
+    row.setSpacing(10)
+    bc = QPushButton("Cancel")
+    bc.setMinimumHeight(50)
+    bc.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    apply_btn_color(bc, C_NEUTRAL)
+    bc.setStyleSheet(bc.styleSheet() + " QPushButton { font-size: 13pt; }")
+    bc.clicked.connect(dlg.reject)
+    row.addWidget(bc, stretch=1)
+    bo = QPushButton("Continue")
+    bo.setMinimumHeight(50)
+    bo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    apply_btn_color(bo, C_OK)
+    bo.setStyleSheet(bo.styleSheet() + " QPushButton { font-size: 13pt; }")
+    bo.clicked.connect(dlg.accept)
+    row.addWidget(bo, stretch=1)
+    inner.addLayout(row)
+    lay.addLayout(inner)
+    edit.setFocus()
+    if dlg.exec() == QDialog.DialogCode.Accepted:
+        return edit.text()
+    return None
 
-    def __init__(self, parent, title, headline, lines=(), color="#2f9e44",
-                 auto_ms=0):
+
+def ask_password(parent, headline, body=""):
+    """Big, clear password box.  Returns the typed text, or None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Password")
+    dlg.setModal(True)
+    dlg.setMinimumWidth(560)
+    dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
+                      f" border: 2px solid {C_WARN}; border-radius: 12px; }}")
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+    band = QLabel(headline)
+    band.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    band.setWordWrap(True)
+    band.setStyleSheet(f"background: {C_WARN}; color: white;"
+                       " font-size: 22pt; font-weight: 800; padding: 20px;"
+                       " border-top-left-radius: 10px;"
+                       " border-top-right-radius: 10px;")
+    lay.addWidget(band)
+    inner = QVBoxLayout()
+    inner.setContentsMargins(26, 22, 26, 22)
+    inner.setSpacing(14)
+    if body:
+        t = QLabel(body)
+        t.setWordWrap(True)
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t.setStyleSheet(f"color: {C_MUTED}; font-size: 12pt;")
+        inner.addWidget(t)
+    edit = QLineEdit()
+    edit.setEchoMode(QLineEdit.EchoMode.Password)
+    edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    edit.setMinimumHeight(54)
+    edit.setStyleSheet(f"background: {C_FIELD}; color: white;"
+                       f" border: 1px solid {C_LINE}; border-radius: 8px;"
+                       " font-size: 20pt; letter-spacing: 6px;")
+    edit.returnPressed.connect(dlg.accept)
+    inner.addWidget(edit)
+    row = QHBoxLayout()
+    row.setSpacing(10)
+    bc = QPushButton("Cancel")
+    bc.setMinimumHeight(50)
+    bc.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    apply_btn_color(bc, C_NEUTRAL)
+    bc.setStyleSheet(bc.styleSheet() + " QPushButton { font-size: 13pt; }")
+    bc.clicked.connect(dlg.reject)
+    row.addWidget(bc, stretch=1)
+    bo = QPushButton("Continue")
+    bo.setMinimumHeight(50)
+    bo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    apply_btn_color(bo, C_OK)
+    bo.setStyleSheet(bo.styleSheet() + " QPushButton { font-size: 13pt; }")
+    bo.clicked.connect(dlg.accept)
+    row.addWidget(bo, stretch=1)
+    inner.addLayout(row)
+    lay.addLayout(inner)
+    edit.setFocus()
+    if dlg.exec() == QDialog.DialogCode.Accepted:
+        return edit.text()
+    return None
+
+
+class Message(QDialog):
+    """The ONE popup used everywhere: a big colour band with a short
+    headline, then plain-English text in large print and one wide button.
+
+    Non-modal and always on top, so a signal from the client is never
+    blocked by a message left open on the screen.
+    """
+
+    KINDS = {
+        "error": (C_NG,     "Problem"),
+        "warn":  (C_WARN,   "Please check"),
+        "ok":    (C_OK,     "Done"),
+        "info":  ("#2563c9", "Information"),
+    }
+
+    AUTO_CLOSE_MS = 2000          # every popup closes itself after 2 s
+
+    def __init__(self, parent, title, headline, lines=(), color=C_OK,
+                 auto_ms=0, retry=None, retry_text="Try again"):
         super().__init__(parent)
-        self.setWindowTitle(title)
+        self.setWindowTitle(title or "Message")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setModal(False)
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(min(600, fit_size(600, 300)[0]))
+        self.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
+                           f" border: 2px solid {color}; border-radius: 12px; }}")
+
         lay = QVBoxLayout(self)
-        h = QLabel(headline)
-        h.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        h.setWordWrap(True)
-        h.setStyleSheet(f"background: {color}; color: white;"
-                        " font-size: 30pt; font-weight: bold;"
-                        " padding: 14px; border-radius: 8px;")
-        lay.addWidget(h)
-        if lines:
-            t = QLabel("\n".join(lines))
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        band = QLabel(str(headline))
+        band.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        band.setWordWrap(True)
+        band.setStyleSheet(f"background: {color}; color: white;"
+                           " font-size: 26pt; font-weight: 800;"
+                           " padding: 22px 20px; border-top-left-radius: 10px;"
+                           " border-top-right-radius: 10px;"
+                           " letter-spacing: 0.5px;")
+        lay.addWidget(band)
+
+        body = QVBoxLayout()
+        body.setContentsMargins(26, 22, 26, 22)
+        body.setSpacing(16)
+        text = "\n".join(str(x) for x in lines) if not isinstance(lines, str) \
+            else lines
+        text = _short_text(text)
+        if text.strip():
+            t = QLabel(text)
             t.setWordWrap(True)
-            t.setStyleSheet("font-size: 11pt; padding: 6px;")
-            lay.addWidget(t)
-        b = QPushButton("OK")
-        b.setMinimumHeight(36)
-        b.clicked.connect(self.close)
-        lay.addWidget(b)
-        if auto_ms > 0:
-            QTimer.singleShot(auto_ms, self.close)
+            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            t.setStyleSheet(f"color: {C_TEXT}; font-size: 16pt;"
+                            " line-height: 150%;")
+            body.addWidget(t)
+
+        brow = QHBoxLayout()
+        brow.setSpacing(10)
+        if retry is not None:
+            rb = QPushButton(retry_text)
+            rb.setMinimumHeight(52)
+            rb.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            apply_btn_color(rb, C_ACCENT)
+            rb.setStyleSheet(rb.styleSheet()
+                             + " QPushButton { font-size: 14pt; }")
+
+            def _retry():
+                self.close()
+                try:
+                    retry()
+                except Exception:
+                    pass
+            rb.clicked.connect(_retry)
+            brow.addWidget(rb, stretch=1)
+        if brow.count():
+            body.addLayout(brow)
+        lay.addLayout(body)
+        QTimer.singleShot(self.AUTO_CLOSE_MS, self.close)
+
+    def mousePressEvent(self, e):          # a tap closes it early
+        self.close()
+
+    # -- the only entry points the screens use -----------------------------
+    @classmethod
+    def show_msg(cls, parent, kind, headline, body="", auto_ms=0, retry=None,
+                 title=None):
+        color, deftitle = cls.KINDS.get(kind, cls.KINDS["info"])
+        dlg = cls(parent, title or deftitle, headline, body, color,
+                  auto_ms, retry)
+        dlg.show()
+        dlg.raise_()
+        return dlg
+
+    @classmethod
+    def error(cls, parent, headline, body="", auto_ms=0, retry=None,
+              title=None):
+        return cls.show_msg(parent, "error", headline, body, auto_ms, retry,
+                            title)
+
+    @classmethod
+    def warn(cls, parent, headline, body="", auto_ms=0, retry=None,
+             title=None):
+        return cls.show_msg(parent, "warn", headline, body, auto_ms, retry,
+                            title)
+
+    @classmethod
+    def ok(cls, parent, headline, body="", auto_ms=2600, retry=None,
+           title=None):
+        return cls.show_msg(parent, "ok", headline, body, auto_ms, retry,
+                            title)
+
+    @classmethod
+    def info(cls, parent, headline, body="", auto_ms=0, retry=None,
+             title=None):
+        return cls.show_msg(parent, "info", headline, body, auto_ms, retry,
+                            title)
+
+    # -- yes / no question (this one DOES wait for the answer) -------------
+    @staticmethod
+    def confirm(parent, headline, body="", yes="Yes", no="No",
+                color="#2563c9"):
+        dlg = QDialog(parent)
+        dlg.setWindowTitle("Please confirm")
+        dlg.setModal(True)
+        dlg.setMinimumWidth(640)
+        dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
+                          f" border: 2px solid {color};"
+                          f" border-radius: 12px; }}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        band = QLabel(str(headline))
+        band.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        band.setWordWrap(True)
+        band.setStyleSheet(f"background: {color}; color: white;"
+                           " font-size: 24pt; font-weight: 800;"
+                           " padding: 22px 20px;"
+                           " border-top-left-radius: 10px;"
+                           " border-top-right-radius: 10px;")
+        lay.addWidget(band)
+        inner = QVBoxLayout()
+        inner.setContentsMargins(26, 22, 26, 22)
+        inner.setSpacing(16)
+        if str(body).strip():
+            t = QLabel(str(body))
+            t.setWordWrap(True)
+            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            t.setStyleSheet(f"color: {C_TEXT}; font-size: 14pt;")
+            inner.addWidget(t)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        bn = QPushButton(no)
+        bn.setMinimumHeight(52)
+        bn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        apply_btn_color(bn, C_NEUTRAL)
+        bn.setStyleSheet(bn.styleSheet() + " QPushButton { font-size: 13pt; }")
+        bn.clicked.connect(dlg.reject)
+        row.addWidget(bn, stretch=1)
+        by = QPushButton(yes)
+        by.setMinimumHeight(52)
+        by.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        apply_btn_color(by, C_OK)
+        by.setStyleSheet(by.styleSheet() + " QPushButton { font-size: 13pt; }")
+        by.clicked.connect(dlg.accept)
+        row.addWidget(by, stretch=1)
+        inner.addLayout(row)
+        lay.addLayout(inner)
+        return dlg.exec() == QDialog.DialogCode.Accepted
+
+
+ResultPopup = Message        # old name kept for existing call sites
+
+
+def _first_line(text, n=70):
+    t = str(text).strip().splitlines()
+    t = t[-1] if t else ""
+    return t if len(t) <= n else t[:n - 3] + "..."
+
+
+def _short_text(text):
+    """Popups carry one or two short lines, never a paragraph of detail."""
+    paras = [p.strip() for p in re.split(r"\n\s*\n", str(text))
+             if p.strip()]
+    return "\n".join(paras[:2])
 
 
 class App(QMainWindow):
@@ -2019,7 +2605,8 @@ class App(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Inspection")
-        self.resize(1420, 830)
+        self.setMinimumSize(1000, 620)
+        self._fit_window_to_screen()
         self.app_config = AppConfig()
         self.heads = HeadManager()
         self.camera = CameraFeed(
@@ -2052,25 +2639,35 @@ class App(QMainWindow):
         QTimer.singleShot(800, self._health_tick)
         self.show_home()
 
+    # -- window always matches the screen it opens on ------------------------
+    def _fit_window_to_screen(self):
+        """Size and place the window from the real screen, instead of a
+        fixed pixel size — so it never runs off a small monitor and never
+        looks tiny and lost on a big one."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1420, 830)
+            return
+        geo = screen.availableGeometry()
+        margin = 60
+        w = min(1420, geo.width() - margin)
+        h = min(830, geo.height() - margin)
+        w = max(1000, w)
+        h = max(620, h)
+        self.resize(w, h)
+        self.move(geo.x() + (geo.width() - w) // 2,
+                  geo.y() + (geo.height() - h) // 2)
+        # A small panel screen: use all of it rather than leaving a margin.
+        if geo.width() <= 1366 or geo.height() <= 800:
+            self.showMaximized()
+
     # -- popups: lost Ethernet / lost camera ----------------------------------
-    def alert(self, key, title, text, retry=None):
-        """Non-modal warning popup (one per key).  retry = optional callback
-        behind a 'Retry' button."""
+    def alert(self, key, headline, text, retry=None):
+        """Big red popup (one per key: a second one replaces the first)."""
         old = self._alerts.pop(key, None)
         if old is not None:
             old.close()
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle(title)
-        box.setText(text)
-        box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        if retry is not None:
-            rb = box.addButton("Retry", QMessageBox.ButtonRole.ActionRole)
-            rb.clicked.connect(retry)
-        box.setWindowModality(Qt.WindowModality.NonModal)
-        box.show()
-        self._alerts[key] = box
+        self._alerts[key] = Message.error(self, headline, text, retry=retry)
 
     def clear_alert(self, key):
         box = self._alerts.pop(key, None)
@@ -2088,9 +2685,8 @@ class App(QMainWindow):
                     self.comm_log.add("EVT", "Ethernet connection restored")
                 else:
                     self.comm_log.add("ERR", "Ethernet NOT connected")
-                    self.alert("ethernet", "Ethernet not connected",
-                               "Connection failed.\n\n"
-                               f"Reason: {ETH_REASON}")
+                    self.alert("ethernet", "NETWORK NOT CONNECTED",
+                               "Reason: network cable is out or the switch is off.")
         if cfg.get("check_camera", True):
             err = self.camera.error      # only set once the camera was started
             ok = not err
@@ -2101,9 +2697,8 @@ class App(QMainWindow):
                     self.comm_log.add("EVT", "Camera connection restored")
                 else:
                     self.comm_log.add("ERR", f"Camera NOT connected: {err}")
-                    self.alert("camera", "Camera not connected",
-                               "Camera connection failed.\n\n"
-                               f"Reason: {CAM_REASON}",
+                    self.alert("camera", "CAMERA NOT CONNECTED",
+                               "Reason: camera cable is out or the camera has no power.",
                                retry=self.camera.start)
 
     def hardware_ok(self, parent=None):
@@ -2114,26 +2709,25 @@ class App(QMainWindow):
         cam = not self.camera.error
         if not eth:
             self._health["ethernet"] = False
-            self.alert("ethernet", "Ethernet not connected",
-                       f"Connection failed.\n\nReason: {ETH_REASON}")
+            self.alert("ethernet", "NETWORK NOT CONNECTED",
+                       "Reason: network cable is out or the switch is off.")
         if not cam:
             self._health["camera"] = False
-            self.alert("camera", "Camera not connected",
-                       "Camera connection failed.\n\n"
-                       f"Reason: {CAM_REASON}",
+            self.alert("camera", "CAMERA NOT CONNECTED",
+                       "Reason: camera cable is out or the camera has no power.",
                        retry=self.camera.start)
         return eth, cam
 
     def ask_validation_password(self, parent):
-        pw, ok = QInputDialog.getText(parent, "Validation part",
-                                      "Enter the VALIDATION password:",
-                                      QLineEdit.EchoMode.Password)
-        if not ok:
+        pw = ask_password(parent, "Validation password needed",
+                          "These parts are tested but never reported to "
+                          "MES, so a separate password is needed.")
+        if pw is None:
             return False
         if pw == str(self.app_config.data.get("validation_password", "5678")):
             return True
-        QMessageBox.critical(parent, "Wrong password",
-                             "Incorrect validation password.")
+        Message.error(parent, "Wrong password",
+                      "That validation password is not correct.")
         return False
 
     def purge_now(self):
@@ -2168,12 +2762,15 @@ class App(QMainWindow):
         self.app_config.data["locked"] = True
         self.app_config.save()
         self.comm_log.add("EVT", "UI LOCKED (operator mode)")
+        Message.ok(self, "LOCKED",
+                  "Setup is now hidden. Operator mode.")
         self.refresh_screen()
 
     def unlock_with_password(self, parent):
-        pw, ok = QInputDialog.getText(parent, "Controls", "Enter password:",
-                                      QLineEdit.EchoMode.Password)
-        if not ok:
+        pw = ask_password(parent, "Enter the password",
+                          "The setup buttons stay hidden until the correct "
+                          "password is entered.")
+        if pw is None:
             return
         if pw == str(self.app_config.data.get("password", "1234")):
             self.app_config.data["locked"] = False
@@ -2181,16 +2778,16 @@ class App(QMainWindow):
             self.comm_log.add("EVT", "UI UNLOCKED (controls open)")
             self.refresh_screen()
         else:
-            QMessageBox.critical(parent, "Wrong password",
-                                 "Incorrect password.")
+            Message.error(parent, "Wrong password",
+                          "That password is not correct. Please try again.")
 
     def lock_button(self, master):
         """Shared 'Controls'/'Lock' button for the top bars."""
         if self.is_locked():
-            return styled_btn(master, "🔑 Controls",
+            return styled_btn(master, "Unlock Setup",
                               lambda: self.unlock_with_password(master),
                               color="#f59f00")
-        return styled_btn(master, "🔒 Lock", self.lock, color="#44444e")
+        return styled_btn(master, "Lock", self.lock, color="#44444e")
 
     # -- operator session ----------------------------------------------------
     # The Operator ID is tied to *selecting* a model, not to building the
@@ -2343,108 +2940,47 @@ class BaseScreen(QWidget):
 # COMM BAR + MONITOR
 # ============================================================================
 class CommBar(QFrame):
-    def __init__(self, master, app, mini_log_lines=4):
+    """One line: machine connection lamp + status + the Monitor button.
+    Connect / handshake / test signals all live in the Monitor window."""
+
+    def __init__(self, master, app, mini_log_lines=0):
         super().__init__()
         self.app = app
         self._alive = True
-        self._last_seq = 0
         self.setStyleSheet(f"QFrame {{ background: {C_PANEL};"
-                           f" border-radius: 8px; }}"
-                           f" QLabel {{ background: transparent; }}")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 6, 8, 6)
-        lay.setSpacing(4)
-
-        row = QHBoxLayout()
-        self.lamp = QLabel("●")
-        self.lamp.setStyleSheet("color: #e03131; font-size: 14pt;"
-                                " font-weight: bold;")
+                           f" border: 1px solid {C_LINE};"
+                           f" border-radius: 10px; }}"
+                           " QLabel { background: transparent;"
+                           " border: none; }")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 8, 8, 8)
+        row.setSpacing(10)
+        self.lamp = QLabel()
+        self.lamp.setFixedSize(12, 12)
         row.addWidget(self.lamp)
-        self.status_lbl = QLabel("communication OFF")
-        self.status_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
-        row.addWidget(self.status_lbl)
-        row.addStretch()
-        row.addWidget(styled_btn(self, "🖥 Monitor",
+        cap = QLabel("MACHINE")
+        cap.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;"
+                          " font-weight: 700; letter-spacing: 1px;")
+        row.addWidget(cap)
+        self.status_lbl = QLabel("")
+        self.status_lbl.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
+        row.addWidget(self.status_lbl, stretch=1)
+        row.addWidget(styled_btn(self, "Monitor",
                                  lambda: CommMonitor(self, app).show(),
-                                 color="#3b6ef5"))
-        self.btn_hs = styled_btn(self, "Handshake", self.toggle_handshake,
-                                 color="#44444e")
-        row.addWidget(self.btn_hs)
-        self.btn_toggle = styled_btn(self, "Comm ON", self.toggle_comm,
-                                     color="#2f9e44")
-        row.addWidget(self.btn_toggle)
-        lay.addLayout(row)
-
-        self.mini = QTextEdit()
-        self.mini.setReadOnly(True)
-        self.mini.setStyleSheet(
-            f"QTextEdit {{ background: {C_FIELD}; color: #8f8f9a;"
-            f" border: none; border-radius: 6px; font-size: 8pt; }}")
-        self.mini.setFixedHeight(mini_log_lines * 16 + 10)
-        lay.addWidget(self.mini)
-
-        sim = QHBoxLayout()
-        lbl = QLabel("Simulate CLIENT:")
-        lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
-        sim.addWidget(lbl)
-        self.sim_entry = QLineEdit()
-        self.sim_entry.returnPressed.connect(self.simulate)
-        sim.addWidget(self.sim_entry, stretch=1)
-        sim.addWidget(styled_btn(self, "Send ▶", self.simulate,
-                                 color="#3b6ef5"))
-        lay.addLayout(sim)
-
+                                 color="#44444e"))
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
-        self._timer.start(400)
-        self._refresh_now()
-
-    def simulate(self):
-        text = self.sim_entry.text().strip()
-        if not text:
-            return
-        self.sim_entry.clear()
-        self.app.engine.simulate(text)
-
-    def toggle_comm(self):
-        if self.app.engine.enabled:
-            self.app.engine.stop()
-        else:
-            self.app.engine.start()
-        self._refresh_now()
-
-    def toggle_handshake(self):
-        hs = self.app.comm_settings.data["handshake"]
-        hs["enabled"] = not hs.get("enabled", True)
-        self.app.comm_settings.save()
-        self.app.comm_log.add("EVT", "handshake "
-                              + ("ENABLED" if hs["enabled"] else "DISABLED"))
-        self._refresh_now()
-
-    def _refresh_now(self):
-        eng = self.app.engine
-        self.lamp.setStyleSheet(
-            f"color: {'#2f9e44' if eng.enabled else '#e03131'};"
-            " font-size: 14pt; font-weight: bold;")
-        self.status_lbl.setText(eng.status_text())
-        self.btn_toggle.setText("Comm OFF" if eng.enabled else "Comm ON")
-        apply_btn_color(self.btn_toggle,
-                        "#e03131" if eng.enabled else "#2f9e44")
-        hs_on = self.app.comm_settings.data["handshake"].get("enabled", True)
-        self.btn_hs.setText(f"Handshake {'ON' if hs_on else 'OFF'}")
-        apply_btn_color(self.btn_hs, "#845ef7" if hs_on else "#44444e")
+        self._timer.start(500)
+        self._poll()
 
     def _poll(self):
         if not self._alive:
             return
-        self._refresh_now()
-        new = self.app.comm_log.since(self._last_seq)
-        if new:
-            self._last_seq = new[-1][0]
-            for _, line in new:
-                self.mini.append(html.escape(line, quote=False))
-            self.mini.verticalScrollBar().setValue(
-                self.mini.verticalScrollBar().maximum())
+        eng = self.app.engine
+        on = eng.enabled and eng.client_count() > 0
+        col = C_OK if on else (C_WARN if eng.enabled else C_FAINT)
+        self.lamp.setStyleSheet(f"background: {col}; border-radius: 6px;")
+        self.status_lbl.setText(eng.status_text())
 
 
 class CommMonitor(QDialog):
@@ -2456,9 +2992,32 @@ class CommMonitor(QDialog):
         self.app = app
         self._alive = True
         self._last_seq = 0
-        self.setWindowTitle("Communication Monitor")
-        self.resize(760, 640)
+        self.setWindowTitle("Monitor - machine communication")
+        self.resize(*fit_size(780, 660))
         lay = QVBoxLayout(self)
+
+        # connection on/off + handshake: the only place these are switched
+        ctl = QFrame()
+        ctl.setStyleSheet(f"QFrame {{ background: {C_ELEV};"
+                          f" border: 1px solid {C_LINE}; border-radius: 8px; }}"
+                          " QLabel { background: transparent; border: none; }")
+        cl = QHBoxLayout(ctl)
+        cl.setContentsMargins(12, 8, 8, 8)
+        cl.setSpacing(10)
+        self.lamp = QLabel()
+        self.lamp.setFixedSize(12, 12)
+        cl.addWidget(self.lamp)
+        self.status_lbl = QLabel("")
+        self.status_lbl.setWordWrap(True)
+        self.status_lbl.setStyleSheet(f"color: {C_TEXT}; font-size: 10pt;")
+        cl.addWidget(self.status_lbl, stretch=1)
+        self.btn_toggle = styled_btn(self, "Connect", self.toggle_comm,
+                                     color="#2f9e44")
+        self.btn_hs = styled_btn(self, "Handshake ON", self.toggle_handshake,
+                                 color="#44444e")
+        cl.addWidget(self.btn_toggle)
+        cl.addWidget(self.btn_hs)
+        lay.addWidget(ctl)
 
         box = QGroupBox(" Connection & Handshake (global) ")
         grid = QGridLayout()
@@ -2466,9 +3025,9 @@ class CommMonitor(QDialog):
         self.vars = {}
         fields = [("Listen IP", "ip", s["connection"].get("ip", "0.0.0.0")),
                   ("TCP Port", "port", s["connection"].get("port", 5000)),
-                  ("Handshake ping (client→us)", "ping",
+                  ("Handshake ping (client->us)", "ping",
                    s["handshake"].get("ping", "PING")),
-                  ("Handshake reply (us→client)", "reply",
+                  ("Handshake reply (us->client)", "reply",
                    s["handshake"].get("reply", "PONG"))]
         for i, (lbl, key, val) in enumerate(fields):
             l = QLabel(lbl)
@@ -2482,7 +3041,7 @@ class CommMonitor(QDialog):
         boxlay.addLayout(grid)
         savew = QHBoxLayout()
         savew.addStretch()
-        savew.addWidget(styled_btn(self, "💾 Save settings",
+        savew.addWidget(styled_btn(self, "Save settings",
                                    self.save_settings, color="#2f9e44"))
         savew.addStretch()
         boxlay.addLayout(savew)
@@ -2498,13 +3057,13 @@ class CommMonitor(QDialog):
         lay.addWidget(self.txt, stretch=1)
 
         sim = QHBoxLayout()
-        sl = QLabel("Simulate CLIENT:")
+        sl = QLabel("Simulate machine:")
         sl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         sim.addWidget(sl)
         self.sim_entry = QLineEdit()
         self.sim_entry.returnPressed.connect(self.simulate)
         sim.addWidget(self.sim_entry, stretch=1)
-        sim.addWidget(styled_btn(self, "Send ▶", self.simulate))
+        sim.addWidget(styled_btn(self, "Send", self.simulate))
         lay.addLayout(sim)
 
         pl = QLabel(f"Log files: {os.path.abspath(COMM_LOG_DIR)}"
@@ -2514,6 +3073,7 @@ class CommMonitor(QDialog):
         lay.addWidget(pl)
 
         self._append(self.app.comm_log.since(0))
+        self._refresh_ctl()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(300)
@@ -2522,11 +3082,38 @@ class CommMonitor(QDialog):
         self._alive = False
         e.accept()
 
+    def toggle_comm(self):
+        if self.app.engine.enabled:
+            self.app.engine.stop()
+        else:
+            self.app.engine.start()
+        self._refresh_ctl()
+
+    def toggle_handshake(self):
+        hs = self.app.comm_settings.data["handshake"]
+        hs["enabled"] = not hs.get("enabled", True)
+        self.app.comm_settings.save()
+        self.app.comm_log.add("EVT", "handshake "
+                              + ("ENABLED" if hs["enabled"] else "DISABLED"))
+        self._refresh_ctl()
+
+    def _refresh_ctl(self):
+        eng = self.app.engine
+        on = eng.enabled and eng.client_count() > 0
+        col = C_OK if on else (C_WARN if eng.enabled else C_FAINT)
+        self.lamp.setStyleSheet(f"background: {col}; border-radius: 6px;")
+        self.status_lbl.setText(eng.status_text())
+        self.btn_toggle.setText("Disconnect" if eng.enabled else "Connect")
+        apply_btn_color(self.btn_toggle,
+                        "#44444e" if eng.enabled else "#2f9e44")
+        hs_on = self.app.comm_settings.data["handshake"].get("enabled", True)
+        self.btn_hs.setText(f"Handshake {'ON' if hs_on else 'OFF'}")
+
     def save_settings(self):
         try:
             port = int(self.vars["port"].get().strip())
         except ValueError:
-            QMessageBox.critical(self, "Bad port",
+            Message.error(self, "Bad port",
                                  "TCP port must be a number.")
             return
         s = self.app.comm_settings.data
@@ -2563,7 +3150,43 @@ class CommMonitor(QDialog):
     def _poll(self):
         if not self._alive:
             return
+        self._refresh_ctl()
         self._append(self.app.comm_log.since(self._last_seq))
+
+
+class DetectionLogDialog(QDialog):
+    """What-happened log for one model — opened on demand with a button,
+    the same way the Monitor dialog opens for communication events."""
+
+    def __init__(self, master, lines):
+        super().__init__(master)
+        self.setWindowTitle("Detection Logs")
+        self.resize(*fit_size(640, 560))
+        lay = QVBoxLayout(self)
+        t = QLabel("WHAT THE MODEL HAS BEEN DOING")
+        t.setStyleSheet(f"color: {C_MUTED}; font-weight: bold;")
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(t)
+        self.txt = QTextEdit()
+        self.txt.setReadOnly(True)
+        self.txt.setStyleSheet(
+            f"QTextEdit {{ background: {C_FIELD}; color: #c8c8d0;"
+            f" border: none; border-radius: 6px; font-size: 9pt; }}")
+        for msg in lines:
+            self.txt.append(html.escape(msg, quote=False))
+        self.txt.verticalScrollBar().setValue(
+            self.txt.verticalScrollBar().maximum())
+        lay.addWidget(self.txt, stretch=1)
+        close_row = QHBoxLayout()
+        close_row.addStretch()
+        close_row.addWidget(styled_btn(self, "Close", self.close,
+                                       color="#44444e"))
+        lay.addLayout(close_row)
+
+    def append_line(self, msg):
+        self.txt.append(html.escape(msg, quote=False))
+        self.txt.verticalScrollBar().setValue(
+            self.txt.verticalScrollBar().maximum())
 
 
 # ============================================================================
@@ -2577,7 +3200,7 @@ class ScannerDialog(QDialog):
         self.on_close = on_close
         self._alive = True
         self.setWindowTitle(f"Barcode Scanner — {head_name}")
-        self.resize(560, 520)
+        self.resize(*fit_size(560, 520))
 
         cfg = app.heads.get_scanner(head_name)
         lay = QVBoxLayout(self)
@@ -2620,7 +3243,7 @@ class ScannerDialog(QDialog):
         srcn = QLabel("Operator ID is ALWAYS scanned with the scanner.  With\n"
                       "'Camera' the PART is read by the camera: add QR scanners\n"
                       "while building a scene (5. QR Scanner) and mark ONE as\n"
-                      "master.  After Finish Model, a  📷 SCAN QR  button starts\n"
+                      "master.  After Finish Model, a SCAN QR CODE button starts\n"
                       "every cycle (set its client signals in Comm Config).")
         srcn.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
         boxlay.addWidget(srcn)
@@ -2657,7 +3280,7 @@ class ScannerDialog(QDialog):
         boxlay.addWidget(self.var_req_op.c)
 
         trow = QHBoxLayout()
-        self.btn_test = styled_btn(self, "▶ Test scan", self.start_test,
+        self.btn_test = styled_btn(self, "Test scan", self.start_test,
                                    color="#f59f00")
         trow.addWidget(self.btn_test)
         self.test_lbl = QLabel("press Test — the scan box opens, then scan")
@@ -2669,7 +3292,7 @@ class ScannerDialog(QDialog):
 
         brow = QHBoxLayout()
         brow.addStretch()
-        brow.addWidget(styled_btn(self, "💾 Save", self.save,
+        brow.addWidget(styled_btn(self, "Save", self.save,
                                   color="#2f9e44"))
         brow.addWidget(styled_btn(self, "Close", self._close,
                                   color="#44444e"))
@@ -2685,10 +3308,10 @@ class ScannerDialog(QDialog):
             sub="scan a barcode now — the keyboard is locked to this box",
             timeout_s=timeout)
         if code:
-            self.test_lbl.setText(f"✔ scanned:  '{code}'")
+            self.test_lbl.setText(f"Scanned:  '{code}'")
             self.test_lbl.setStyleSheet("color: #69db7c; font-size: 9pt;")
         else:
-            self.test_lbl.setText("✖ nothing scanned (cancelled / timeout)")
+            self.test_lbl.setText("Nothing was scanned.")
             self.test_lbl.setStyleSheet("color: #ff8787; font-size: 9pt;")
 
     def save(self):
@@ -2747,20 +3370,20 @@ class MesDialog(QDialog):
         self.app = app
         self.head = head_name
         self.on_close = on_close
-        self.setWindowTitle(f"MES Integration — {head_name}")
-        self.resize(600, 700)
+        self.setWindowTitle(f"MES settings - {head_name}")
+        self.resize(*fit_size(600, 700, min_h=480))
 
         cfg = app.heads.get_mes(head_name)
         lay = QVBoxLayout(self)
 
-        title = QLabel(f"MES INTEGRATION  —  model '{head_name}'")
+        title = QLabel(f"MES SETTINGS   -   model '{head_name}'")
         title.setStyleSheet("color: white; font-size: 13pt;"
                             " font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(title)
 
         if not MES_AVAILABLE:
-            warn = QLabel("⚠ mes_client could not be imported "
+            warn = QLabel("MES cannot be used: mes_client is missing "
                           f"({MES_IMPORT_ERR}).\nPut mes_client.py next to "
                           "this file and install 'requests'.")
             warn.setStyleSheet("color: #ff8787; font-size: 9pt;")
@@ -2768,7 +3391,7 @@ class MesDialog(QDialog):
             lay.addWidget(warn)
 
         self.var_enabled = BVar(QCheckBox(
-            "Enable MES integration for this model"))
+            "Send the results of this model to MES"))
         self.var_enabled.c.setStyleSheet("font-weight: bold;")
         self.var_enabled.set(bool(cfg.get("enabled")))
         lay.addWidget(self.var_enabled.c)
@@ -2782,7 +3405,7 @@ class MesDialog(QDialog):
             row = QHBoxLayout()
             l = QLabel(label)
             l.setStyleSheet("color: #c8c8d0;")
-            l.setFixedWidth(160)
+            l.setMinimumWidth(160)
             row.addWidget(l)
             e = QLineEdit(str(cfg.get(key, "")))
             if is_pw:
@@ -2800,22 +3423,19 @@ class MesDialog(QDialog):
                              (cfg.get("validation_serials") or [])
                              if str(x).strip()]
         self._val_unlocked = False
-        vbox = QGroupBox(" 🧪 VALIDATION SERIAL NUMBERS (MES disabled for "
-                         "these) ")
+        vbox = QGroupBox(" VALIDATION BARCODES (never sent to MES) ")
         vlay = QVBoxLayout(vbox)
-        vnote = QLabel("A scanned serial found in this list runs normally "
-                       "but is NEVER sent to MES (no check, no report). "
-                       "Any other serial uses MES as usual.")
-        vnote.setWordWrap(True)
-        vnote.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
-        vlay.addWidget(vnote)
+        vlay.addWidget(hint_label(
+            "A part whose barcode is in this list is tested as usual, but "
+            "nothing about it is sent to MES. Every other barcode uses MES "
+            "normally.", C_FAINT))
         self.val_list = QListWidget()
         self.val_list.setFixedHeight(90)
         vlay.addWidget(self.val_list)
         vrow = QHBoxLayout()
         self.val_edit = QLineEdit()
-        self.val_edit.setPlaceholderText("type or scan a serial no, then "
-                                         "Enter")
+        self.val_edit.setPlaceholderText("type or scan a barcode, then "
+                                         "press Enter")
         self.val_edit.setStyleSheet(f"background: {C_FIELD}; color: white;"
                                     " padding: 5px; border-radius: 4px;")
         self.val_edit.returnPressed.connect(self._val_add)
@@ -2828,20 +3448,20 @@ class MesDialog(QDialog):
         vrow.addWidget(self.val_del_btn)
         vlay.addLayout(vrow)
         self.val_unlock_btn = styled_btn(
-            vbox, "🔑 Unlock with validation password", self._val_unlock,
+            vbox, "Unlock with the validation password", self._val_unlock,
             color="#f59f00")
         vlay.addWidget(self.val_unlock_btn)
         lay.addWidget(vbox)
         self._val_refresh()
 
         self.var_block = BVar(QCheckBox(
-            "Block the run when the previous stage did NOT pass "
-            "(applies in 🔒 locked / production mode)"))
+            "Do not allow a part that failed the station before this one "
+            "(applies once the screen is locked for production)"))
         self.var_block.set(bool(cfg.get("block_on_prev_fail", True)))
         lay.addWidget(self.var_block.c)
 
         self.var_imgs = BVar(QCheckBox(
-            "Upload the result images to MES at the end of every cycle"))
+            "Send the result pictures to MES after every part"))
         self.var_imgs.set(bool(cfg.get("upload_images", True)))
         lay.addWidget(self.var_imgs.c)
 
@@ -2851,16 +3471,17 @@ class MesDialog(QDialog):
         note.setWordWrap(True)
         lay.addWidget(note)
 
-        self.test_lbl = QLabel("press Test login to verify the connection")
+        self.test_lbl = QLabel("Press Test connection to check these "
+                               "details.")
         self.test_lbl.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
         self.test_lbl.setWordWrap(True)
         lay.addWidget(self.test_lbl)
 
         brow = QHBoxLayout()
         brow.addStretch()
-        brow.addWidget(styled_btn(self, "🔌 Test login", self.test_login,
+        brow.addWidget(styled_btn(self, "Test connection", self.test_login,
                                   color="#f59f00"))
-        brow.addWidget(styled_btn(self, "💾 Save", self.save,
+        brow.addWidget(styled_btn(self, "Save", self.save,
                                   color="#2f9e44"))
         brow.addWidget(styled_btn(self, "Close", self._close,
                                   color="#44444e"))
@@ -2889,8 +3510,9 @@ class MesDialog(QDialog):
         if not code:
             return
         if code in self._val_serials:
-            QMessageBox.information(self, "Already added",
-                                    f"'{code}' is already in the list.")
+            Message.info(self, "ALREADY IN THE LIST",
+                         f"The barcode '{code}' is already saved.",
+                         auto_ms=3000)
         else:
             self._val_serials.append(code)
             self._val_refresh()
@@ -2916,7 +3538,7 @@ class MesDialog(QDialog):
 
     def test_login(self):
         if not MES_AVAILABLE:
-            self.test_lbl.setText(f"✖ mes_client unavailable "
+            self.test_lbl.setText(f"Not available: "
                                   f"({MES_IMPORT_ERR})")
             self.test_lbl.setStyleSheet("color: #ff8787; font-size: 9pt;")
             return
@@ -2928,7 +3550,8 @@ class MesDialog(QDialog):
 
         def done(res):
             ok, msg = res
-            self.test_lbl.setText(("✔ " if ok else "✖ ") + str(msg))
+            self.test_lbl.setText(("Connected. " if ok else "Failed. ")
+                                  + str(msg))
             self.test_lbl.setStyleSheet(
                 f"color: {'#69db7c' if ok else '#ff8787'}; font-size: 9pt;")
             sess.logout()
@@ -2941,17 +3564,16 @@ class MesDialog(QDialog):
                        if k in ("mes_ip", "username", "password", "stage_id",
                                 "product_id") and not cfg.get(k)]
             if missing:
-                QMessageBox.critical(
-                    self, "Missing MES details",
-                    "MES is enabled but these are empty:\n\n  "
-                    + "\n  ".join(missing))
+                Message.error(
+                    self, "MES DETAILS MISSING",
+                    "Fill in: " + ", ".join(missing))
                 return
         self.app.heads.set_mes(self.head, **cfg)
         self.app.comm_log.add("EVT", f"MES config saved for model "
                                      f"'{self.head}' "
                                      f"(enabled={cfg['enabled']})")
-        QMessageBox.information(self, "Saved",
-                                f"MES settings saved for '{self.head}'.")
+        Message.ok(self, "SAVED",
+                   f"The MES settings for '{self.head}' are saved.")
 
     def _close(self):
         cb, self.on_close = self.on_close, None
@@ -2984,7 +3606,7 @@ class OperatorScanDialog(QDialog):
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(12)
 
-        t = QLabel("👤 SCAN OPERATOR ID")
+        t = QLabel("SCAN YOUR ID BADGE")
         t.setStyleSheet("color: #ffd43b; font-size: 15pt; font-weight: bold;")
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(t)
@@ -3003,7 +3625,7 @@ class OperatorScanDialog(QDialog):
 
         brow = QHBoxLayout()
         brow.addStretch()
-        brow.addWidget(styled_btn(self, "⌕  Scan  (F2)", self.open_scan,
+        brow.addWidget(styled_btn(self, "Scan  (F2)", self.open_scan,
                                   color="#3b6ef5"))
         brow.addWidget(styled_btn(self, "Cancel", self.reject,
                                   color="#44444e"))
@@ -3044,26 +3666,33 @@ class OperatorScanDialog(QDialog):
 class HomeScreen(BaseScreen):
     def __init__(self, master, app):
         super().__init__(master, app)
-        self.setStyleSheet("background-color: #1c1c22;")
+        self.setStyleSheet(f"background-color: {C_BG};")
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(20, 12, 20, 12)
+        lay.setContentsMargins(26, 16, 26, 16)
+        lay.setSpacing(12)
         top = QHBoxLayout()
-        t = QLabel("MODELS")
-        t.setStyleSheet("color: white; font-size: 20pt; font-weight: bold;")
-        top.addWidget(t)
+        head = QVBoxLayout()
+        head.setSpacing(2)
+        t = QLabel("Vision Inspection")
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 22pt; font-weight: 800;"
+                        " letter-spacing: 0.4px;")
+        head.addWidget(t)
+        sub = section_title("select a model to open")
+        sub.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        head.addWidget(sub)
+        top.addLayout(head)
         top.addStretch()
         top.addWidget(app.lock_button(self))
         lay.addLayout(top)
         if not app.is_locked():
-            hint = QLabel("1) build detection → 2) Finish Model → "
-                          "3) Communication.  The client can also "
-                          "select a model by its Select-signal.")
-            hint.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
-            lay.addWidget(hint)
+            lay.addWidget(hint_label(
+                "A model holds everything needed to check one part: what the "
+                "camera looks at, the good/bad rule, the barcode scanner and "
+                "the machine connection."))
             lay.addWidget(CommBar(self, app, mini_log_lines=4))
             addrow = QHBoxLayout()
             addrow.addStretch()
-            addrow.addWidget(styled_btn(self, "+  Add Model", self.add_head,
+            addrow.addWidget(styled_btn(self, "Add Model", self.add_head,
                                         color="#2f9e44"))
             addrow.addStretch()
             lay.addLayout(addrow)
@@ -3086,18 +3715,20 @@ class HomeScreen(BaseScreen):
                 it.widget().deleteLater()
         heads = self.app.heads.list_heads()
         if not heads:
-            empty = QLabel("No models yet — press  + Add Model")
-            empty.setStyleSheet("color: #666; font-size: 11pt;")
+            empty = QLabel("No models yet.\nPress  Add Model  to make the "
+                           "first one.")
+            empty.setStyleSheet(f"color: {C_FAINT}; font-size: 13pt;")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.list_lay.insertWidget(0, empty)
             return
         for i, h in enumerate(heads):
-            row = panel("#26262e")
+            row = panel(C_ELEV)
             rlay = QHBoxLayout(row)
-            rlay.setContentsMargins(14, 8, 14, 8)
+            rlay.setContentsMargins(16, 10, 16, 10)
+            rlay.setSpacing(10)
             name = QLabel(h)
-            name.setStyleSheet("color: white; font-size: 13pt;"
-                               " font-weight: bold;")
+            name.setStyleSheet(f"color: {C_TEXT}; font-size: 13pt;"
+                               " font-weight: 700;")
             rlay.addWidget(name)
             cnt = self.app.heads.get_counters(h)["cycle"]
             if self.app.is_locked():
@@ -3107,31 +3738,39 @@ class HomeScreen(BaseScreen):
                 done, total, _ = cfg.progress()
                 sc = self.app.heads.get_scanner(h)
                 status = (f"  {len(self.app.heads.list_parents(h))} scene(s)"
-                          " | " + ("detection ✔"
-                                   if self.app.heads.is_finished(h)
-                                   else "detection…")
-                          + f" | comm {done}/{total}"
-                          + f" | scanner {'ON' if sc.get('enabled') else 'off'}"
-                          + f" | cycles OK {cnt['ok']}/NG {cnt['ng']}")
+                          "   ·   " + ("finished"
+                                       if self.app.heads.is_finished(h)
+                                       else "still being built")
+                          + f"   ·   connection {done}/{total}"
+                          + "   ·   scanner "
+                          + ('on' if sc.get('enabled') else 'off')
+                          + f"   ·   OK {cnt['ok']} / NG {cnt['ng']}")
             st = QLabel(status)
             st.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
             rlay.addWidget(st)
             rlay.addStretch()
+            rowbtns = []
             if not self.app.is_locked():
-                rlay.addWidget(styled_btn(row, "Delete",
-                                          lambda hh=h: self.delete_head(hh),
-                                          color="#c92a2a"))
-            rlay.addWidget(styled_btn(row, "Open ▶",
-                                      lambda hh=h: self.app.show_head(hh)))
+                rowbtns.append(styled_btn(
+                    row, "Delete", lambda hh=h: self.delete_head(hh),
+                    color="#c92a2a"))
+            rowbtns.append(styled_btn(row, "Open",
+                                      lambda hh=h: self.app.show_head(hh),
+                                      color="#2f9e44"))
+            for b in rowbtns:
+                b.setFixedWidth(104)
+            rlay.addWidget(btn_group(rowbtns))
             self.list_lay.insertWidget(i, row)
 
     def add_head(self):
-        name, ok = QInputDialog.getText(self, "Add Model", "New model name:")
-        if not ok or not name or not name.strip():
+        name = ask_text(self, "Name the new model",
+                        "Use the name of the part this station checks.",
+                        placeholder="for example:  bracket A12")
+        if not name or not name.strip():
             return
         name = name.strip()
         if self.app.heads.exists(name):
-            QMessageBox.information(self, "Model exists",
+            Message.info(self, "Model exists",
                                     f"Model '{name}' already exists — "
                                     "opening it.")
             self.app.show_head(name)
@@ -3139,34 +3778,30 @@ class HomeScreen(BaseScreen):
         self.app.heads.create(name)
         # ask about MES integration at model creation (details are filled in
         # later, once the model is finalised)
-        m = QMessageBox.question(
-            self, "MES integration",
-            f"Enable MES integration for model '{name}'?\n\n"
-            "The connection details (IP, login, stage, product…) are "
-            "configured with the 'MES' button after you finish the model.")
-        if m == QMessageBox.StandardButton.Yes:
+        if Message.confirm(
+                self, "Use MES for this model?",
+                "Choose Yes if the results of this model must be sent to "
+                "MES.\n\nYou can fill in the MES details later, with the "
+                "MES button, after the model is finished."):
             self.app.heads.set_mes(name, enabled=True)
         # ask to add the barcode scanner right at model creation
-        r = QMessageBox.question(
-            self, "Barcode scanner",
-            f"Add a barcode scanner to model '{name}' now?\n\n"
-            "(You can also configure it later with the 'Scanner' button.)")
-        if r == QMessageBox.StandardButton.Yes:
+        if Message.confirm(
+                self, "Use a barcode scanner?",
+                "Choose Yes if the operator must scan a barcode before "
+                "every test.\n\nYou can also set this up later, with the "
+                "Scanner button."):
             ScannerDialog(self, self.app, name,
                           on_close=lambda: self.app.show_head(name)).show()
         else:
             self.app.show_head(name)
 
     def delete_head(self, head_name):
-        reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Are you sure you want to delete model '{head_name}'?\n\n"
-            f"This will permanently delete all data and files for model '{head_name}'.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
+        if Message.confirm(
+                self, "Delete this model?",
+                f"Everything saved for the model '{head_name}' will be "
+                "deleted for good: its scenes, its master pictures and its "
+                "settings.\n\nThis cannot be undone.",
+                yes="Delete", no="Keep it"):
             self.app.heads.delete(head_name)
             self.refresh()
 
@@ -3268,300 +3903,321 @@ class HeadScreen(BaseScreen):
         if self.mes and self.operator_id:
             self.mes.set_operator(self.operator_id)
 
+        self._mes_online = None        # None = not checked yet
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 6, 10, 6)
+        root.setContentsMargins(12, 10, 12, 10)
+        root.setSpacing(10)
         # the screen itself holds keyboard focus so a scan that arrives while
         # the scan box is shut lands here (see keyPressEvent) instead of
         # leaking into whatever widget happened to be focused
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-        # ---- top bar
-        top = QHBoxLayout()
-        top.addWidget(styled_btn(self, "← Models", self.app.show_home,
-                                 color="#44444e"))
-        t = QLabel(f"MODEL:  {head_name}")
-        t.setStyleSheet("color: white; font-size: 15pt; font-weight: bold;")
-        top.addWidget(t)
-        if self.operator_id:
-            op_badge = QLabel(f"👤 Op: {self.operator_id}")
-            op_badge.setStyleSheet("color: #74c0fc; font-weight: bold;"
-                                   " font-size: 11pt; padding: 3px 10px;"
-                                   " background: #1c2333; border-radius: 5px;")
-            top.addWidget(op_badge)
-            top.addWidget(styled_btn(self, "⇄", self.switch_operator,
-                                     color="#44444e"))
-        top.addStretch()
-        if not locked:
-            top.addWidget(styled_btn(self, "Auto Balance", self.auto_balance,
-                                     color="#44444e"))
-            top.addWidget(styled_btn(self, "⟲ Reset Camera",
-                                     self.reset_camera, color="#e8590c"))
-            top.addWidget(styled_btn(self, "+ Add Scene", self.add_parent,
-                                     color="#2f9e44"))
-            top.addWidget(styled_btn(self, "Scanner",
-                                     self.open_scanner_cfg, color="#3b6ef5"))
-            top.addWidget(styled_btn(
-                self, "MES", self.open_mes_cfg,
-                color="#0ca678" if self.mes_cfg.get("enabled") else "#44444e"))
-            top.addWidget(styled_btn(self, "Comm Config", self.open_comm,
-                                     color="#845ef7" if self.finished
-                                     else "#44444e"))
-            if not self.finished:
-                top.addWidget(styled_btn(self, "Finish Model",
-                                         self.finish_head, color="#f59f00"))
-        top.addWidget(app.lock_button(self))
-        root.addLayout(top)
-
+        self.n_scenes = len(app.heads.list_parents(head_name))
         # cycle tracking: a cycle completes when EVERY scene has been run
         # (in any order — scene1 then scene2, or one RUN MODEL)
         self.cycle_scene_results = {}
 
+        # ============================================================ HEADER
+        #  [Back]  MODEL name   OPERATOR id [Change]     o Camera o Network
+        #                                                o MES o Machine [Lock]
+        hdr, _hl = card(None, "hdr")
+        hl = QHBoxLayout()
+        _hl.setContentsMargins(10, 8, 10, 8)
+        _hl.addLayout(hl)
+        hl.setSpacing(14)
+        hl.addWidget(styled_btn(self, "Back to Models", self.app.show_home,
+                                color="#44444e"))
+        tcol = QVBoxLayout()
+        tcol.setSpacing(0)
+        tcol.addWidget(caption("Model"))
+        tcol.addWidget(screen_title(head_name))
+        hl.addLayout(tcol)
+        if self.operator_id:
+            hl.addWidget(vline())
+            ocol = QVBoxLayout()
+            ocol.setSpacing(0)
+            ocol.addWidget(caption("Operator"))
+            ol = QLabel(str(self.operator_id))
+            ol.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;"
+                             " font-weight: 600;")
+            ocol.addWidget(ol)
+            hl.addLayout(ocol)
+            hl.addWidget(styled_btn(self, "Change", self.switch_operator,
+                                    color="#44444e"))
+        hl.addStretch()
+        self.chips = {}
+        for key, name in (("camera", "Camera"), ("network", "Network"),
+                          ("mes", "MES"), ("machine", "Machine")):
+            if key == "mes" and not self.mes_active:
+                continue
+            self.chips[key] = StatusChip(name)
+            hl.addWidget(self.chips[key])
+        hl.addSpacing(6)
+        hl.addWidget(app.lock_button(self))
+        root.addWidget(hdr)
+
+        # =========================================================== TOOLBAR
+        # setup only.  A new model shows Add Scene; the rest appears when
+        # the step before it is done.
+        if not locked:
+            tb, _tl = card(None, "tb")
+            _tl.setContentsMargins(12, 8, 12, 10)
+            tl_host = QWidget()
+            tl_host.setStyleSheet("background: transparent;")
+            tl = QHBoxLayout(tl_host)
+            tl.setContentsMargins(0, 0, 0, 0)
+            tl.setSpacing(18)
+            tl_scroll = QScrollArea()
+            tl_scroll.setWidget(tl_host)
+            tl_scroll.setWidgetResizable(True)
+            tl_scroll.setFrameShape(QFrame.Shape.NoFrame)
+            tl_scroll.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            tl_scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            tl_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+            _tl.addWidget(tl_scroll)
+            mb = [styled_btn(self, "Add Scene", self.add_parent,
+                             color="#2f9e44" if not self.n_scenes
+                             else "#44444e")]
+            if self.n_scenes and not self.finished:
+                mb.append(styled_btn(self, "Finish Model", self.finish_head,
+                                     color="#f59f00"))
+            tl.addWidget(tool_group("Model", mb))
+            if self.finished:
+                tl.addWidget(vline())
+                tl.addWidget(tool_group("Station", [
+                    styled_btn(self, "Scanner", self.open_scanner_cfg,
+                               color="#44444e"),
+                    styled_btn(self, "MES", self.open_mes_cfg,
+                               color="#44444e"),
+                    styled_btn(self, "Machine", self.open_comm,
+                               color="#44444e")]))
+            tl.addStretch()
+            tools = []
+            if self.n_scenes:
+                tools.append(styled_btn(self, "Reset Camera",
+                                        self.reset_camera, color="#44444e"))
+            tools.append(styled_btn(self, "Detection Logs",
+                                    self.open_log_dialog, color="#44444e"))
+            tools.append(styled_btn(self, "Monitor",
+                                    lambda: CommMonitor(self, app).show(),
+                                    color="#44444e"))
+            tl.addWidget(tool_group("Tools", tools))
+            tl.addWidget(vline())
+            tl.addWidget(simulate_group(app, self))
+            root.addWidget(tb)
+
         body = QHBoxLayout()
+        body.setSpacing(10)
         root.addLayout(body, stretch=1)
 
-        # ---- left: manual triggers (hidden when locked) + view + setting
-        left = panel()
-        left.setFixedWidth(270)
-        llay = QVBoxLayout(left)
-        llay.setContentsMargins(10, 8, 10, 8)
-        if not locked:
-            lt = QLabel("MANUAL TRIGGER")
-            lt.setStyleSheet(f"color: {C_MUTED}; font-weight: bold;")
-            lt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            llay.addWidget(lt)
-            llay.addWidget(styled_btn(
-                left, "▶▶  RUN MODEL (all scenes)",
-                lambda: self.execute(("head",), "MANUAL"), color="#e8590c"))
-            st = QLabel("SCENES — press to RUN")
-            st.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;"
-                             " font-weight: bold;")
-            st.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            llay.addWidget(st)
-            self.parent_btn_frame = QWidget()
-            self.parent_btn_lay = QVBoxLayout(self.parent_btn_frame)
-            self.parent_btn_lay.setContentsMargins(0, 0, 0, 0)
-            self.parent_btn_lay.setSpacing(6)
-            llay.addWidget(self.parent_btn_frame)
-        else:
-            self.parent_btn_frame = None
-            self.parent_btn_lay = None
-            lt = QLabel("🔒 OPERATOR MODE")
-            lt.setStyleSheet(f"color: {C_MUTED}; font-weight: bold;")
-            lt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            llay.addWidget(lt)
-            sub = QLabel("runs are triggered by\nthe client (communication)")
-            sub.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
-            llay.addWidget(sub)
-
-        vt = QLabel("VIEW")
-        vt.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;"
-                         " font-weight: bold;")
-        vt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        llay.addWidget(vt)
-        llay.addWidget(styled_btn(left, "Compare Master",
-                                  self.enter_compare, color="#3b6ef5"))
-        llay.addWidget(styled_btn(left, " Live View", self.back_to_live,
-                                  color="#44444e"))
-
-        _thr_edit = QLineEdit(str(self.app.heads.get_settings(head_name)
-                                  .get("distance_threshold", 20)))
-        self.var_dist_thr = SVar(_thr_edit)
-        if not locked:
-            setbox = QGroupBox(" OK / NG SETTING ")
-            sblay = QVBoxLayout(setbox)
-            srow = QHBoxLayout()
-            sl = QLabel("Pin distance thr (px):")
-            sl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
-            srow.addWidget(sl)
-            _thr_edit.setFixedWidth(64)
-            _thr_edit.returnPressed.connect(self._save_dist_thr)
-            _thr_edit.editingFinished.connect(self._save_dist_thr)
-            srow.addWidget(_thr_edit)
-            srow.addStretch()
-            sblay.addLayout(srow)
-            hint = QLabel("Pins are paired to the master first, then\n"
-                          "the distance is judged: shifted more than\n"
-                          "this (or missing) = RED = NG.")
-            hint.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
-            sblay.addWidget(hint)
-            llay.addWidget(setbox)
-        llay.addStretch()
-        body.addWidget(left)
-
-        # ---- centre: canvas + per-view controls
-        centre = QWidget()
-        clay = QVBoxLayout(centre)
-        clay.setContentsMargins(4, 0, 4, 0)
-        self.canvas = VideoCanvas(centre)
+        # ====================================================== CAMERA (left)
+        leftcol = QVBoxLayout()
+        leftcol.setSpacing(10)
+        cam, clay = card(None, "cam")
+        clay.setContentsMargins(10, 8, 10, 10)
+        vrow = QHBoxLayout()
+        vrow.setSpacing(8)
+        vrow.addWidget(caption("Camera"))
+        vrow.addStretch()
+        vbtns = [styled_btn(cam, "Live", self.back_to_live, color="#44444e")]
+        if self.n_scenes:
+            vbtns.append(styled_btn(cam, "Compare with Master",
+                                    self.enter_compare, color="#44444e"))
+        vrow.addWidget(btn_group(vbtns, spacing=4, pad=(4, 4, 4, 4)))
+        clay.addLayout(vrow)
+        self.canvas = VideoCanvas(cam)
+        self.canvas.setMinimumSize(420, 260)
         clay.addWidget(self.canvas, stretch=1)
-        clay.addWidget(zoom_controls(centre, self.canvas))
+        clay.addWidget(zoom_controls(cam, self.canvas))
 
         self.result_ctl = QWidget()
         rc = QHBoxLayout(self.result_ctl)
-        rc.setContentsMargins(0, 4, 0, 0)
+        rc.setContentsMargins(0, 2, 0, 0)
         rc.addStretch()
         self.btn_pinmap = styled_btn(self.result_ctl, "Pin Map",
-                                     self.toggle_pinmap, color="#3b6ef5")
-        rc.addWidget(self.btn_pinmap)
-        rc.addWidget(styled_btn(self.result_ctl, "Compare with Master",
-                                self.enter_compare, color="#845ef7"))
-        rc.addWidget(styled_btn(self.result_ctl, "Back to Live",
-                                self.back_to_live, color="#44444e"))
+                                     self.toggle_pinmap, color="#44444e")
+        rc.addWidget(btn_group([
+            self.btn_pinmap,
+            styled_btn(self.result_ctl, "Compare with Master",
+                       self.enter_compare, color="#44444e"),
+            styled_btn(self.result_ctl, "Back to Live",
+                       self.back_to_live, color="#44444e")]))
         rc.addStretch()
         self.result_ctl.setVisible(False)
         clay.addWidget(self.result_ctl)
 
         self.compare_ctl = QWidget()
         cc = QHBoxLayout(self.compare_ctl)
-        cc.setContentsMargins(0, 4, 0, 0)
+        cc.setContentsMargins(0, 2, 0, 0)
         cc.addStretch()
         cl = QLabel("Compare:")
-        cl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
+        cl.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
         cc.addWidget(cl)
         self.compare_sel = QComboBox()
-        self.compare_sel.setFixedWidth(280)
+        self.compare_sel.setMinimumWidth(220)
         cc.addWidget(self.compare_sel)
         self.btn_side = styled_btn(self.compare_ctl, "Side-by-Side",
                                    lambda: self.set_compare_mode("side"),
                                    color="#3b6ef5")
-        cc.addWidget(self.btn_side)
         self.btn_overlay = styled_btn(self.compare_ctl, "Overlay",
                                       lambda: self.set_compare_mode("overlay"),
                                       color="#44444e")
-        cc.addWidget(self.btn_overlay)
-        cc.addWidget(styled_btn(self.compare_ctl, " Back to Live",
-                                self.back_to_live, color="#44444e"))
+        cc.addWidget(btn_group([
+            self.btn_side, self.btn_overlay,
+            styled_btn(self.compare_ctl, "Back to Live",
+                       self.back_to_live, color="#44444e")]))
         cc.addStretch()
         self.compare_ctl.setVisible(False)
         clay.addWidget(self.compare_ctl)
-        body.addWidget(centre, stretch=1)
+        leftcol.addWidget(cam, stretch=1)
 
-        # ---- right column
-        right = panel()
-        right.setFixedWidth(330)
-        rlay = QVBoxLayout(right)
-        rlay.setContentsMargins(6, 6, 6, 6)
+        # ---- run bar under the camera (setup only)
+        self.parent_btn_frame = None
+        self.parent_btn_lay = None
+        _thr_edit = QLineEdit(str(self.app.heads.get_settings(head_name)
+                                  .get("distance_threshold", 20)))
+        self.var_dist_thr = SVar(_thr_edit)
+        if not locked:
+            runbar, _rl = card(None, "run")
+            _rl.setContentsMargins(12, 8, 12, 8)
+            rl_host = QWidget()
+            rl_host.setStyleSheet("background: transparent;")
+            rl = QHBoxLayout(rl_host)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(12)
+            rl_scroll = QScrollArea()
+            rl_scroll.setWidget(rl_host)
+            rl_scroll.setWidgetResizable(True)
+            rl_scroll.setFrameShape(QFrame.Shape.NoFrame)
+            rl_scroll.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            rl_scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            rl_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+            _rl.addWidget(rl_scroll)
+            if self.n_scenes:
+                rl.addWidget(styled_btn(
+                    runbar, "Run All Scenes",
+                    lambda: self.execute(("head",), "MANUAL"),
+                    color="#e8590c"))
+                rl.addWidget(vline())
+                rl.addWidget(caption("One scene"))
+                self.parent_btn_frame = QWidget()
+                self.parent_btn_frame.setStyleSheet("background: transparent;")
+                self.parent_btn_lay = QHBoxLayout(self.parent_btn_frame)
+                self.parent_btn_lay.setContentsMargins(0, 0, 0, 0)
+                self.parent_btn_lay.setSpacing(6)
+                self.parent_btn_lay.setAlignment(Qt.AlignmentFlag.AlignLeft)
+                sc = QScrollArea()
+                sc.setWidget(self.parent_btn_frame)
+                sc.setWidgetResizable(True)
+                sc.setFrameShape(QFrame.Shape.NoFrame)
+                sc.setVerticalScrollBarPolicy(
+                    Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                sc.setHorizontalScrollBarPolicy(
+                    Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+                sc.setFixedHeight(54)
+                sc.setStyleSheet("QScrollArea { background: transparent; }")
+                rl.addWidget(sc, stretch=1)
+                rl.addWidget(vline())
+                tcap = QVBoxLayout()
+                tcap.setSpacing(2)
+                tcap.addWidget(caption("Pin limit (px)"))
+                _thr_edit.setFixedWidth(80)
+                _thr_edit.setToolTip("A pin shifted more than this from the "
+                                     "master (or missing) = NG")
+                _thr_edit.returnPressed.connect(self._save_dist_thr)
+                _thr_edit.editingFinished.connect(self._save_dist_thr)
+                tcap.addWidget(_thr_edit)
+                rl.addLayout(tcap)
+            else:
+                nl = QLabel("No scene yet.  Press  Add Scene  to start.")
+                nl.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+                rl.addWidget(nl)
+                rl.addStretch()
+            leftcol.addWidget(runbar)
+        body.addLayout(leftcol, stretch=1)
+
+        # ===================================================== SIDEBAR (right)
+        side = QWidget()
+        side.setObjectName("side")
+        side.setStyleSheet("QWidget#side { background: transparent; }")
+        rlay = QVBoxLayout(side)
+        rlay.setContentsMargins(0, 0, 2, 0)
+        rlay.setSpacing(10)
+
+        # -- RESULT
+        rcard, rcl = card("Result", "res")
         self.status_big = QLabel("——")
         self.status_big.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_big.setFixedHeight(76)
-        rlay.addWidget(self.status_big)
-        self.status_sub = QLabel("no run yet")
-        self.status_sub.setStyleSheet("color: #8f8f9a; font-size: 9pt;")
+        self.status_big.setWordWrap(True)
+        self.status_big.setMinimumHeight(100)
+        rcl.addWidget(self.status_big)
+        self.status_sub = QLabel("Nothing tested yet")
+        self.status_sub.setWordWrap(True)
+        self.status_sub.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
         self.status_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rlay.addWidget(self.status_sub)
+        rcl.addWidget(self.status_sub)
         self.set_big_status(None)
-
         # overall CYCLE result (all scenes of the unit) - separate from the
         # big status above, which shows the LAST RUN only
-        self.cycle_result_lbl = QLabel("CYCLE RESULT:  —")
+        self.cycle_result_lbl = QLabel("WHOLE PART:  -")
         self.cycle_result_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.cycle_result_lbl.setWordWrap(True)
-        rlay.addWidget(self.cycle_result_lbl)
+        rcl.addWidget(self.cycle_result_lbl)
         self._set_cycle_result(None)
-        self.val_banner = QLabel("🧪 VALIDATION PART\n"
-                                 "data is NOT sent to MES")
+        self.val_banner = QLabel("VALIDATION PART\nnot sent to MES")
         self.val_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.val_banner.setStyleSheet(
-            "background: #1971c2; color: white; font-weight: bold;"
+            f"background: {C_ACCENT}; color: white; font-weight: bold;"
             " font-size: 12pt; padding: 6px; border-radius: 6px;")
         self.val_banner.setVisible(False)
-        rlay.addWidget(self.val_banner)
+        rcl.addWidget(self.val_banner)
+        rlay.addWidget(rcard)
 
-        # -- OK/NG counters (cycle first; arranged vertically)
-        cbox = QGroupBox(" OK / NG COUNTER ")
-        cblay = QVBoxLayout(cbox)
-        cblay.setSpacing(6)
-        crow = QHBoxLayout()
-        cyc = QLabel("CYCLE")
-        cyc.setStyleSheet("color: #c8c8d0; font-weight: bold; font-size: 10pt;")
-        crow.addWidget(cyc)
-        crow.addStretch()
-        if not locked:
-            crow.addWidget(styled_btn(cbox, "⟲ Reset", self.reset_counters,
-                                      color="#e03131"))
-        self.btn_expand = styled_btn(cbox, "▾ Expand", self.toggle_counters,
-                                     color="#44444e")
-        crow.addWidget(self.btn_expand)
-        cblay.addLayout(crow)
-
-        self.cnt_ok_lbl = QLabel("OK  0")
-        self.cnt_ok_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cnt_ok_lbl.setStyleSheet(
-            "background: #2f9e44; color: white; font-weight: bold;"
-            " font-size: 14pt; padding: 6px 12px; border-radius: 6px;")
-
-        self.cnt_ng_lbl = QLabel("NG  0")
-        self.cnt_ng_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cnt_ng_lbl.setStyleSheet(
-            "background: #c92a2a; color: white; font-weight: bold;"
-            " font-size: 14pt; padding: 6px 12px; border-radius: 6px;")
-
-        cblay.addWidget(self.cnt_ok_lbl)
-        cblay.addWidget(self.cnt_ng_lbl)
-
-        self.counter_detail = QWidget()
-        self.counter_detail.setStyleSheet(
-            "QWidget { background: #1a1a20; border-radius: 6px; }"
-            " QLabel { background: transparent; }")
-        self.counter_detail_lay = QVBoxLayout(self.counter_detail)
-        self.counter_detail_lay.setContentsMargins(4, 4, 4, 4)
-        self.counter_detail_lay.setSpacing(2)
-        self.counter_detail.setVisible(False)
-        cblay.addWidget(self.counter_detail)
-        self.counters_expanded = False
-        rlay.addWidget(cbox)
-
-        # -- barcode scanner panel (only once the model is finished)
+        # -- PART (barcode / QR) — only once the model is finished
         if self.scan_active:
-            sbox = QGroupBox(" CAMERA QR SCANNER (press every cycle) "
-                             if self.qr_scan_active else
-                             " BARCODE SCANNER (runs before scenes) ")
-            sblay = QVBoxLayout(sbox)
-            self.scan_status_lbl = QLabel("waiting for scan…")
-            self.scan_status_lbl.setWordWrap(True)
-            self.scan_status_lbl.setStyleSheet("color: #ffd43b;"
-                                               " font-weight: bold;")
-            sblay.addWidget(self.scan_status_lbl)
+            pcard, pcl = card("Part QR code" if self.qr_scan_active
+                              else "Part barcode", "part")
             self.scan_value_lbl = QLabel("—")
+            self.scan_value_lbl.setWordWrap(True)
             self.scan_value_lbl.setStyleSheet(
-                f"background: {C_FIELD}; color: white; padding: 4px 8px;"
-                " border-radius: 5px; font-family: Consolas, monospace;"
-                " font-weight: bold; font-size: 12pt;")
-            sblay.addWidget(self.scan_value_lbl)
+                f"background: {C_FIELD}; color: {C_TEXT}; padding: 6px 10px;"
+                " border-radius: 6px; font-family: Consolas, monospace;"
+                " font-weight: bold; font-size: 13pt;")
+            pcl.addWidget(self.scan_value_lbl)
+            self.scan_status_lbl = QLabel("Waiting for the barcode")
+            self.scan_status_lbl.setWordWrap(True)
+            self.scan_status_lbl.setStyleSheet(f"color: {C_WARN};"
+                                               " font-weight: bold;")
+            pcl.addWidget(self.scan_status_lbl)
             if self.qr_scan_active:
-                m = self.qr_master
-                if m:
-                    info = (f"master QR '{m['name']}' (scene {m['scene']}) · "
-                            f"{'region set' if m.get('roi_norm') else 'full frame'}"
-                            f" · {QrRules.from_dict(m).describe()}")
-                else:
-                    info = ("⚠ no master QR — build a scene and add one "
-                            "(5. QR Scanner)")
-                il = QLabel(info)
-                il.setWordWrap(True)
-                il.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
-                sblay.addWidget(il)
-                self.scan_btn_qr = styled_btn(sbox, "📷  SCAN QR  ",
+                if not self.qr_master and not locked:
+                    pcl.addWidget(hint_label(
+                        "No main QR code yet. Add one while building a "
+                        "scene.", C_FAINT))
+                self.scan_btn_qr = styled_btn(pcard, "Scan QR Code  (F2)",
                                               self.qr_button_pressed,
-                                              color="#3b6ef5")
-                sblay.addWidget(self.scan_btn_qr)
+                                              color="#2f9e44")
+                pcl.addWidget(self.scan_btn_qr)
                 if self._qr_sig("TRIGGER") and not locked:
-                    self.btn_qr_now = styled_btn(
-                        sbox, "▶ Scan now (don't wait for client)",
-                        self.qr_scan_now, color="#f59f00")
-                    sblay.addWidget(self.btn_qr_now)
+                    self.btn_qr_now = styled_btn(pcard, "Scan Now",
+                                                 self.qr_scan_now,
+                                                 color="#44444e")
+                    self.btn_qr_now.setToolTip("Read the QR now, without "
+                                               "waiting for the machine")
+                    pcl.addWidget(self.btn_qr_now)
             else:
-                sblay.addWidget(styled_btn(sbox, "⌕  SCAN  (F2)",
-                                           self.open_quick_scan,
-                                           color="#3b6ef5"))
-            srow2 = QHBoxLayout()
-            srow2.addStretch()
-            srow2.addWidget(styled_btn(sbox, "Clear", self.clear_barcode,
-                                       color="#44444e"))
-            srow2.addWidget(styled_btn(sbox, "Resend", self.resend_barcode,
-                                       color="#3b6ef5"))
-            sblay.addLayout(srow2)
-            rlay.addWidget(sbox)
+                pcl.addWidget(styled_btn(pcard, "Scan Barcode  (F2)",
+                                         self.open_quick_scan,
+                                         color="#2f9e44"))
+            pcl.addWidget(btn_row([
+                styled_btn(pcard, "Clear", self.clear_barcode,
+                           color="#44444e"),
+                styled_btn(pcard, "Resend", self.resend_barcode,
+                           color="#44444e")]))
+            rlay.addWidget(pcard)
             QShortcut(QKeySequence("F2"), self,
                       activated=(self.qr_button_pressed
                                  if self.qr_scan_active
@@ -3569,55 +4225,87 @@ class HeadScreen(BaseScreen):
         else:
             self.scan_status_lbl = None
 
-        # -- MES previous-stage status panel
+        # -- MES part check
         if self.mes_active:
-            mbox = QGroupBox(" MES  (previous stage check) ")
-            mblay = QVBoxLayout(mbox)
-            self.mes_status_lbl = QLabel("idle")
+            mcard, mcl = card("MES part check", "mes")
+            self.mes_status_lbl = QLabel("Waiting for the barcode")
             self.mes_status_lbl.setWordWrap(True)
-            self.mes_status_lbl.setStyleSheet("color: #9a9aa5;"
-                                              " font-weight: bold;")
-            mblay.addWidget(self.mes_status_lbl)
+            mcl.addWidget(self.mes_status_lbl)
             self.mes_msg_lbl = QLabel("—")
             self.mes_msg_lbl.setWordWrap(True)
             self.mes_msg_lbl.setStyleSheet(
-                f"background: {C_FIELD}; color: #c8c8d0; padding: 4px 8px;"
+                f"background: {C_FIELD}; color: {C_MUTED}; padding: 4px 8px;"
                 " border-radius: 5px; font-size: 9pt;")
-            mblay.addWidget(self.mes_msg_lbl)
-            mrow = QHBoxLayout()
-            mrow.addStretch()
-            mrow.addWidget(styled_btn(mbox, "Re-check",
-                                      self.mes_recheck, color="#44444e"))
-            mblay.addLayout(mrow)
+            self.mes_msg_lbl.setVisible(not locked)
+            mcl.addWidget(self.mes_msg_lbl)
+            mcl.addWidget(styled_btn(mcard, "Check Again",
+                                     self.mes_recheck, color="#44444e"))
             nv = len(self.mes_cfg.get("validation_serials") or [])
-            if nv:
-                vh = QLabel(f"🧪 {nv} validation serial(s) registered - "
-                            "MES is skipped for them (MES button → "
-                            "validation list)")
-                vh.setWordWrap(True)
-                vh.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;")
-                mblay.addWidget(vh)
-            rlay.addWidget(mbox)
+            if nv and not locked:
+                mcl.addWidget(hint_label(
+                    f"{nv} validation serial(s) - never sent to MES.",
+                    C_FAINT))
+            rlay.addWidget(mcard)
         else:
             self.mes_status_lbl = None
             self.mes_msg_lbl = None
 
-        if not locked:
-            rlay.addWidget(CommBar(right, app, mini_log_lines=4))
-            dt = QLabel("DETECTION LOG")
-            dt.setStyleSheet(f"color: {C_MUTED}; font-weight: bold;")
-            dt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            rlay.addWidget(dt)
-            self.log_box = QTextEdit()
-            self.log_box.setReadOnly(True)
-            self.log_box.setStyleSheet(
-                f"QTextEdit {{ background: {C_FIELD}; color: #c8c8d0;"
-                f" border: none; border-radius: 6px; font-size: 9pt; }}")
-            rlay.addWidget(self.log_box, stretch=1)
+        # -- COUNTER
+        ccard, ccl = card("Counter", "cnt")
+        crow = QHBoxLayout()
+        crow.setSpacing(8)
+        self.cnt_ok_lbl = QLabel("OK  0")
+        self.cnt_ok_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cnt_ok_lbl.setStyleSheet(
+            f"background: {C_OK}; color: white; font-weight: bold;"
+            " font-size: 14pt; padding: 8px 10px; border-radius: 6px;")
+        self.cnt_ng_lbl = QLabel("NG  0")
+        self.cnt_ng_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cnt_ng_lbl.setStyleSheet(
+            f"background: {C_NG}; color: white; font-weight: bold;"
+            " font-size: 14pt; padding: 8px 10px; border-radius: 6px;")
+        crow.addWidget(self.cnt_ok_lbl, stretch=1)
+        crow.addWidget(self.cnt_ng_lbl, stretch=1)
+        ccl.addLayout(crow)
+        self.btn_expand = styled_btn(ccard, "Show Details",
+                                     self.toggle_counters, color="#44444e")
+        if locked:
+            ccl.addWidget(self.btn_expand)
         else:
-            self.log_box = None
-            rlay.addStretch()
-        body.addWidget(right)
+            ccl.addWidget(btn_row([
+                self.btn_expand,
+                styled_btn(ccard, "Reset", self.reset_counters,
+                           color="#e03131")]))
+        self.counter_detail = QWidget()
+        self.counter_detail.setObjectName("cdet")
+        self.counter_detail.setStyleSheet(
+            f"QWidget#cdet {{ background: {C_FIELD}; border-radius: 6px; }}"
+            " QLabel { background: transparent; }")
+        self.counter_detail_lay = QVBoxLayout(self.counter_detail)
+        self.counter_detail_lay.setContentsMargins(4, 4, 4, 4)
+        self.counter_detail_lay.setSpacing(2)
+        self.counter_detail.setVisible(False)
+        ccl.addWidget(self.counter_detail)
+        self.counters_expanded = False
+        rlay.addWidget(ccard)
+        rlay.addStretch()
+
+        self._log_lines = deque(maxlen=400)
+        self._log_dialog = None
+
+        sscroll = QScrollArea()
+        sscroll.setWidget(side)
+        sscroll.setWidgetResizable(True)
+        sscroll.setFrameShape(QFrame.Shape.NoFrame)
+        sscroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sscroll.setStyleSheet("QScrollArea { background: transparent;"
+                              " border: none; }")
+        # sidebar width follows the screen, but never narrower than its
+        # widest button / label needs
+        sscroll.setFixedWidth(max(self._side_width(),
+                                  side.minimumSizeHint().width() + 12))
+        body.addWidget(sscroll)
 
         self.reload_models()
         self.refresh_counters()
@@ -3627,19 +4315,19 @@ class HeadScreen(BaseScreen):
         if not locked:
             done, total, _ = self.comm_cfg.progress()
             self.log(f"Comm config: {done}/{total} "
-                     f"({'complete ✔' if done == total else 'incomplete'})")
+                     f"({'complete OK' if done == total else 'incomplete'})")
         if self.qr_scan_active:
-            self.log("Camera QR cycle: press 📷 SCAN QR (F2) at the start of "
+            self.log("Camera QR cycle: press SCAN QR CODE (F2) at the start of "
                      "every cycle (QR readers: "
                      + ", ".join(available_backends()) + ")")
             if not self.qr_master:
-                self.log("⚠ camera QR is selected but the model has NO master "
+                self.log("Warning: camera QR is selected but the model has NO master "
                          "QR — build a scene and add one (5. QR Scanner)")
             elif self.comm_cfg.qr_required():
                 _miss = [f for f in CommConfig.QR_FIELDS
                          if not self._qr_sig(f)]
                 if _miss:
-                    self.log("[QR] Comm Config → CAMERA QR still empty: "
+                    self.log("[QR] Comm Config -> CAMERA QR still empty: "
                              + ", ".join(_miss))
         elif self.scan_active:
             self.log("Scanner cycle: press SCAN (F2) and scan a barcode "
@@ -3648,7 +4336,7 @@ class HeadScreen(BaseScreen):
                 QTimer.singleShot(500, self.open_quick_scan)
         elif self.scanner_cfg.get("enabled") and not self.finished:
             self.log("Scanner is configured but the model is not finished — "
-                     "no scan is required yet. Press '🏁 Finish Model' to "
+                     "no scan is required yet. Press 'Finish Model' to "
                      "start the scan-first cycle.")
         if self.mes_active:
             if not MES_AVAILABLE:
@@ -3662,12 +4350,99 @@ class HeadScreen(BaseScreen):
             self._set_mes_status("idle", "")
         elif self.mes_cfg.get("enabled") and not self.finished:
             self.log("MES is enabled but the model is not finished — no MES "
-                     "calls will be made until you press '🏁 Finish Model'.")
+                     "calls will be made until you press 'Finish Model'.")
         QTimer.singleShot(0, lambda: self.setFocus(
             Qt.FocusReason.OtherFocusReason))
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(30)
+        # header lamps + MES reachability
+        self._chip_timer = QTimer(self)
+        self._chip_timer.timeout.connect(self._refresh_chips)
+        self._chip_timer.timeout.connect(self._refresh_ready)
+        self._chip_timer.start(1000)
+        QTimer.singleShot(50, self._refresh_chips)
+        if self.mes_active:
+            self._mes_timer = QTimer(self)
+            self._mes_timer.timeout.connect(self._mes_probe)
+            self._mes_timer.start(10000)
+            QTimer.singleShot(700, self._mes_probe)
+
+    # ------------------------------------------------------------------
+    # header lamps / MES reachability
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _side_width():
+        scr = QApplication.primaryScreen()
+        w = scr.availableGeometry().width() if scr else 1400
+        return max(330, min(420, int(w * 0.24)))
+
+    def _refresh_chips(self):
+        if not self._alive:
+            return
+        h = self.app._health
+        c = self.chips
+        c["camera"].set(not getattr(self.app.camera, "error", None))
+        c["network"].set(bool(h.get("ethernet", True)))
+        eng = self.app.engine
+        c["machine"].set(None if not eng.enabled
+                         else eng.client_count() > 0, eng.status_text())
+        if "mes" in c:
+            c["mes"].set(self._mes_online)
+
+    def _mes_hostport(self):
+        txt = str(self.mes_cfg.get("mes_ip", "") or "").strip()
+        txt = re.sub(r"^\w+://", "", txt).split("/", 1)[0]
+        if not txt:
+            return None
+        host, port = txt, 80
+        if ":" in txt:
+            host, p = txt.rsplit(":", 1)
+            try:
+                port = int(p)
+            except ValueError:
+                port = 80
+        return host, port
+
+    def _mes_probe(self):
+        """Can the MES server be reached?  (TCP connect, off the UI thread)"""
+        if not self._alive or not self.mes_active:
+            return
+        hp = self._mes_hostport()
+
+        def run():
+            ok = False
+            if hp:
+                try:
+                    with socket.create_connection(hp, timeout=2.5):
+                        ok = True
+                except OSError:
+                    ok = False
+            self.after(0, lambda: self._set_mes_link(ok))
+        threading.Thread(target=run, daemon=True).start()
+
+    def _set_mes_link(self, ok, announce=True):
+        if not self._alive:
+            return
+        prev = self._mes_online
+        self._mes_online = ok
+        if "mes" in self.chips:
+            self.chips["mes"].set(ok)
+        if prev is ok:
+            return
+        if not ok:
+            self.log("[MES] NOT connected")
+            self.app.comm_log.add("ERR", "MES server not reachable")
+            if announce:
+                Message.error(self, "MES NOT CONNECTED",
+                              "Reason: network cable is out or the MES "
+                              "server is off." if self._mes_hostport() else
+                              "Reason: MES address is empty.")
+        elif prev is False:
+            self.log("[MES] connected again")
+            self.app.comm_log.add("EVT", "MES server reachable again")
+            if announce:
+                Message.ok(self, "MES CONNECTED")
 
     # ------------------------------------------------------------------
     def destroy_screen(self):
@@ -3683,28 +4458,38 @@ class HeadScreen(BaseScreen):
         super().destroy_screen()
 
     def log(self, msg):
-        if not self._alive or self.log_box is None:
+        if not self._alive:
             return
-        self.log_box.append(html.escape(msg, quote=False))
-        self.log_box.verticalScrollBar().setValue(
-            self.log_box.verticalScrollBar().maximum())
+        self._log_lines.append(msg)
+        if self._log_dialog is not None:
+            self._log_dialog.append_line(msg)
+
+    def open_log_dialog(self):
+        if self._log_dialog is not None:
+            self._log_dialog.raise_()
+            self._log_dialog.activateWindow()
+            return
+        dlg = DetectionLogDialog(self, list(self._log_lines))
+        self._log_dialog = dlg
+        dlg.destroyed.connect(lambda *_: setattr(self, "_log_dialog", None))
+        dlg.show()
 
     # ------------------------------------------------------------------
     # CYCLE RESULT (overall OK/NG of every scene) + popups
     # ------------------------------------------------------------------
     def _set_cycle_result(self, ok, sub=""):
-        base = ("font-size: 15pt; font-weight: bold; border-radius: 6px;"
-                " padding: 6px;")
+        base = ("font-size: 16pt; font-weight: 700; border-radius: 8px;"
+                " padding: 8px;")
         if ok is None:
-            self.cycle_result_lbl.setText("CYCLE RESULT:  " + (sub or "—"))
+            self.cycle_result_lbl.setText("WHOLE PART:  " + (sub or "-"))
             self.cycle_result_lbl.setStyleSheet(
-                f"background: #2e2e38; color: #8f8f9a; {base}")
+                f"background: {C_ELEV}; color: {C_FAINT}; {base}")
         else:
             self.cycle_result_lbl.setText(
-                f"CYCLE RESULT:  {'OK' if ok else 'NG'}"
+                f"WHOLE PART:  {'OK' if ok else 'NG'}"
                 + (f"\n{sub}" if sub else ""))
             self.cycle_result_lbl.setStyleSheet(
-                f"background: {'#2f9e44' if ok else '#c92a2a'};"
+                f"background: {C_OK if ok else C_NG};"
                 f" color: white; {base}")
 
     def _show_popup(self, key, title, headline, lines, color, auto_ms=0):
@@ -3721,19 +4506,14 @@ class HeadScreen(BaseScreen):
         cp = self.app.app_config.data.get("cycle_popup", {})
         if not cp.get("enabled", True):
             return
-        lines = []
-        if serial:
-            lines.append(f"Serial:  {serial}")
-        lines.append(f"Model:  {self.head}")
-        for sc in sorted(scene_results):
-            lines.append(f"   {'✔' if scene_results[sc] else '✖'}  scene "
-                         f"{sc}:  {'OK' if scene_results[sc] else 'NG'}")
-        if validation:
-            lines.append("\n🧪 VALIDATION PART — result NOT sent to MES")
+        lines = [f"Serial: {serial}" if serial else "",
+                 "Validation part - not sent to MES" if validation
+                 else ("" if cycle_ok else "Put it in the reject bin.")]
+        lines = [x for x in lines if x]
         auto = int(float(cp.get("auto_close_s", 5)) * 1000)
-        self._show_popup("cycle", "Cycle complete",
-                         f"CYCLE  {'OK' if cycle_ok else 'NG'}", lines,
-                         "#2f9e44" if cycle_ok else "#c92a2a", auto)
+        self._show_popup("cycle", "Part finished",
+                         f"PART {'OK' if cycle_ok else 'NG'}", lines,
+                         C_OK if cycle_ok else C_NG, auto)
 
     # ------------------------------------------------------------------
     # VALIDATION PART  (MES disabled for this unit)
@@ -3748,30 +4528,62 @@ class HeadScreen(BaseScreen):
 
     def _validation_notice(self, why):
         self._show_popup(
-            "validation", "VALIDATION PART",
-            "🧪 VALIDATION PART",
-            [f"Serial:  {self.scan_value}", "",
-             "This part is for VALIDATION.",
-             "Its data is NOT sent to MES (no previous-stage check,",
-             "no images, no stage report).", "", why],
-            "#1971c2", 4000)
+            "validation", "Validation part",
+            "VALIDATION PART",
+            [f"Serial: {self.scan_value}", "Not sent to MES."],
+            "#2563c9", 4500)
+
+    def _not_ready_reason(self):
+        """What is stopping the station being READY, or None.  READY only
+        shows once camera, MES (when used) and the machine are all
+        connected — otherwise this says which one is not."""
+        if getattr(self.app.camera, "error", None):
+            return "CAMERA NOT CONNECTED", "Check the camera cable"
+        if not self.app._health.get("ethernet", True):
+            return "NETWORK NOT CONNECTED", "Check the network cable"
+        if self.mes_active and self._mes_online is not True:
+            return "MES NOT CONNECTED", "Check the MES server"
+        if self.app.engine.enabled and self.app.engine.client_count() == 0:
+            return "MACHINE NOT CONNECTED", "Waiting for the machine"
+        return None
 
     def set_big_status(self, ok=None, sub=""):
-        base = ("font-size: 34pt; font-weight: bold; border-radius: 8px;"
-                " padding: 2px;")
+        short_base = ("font-size: 40pt; font-weight: 800;"
+                      " border-radius: 10px; padding: 4px;"
+                      " letter-spacing: 2px;")
+        long_base = ("font-size: 17pt; font-weight: 800;"
+                     " border-radius: 10px; padding: 10px 8px;"
+                     " letter-spacing: 0.5px;")
+        base = short_base
+        self._last_ok = ok
         if ok is None:
-            self.status_big.setText("——")
-            self.status_big.setStyleSheet(
-                f"background: #2e2e38; color: #8f8f9a; {base}")
+            reason = self._not_ready_reason()
+            if reason:
+                base = long_base
+                self.status_big.setText(reason[0])
+                self.status_big.setStyleSheet(
+                    f"background: {C_WARN}; color: white; {base}")
+                sub = sub or reason[1]
+            else:
+                self.status_big.setText("READY")
+                self.status_big.setStyleSheet(
+                    f"background: {C_ELEV}; color: {C_FAINT}; {base}")
         elif ok:
             self.status_big.setText("OK")
             self.status_big.setStyleSheet(
-                f"background: #2f9e44; color: white; {base}")
+                f"background: {C_OK}; color: white; {base}")
         else:
             self.status_big.setText("NG")
             self.status_big.setStyleSheet(
-                f"background: #c92a2a; color: white; {base}")
-        self.status_sub.setText(sub or ("no run yet" if ok is None else ""))
+                f"background: {C_NG}; color: white; {base}")
+        self.status_sub.setText(
+            sub or ("Nothing tested yet" if ok is None else ""))
+
+    def _refresh_ready(self):
+        """Keep the idle READY / NOT-CONNECTED text live while nothing has
+        been tested yet.  Never touches a real OK/NG result on screen."""
+        if getattr(self, "_last_ok", None) is None and self._alive:
+            self.set_big_status(None)
 
     def get_dist_thr(self):
         try:
@@ -3835,7 +4647,7 @@ class HeadScreen(BaseScreen):
             for a, av in sorted(c["areas"].items()):
                 if a.startswith(s + "/"):
                     self._counter_row(self.counter_detail_lay,
-                                      "└ " + a.split("/", 1)[1],
+                                      "  " + a.split("/", 1)[1],
                                       av["ok"], av["ng"], indent=20)
         # areas of scenes that no longer exist (renamed etc.)
         orphans = [(a, v) for a, v in sorted(c["areas"].items())
@@ -3850,17 +4662,17 @@ class HeadScreen(BaseScreen):
         self.counters_expanded = not self.counters_expanded
         if self.counters_expanded:
             self.counter_detail.setVisible(True)
-            self.btn_expand.setText("▴ Hide")
+            self.btn_expand.setText("Hide Details")
         else:
             self.counter_detail.setVisible(False)
-            self.btn_expand.setText("▾ Expand")
+            self.btn_expand.setText("Show Details")
         self.refresh_counters()
 
     def reset_counters(self):
-        r = QMessageBox.question(self, "Reset counters",
-                                 f"Reset ALL OK/NG counters of model "
-                                 f"'{self.head}'?")
-        if r == QMessageBox.StandardButton.Yes:
+        if Message.confirm(self, "Set all counters back to zero?",
+                           "The OK and NG counts of this model will start "
+                           "again from zero.",
+                           yes="Reset", no="Cancel"):
             self.app.heads.reset_counters(self.head)
             self.refresh_counters()
             self.log("Counters reset")
@@ -3879,9 +4691,8 @@ class HeadScreen(BaseScreen):
         """Reset the camera to its own default settings (USB camera: the raw
         feed, nothing applied; resizing is the only processing)."""
         if not self.app.camera._cams:
-            self.app.alert("camera", "Camera not connected",
-                           "Camera connection failed - nothing to reset."
-                           f"\n\nReason: {CAM_REASON}",
+            self.app.alert("camera", "CAMERA NOT CONNECTED",
+                           "Reason: camera cable is out or the camera has no power.",
                            retry=self.app.camera.start)
             return
         self.log("[camera] resetting camera settings…")
@@ -3890,11 +4701,14 @@ class HeadScreen(BaseScreen):
             def ui():
                 if not self._alive:
                     return
-                self.log(f"[camera] {'✔' if ok else '✖'} {msg}")
+                self.log(f"[camera] {'OK' if ok else 'X'} {msg}")
                 self.app.comm_log.add("EVT" if ok else "ERR",
                                       f"camera reset: {msg}")
-                (QMessageBox.information if ok else QMessageBox.warning)(
-                    self, "Reset camera", msg)
+                if ok:
+                    Message.ok(self, "Camera settings reset",
+                               "The camera is back to its own settings.")
+                else:
+                    Message.warn(self, "Camera not reset", str(msg))
             self.app.after(0, ui)
         self.app.camera.reset_camera(done)
 
@@ -3919,8 +4733,10 @@ class HeadScreen(BaseScreen):
             txt = e.text()
             if txt and txt.isprintable() and txt.strip():
                 if self.scan_value:
-                    self.log("[scanner] already scanned this cycle — press "
+                    self.log("[scanner] already scanned this cycle - press "
                              "Clear (or finish the cycle) to scan again")
+                    Message.info(self, "ALREADY SCANNED",
+                             f"Serial: {self.scan_value}")
                     e.accept()
                     return
                 e.accept()
@@ -3953,19 +4769,23 @@ class HeadScreen(BaseScreen):
             self.setFocus(Qt.FocusReason.OtherFocusReason)
         if code:
             self._handle_barcode(code)
+        elif QuickScanInput.last_unlocked:
+            self.log("[scanner] unlock code used - screen is free to use")
         else:
-            self.log("[scanner] scan cancelled — detection still blocked")
+            self.log("[scanner] scan cancelled - detection still blocked")
+            Message.warn(self, "NO BARCODE SCANNED",
+                     "Scan the part first.")
 
     # ------------------------------------------------------------------
     # MES  (previous stage check on scan, report + upload at cycle end)
     # ------------------------------------------------------------------
     def open_mes_cfg(self):
         if not self.app.heads.is_finished(self.head):
-            QMessageBox.information(
+            Message.info(
                 self, "Finish the model first",
                 "MES details can be configured once the model is "
                 "finalised.\n\nBuild the scenes, then press "
-                "'🏁 Finish Model'.")
+                "'Finish Model'.")
             return
         MesDialog(self, self.app, self.head,
                   on_close=lambda: self.app.show_head(
@@ -3977,18 +4797,17 @@ class HeadScreen(BaseScreen):
         if not self.mes_status_lbl:
             return
         text, color = {
-            "idle":     ("waiting for a scan…", "#9a9aa5"),
-            "checking": ("⟳ checking previous stage…", "#ffd43b"),
-            "pass":     ("✔ PREVIOUS STAGE PASSED", "#69db7c"),
-            "all_passed": ("✔ ALL STAGES ALREADY PASSED — OK to run",
-                           "#69db7c"),
-            "fail":     ("✖ NOT PASSED BY PREVIOUS STATION", "#ff6b6b"),
-            "error":    ("⚠ MES ERROR — could not verify", "#ffa94d"),
-            "sending":  ("⟳ sending report to MES…", "#ffd43b"),
-            "sent":     ("✔ report sent to MES", "#69db7c"),
-            "senderr":  ("⚠ MES report FAILED", "#ff6b6b"),
-            "validation": ("🧪 VALIDATION PART — MES DISABLED", "#74c0fc"),
-        }.get(state, (state, "#9a9aa5"))
+            "idle":     ("Waiting for the barcode", C_MUTED),
+            "checking": ("Checking this part...", C_WARN),
+            "pass":     ("Previous station passed", C_OK),
+            "all_passed": ("Already passed by this station", C_OK),
+            "fail":     ("Previous station NOT passed", C_NG),
+            "error":    ("MES not connected", C_NG),
+            "sending":  ("Sending the result to MES...", C_WARN),
+            "sent":     ("Result sent to MES", C_OK),
+            "senderr":  ("Result NOT sent to MES", C_NG),
+            "validation": ("Validation part - not sent to MES", C_ACCENT),
+        }.get(state, (state, C_MUTED))
         self.mes_status_lbl.setText(text)
         self.mes_status_lbl.setStyleSheet(f"color: {color};"
                                           " font-weight: bold;"
@@ -3996,74 +4815,97 @@ class HeadScreen(BaseScreen):
         if self.mes_msg_lbl:
             self.mes_msg_lbl.setText(msg or "—")
 
+    @staticmethod
+    def _mes_link_problem(msg):
+        """Does the MES error say the server could not be reached?"""
+        m = str(msg).lower()
+        return any(w in m for w in (
+            "connection", "timed out", "timeout", "refused", "unreachable",
+            "max retries", "login failed", "no route", "name or service",
+            "not available", "failed to establish"))
+
+    @staticmethod
+    def _serial_problem(msg):
+        """Does the MES answer say the barcode itself is wrong?"""
+        m = str(msg).lower()
+        return any(w in m for w in ("not found", "no record", "invalid",
+                                    "does not exist", "doesn't exist",
+                                    "not exist", "unknown serial",
+                                    "wrong serial", "no data found"))
+
     def mes_check_previous(self, serial):
-        """Scan -> ask MES whether this unit passed its previous stage."""
+        """Scan -> ask MES whether this part passed the previous station."""
         if not self.mes or not self.mes_active:
             return
-        self._set_mes_status("checking", f"serial '{serial}'…")
-        self.log(f"[MES] previous stage check for '{serial}'…")
+        self._set_mes_status("checking", f"serial '{serial}'...")
+        self.log(f"[MES] previous stage check for '{serial}'...")
 
         def done(res):
             if not self._alive:
                 return
             state, msg = res
             msg = str(msg)
-            if state == "pass":
-                self._set_mes_status("pass", msg)
-                self.log(f"[MES] ✔ previous stage OK — {msg}")
-                self.app.comm_log.add("EVT", f"MES prev-stage PASS "
-                                             f"'{serial}': {msg}")
+
+            if state in ("pass", "all_passed"):
+                self._set_mes_status(state, msg)
+                if state == "pass":
+                    self.log(f"[MES] OK previous stage passed - {msg}")
+                    self.app.comm_log.add("EVT", f"MES prev-stage PASS "
+                                                 f"'{serial}': {msg}")
+                    Message.ok(self, "PART OK TO TEST",
+                               f"Serial: {serial}")
+                else:
+                    self.log(f"[MES] OK all stations already passed - {msg}")
+                    self.app.comm_log.add("EVT", f"MES prev-stage ALL-PASSED "
+                                                 f"'{serial}': {msg}")
+                    Message.ok(self, "ALREADY PASSED",
+                               f"Serial: {serial}\n"
+                               "Already passed by this station.")
                 if self.scanner_cfg.get("send_to_client", True):
-                                
-                                    self._try_send_barcode()
+                    self._try_send_barcode()
+                self._update_scan_panel()
                 return
-            if state == "all_passed":
-                # MES says the board already cleared every stage. That is a
-                # PASS, not a failure — carry on and report as normal.
-                self._set_mes_status("all_passed", msg)
-                self.log(f"[MES] ✔ all stages already passed — {msg}")
-                self.log("[MES] treating as PASS — running this unit and "
-                         "updating MES as usual")
-                self.app.comm_log.add("EVT", f"MES prev-stage ALL-PASSED "
-                                             f"'{serial}': {msg}")
-                if self.scanner_cfg.get("send_to_client", True):
-                                
-                                    self._try_send_barcode()
-                return
-            if state == "fail":
-                                        # MES says the board already cleared every stage. That is a
-                                        # PASS, not a failure — carry on and report as normal.
-                                        self._set_mes_status("fail", msg)
-                                        # self.log(f"[MES] ✔ all stages already passed — {msg}")
-                                        # self.log("[MES] treating as PASS — running this unit and "
-                                        #          "updating MES as usual")
-                                        # self.app.comm_log.add("EVT", f"MES prev-stage ALL-PASSED "
-                                        #                              f"'{serial}': {msg}")
-                                        if self.scanner_cfg.get("send_to_client", False):
-                                                        
-                                                            self._try_send_barcode(st="ng")
-                                                            
-                                    
-                                        return
+
+            # ---- not allowed / could not be checked
+            bad_serial = (state in ("error", "fail")
+                          and self._serial_problem(msg))
+            no_link = (state == "error" and not bad_serial
+                       and self._mes_link_problem(msg))
+            if no_link:
+                self._set_mes_link(False, announce=False)
             self._set_mes_status("error" if state == "error" else "fail", msg)
-            self.log(f"[MES] ✖ {msg}")
+            self.log(f"[MES] FAILED {msg}")
             self.app.comm_log.add("EVT", f"MES prev-stage "
                                          f"{state.upper()} '{serial}': {msg}")
-            # Locked = production mode -> hard stop with a popup, then the
-            # cycle restarts so the operator can scan the next board.
-            # Unlocked = engineering mode -> warn only, runs still allowed.
-            if self.app.is_locked() and self.mes_cfg.get(
-                    "block_on_prev_fail", True):
-                QMessageBox.critical(
-                    self, "Previous stage NOT passed",
-                    f"Serial:  {serial}\n\n{msg}\n\n"
-                    "This unit cannot be tested at this stage.\n"
-                    "Remove the board — the next scan will start a new "
-                    "cycle.")
-                self.log("[scanner] cycle aborted — scan the next barcode")
+
+            if state == "fail" and self.scanner_cfg.get("send_to_client",
+                                                        False):
+                self._try_send_barcode(st="ng")
+
+            blocked = (self.app.is_locked()
+                       and self.mes_cfg.get("block_on_prev_fail", True))
+            if bad_serial:
+                Message.error(self, "WRONG SERIAL NUMBER",
+                              f"Serial: {serial}\n"
+                              "This serial number is not in MES.")
+            elif state == "fail":
+                Message.error(self, "PREVIOUS STATION NOT PASSED",
+                              f"Serial: {serial}\n"
+                              "Take this part off the station.")
+            elif no_link:
+                Message.error(self, "MES NOT CONNECTED",
+                              "Reason: network cable is out or the MES "
+                              "server is off.")
+            else:
+                Message.warn(self, "MES CHECK FAILED",
+                             f"Serial: {serial}\n"
+                             "Reason: " + _first_line(msg))
+
+            if blocked:
+                self.log("[scanner] cycle aborted - scan the next barcode")
                 self._start_next_cycle()
             else:
-                self.log("[MES] not locked — run allowed, but this unit "
+                self.log("[MES] controls open - run allowed, but this part "
                          "did NOT pass the previous station")
         self.mes.check_previous_async(serial, done)
 
@@ -4072,7 +4914,9 @@ class HeadScreen(BaseScreen):
             self.log("[MES] validation part — MES is disabled for it")
             return
         if not self.scan_value:
-            self.log("[MES] nothing to check — scan a barcode first")
+            self.log("[MES] nothing to check - scan a barcode first")
+            Message.info(self, "NOTHING TO CHECK",
+                         "Scan the barcode on the part first.")
             return
         self.mes_check_previous(self.scan_value)
 
@@ -4268,14 +5112,19 @@ class HeadScreen(BaseScreen):
                 return
             if ok:
                 self._set_mes_status("sent", str(msg))
-                self.log(f"[MES] ✔ stage report accepted — {msg}")
+                self.log(f"[MES] OK stage report accepted - {msg}")
                 self.app.comm_log.add("EVT", f"MES stage report '{serial}' "
                                              f"OK: {msg}")
+                Message.ok(self, "SENT TO MES",
+                           f"Serial: {serial}")
             else:
                 self._set_mes_status("senderr", str(msg))
-                self.log(f"[MES] ✖ stage report FAILED — {msg}")
+                self.log(f"[MES] FAILED stage report - {msg}")
                 self.app.comm_log.add("ERR", f"MES stage report '{serial}' "
                                              f"FAILED: {msg}")
+                Message.error(self, "NOT SENT TO MES",
+                              f"Serial: {serial}\n"
+                              "Reason: MES did not answer. Saved on this PC.")
             if path:
                 self.log(f"[MES] report: {path}")
             # only now is the unit finished -> ready for the next one
@@ -4287,7 +5136,7 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     # CAMERA QR  (part read by camera; Operator ID still uses the scanner)
     #
-    #   operator presses  📷 SCAN QR
+    #   operator presses SCAN QR CODE
     #     -> REQ signal to the client ("present the part")
     #     -> client answers with TRIGGER  (part is in position)
     #     -> camera reads the master QR  (multi-frame consensus)
@@ -4314,19 +5163,14 @@ class HeadScreen(BaseScreen):
                 pass
 
     def _qr_popup(self, title, text, auto_ms=0, critical=False):
-        """auto_ms > 0: non-blocking popup that closes itself (retry notices
-        must not stop the retry loop).  auto_ms == 0: normal modal popup."""
-        if not auto_ms:
-            (QMessageBox.critical if critical else QMessageBox.warning)(
-                self, title, text)
-            return
-        self._qr_close_toast()
-        box = QMessageBox(QMessageBox.Icon.Warning, title, text,
-                          QMessageBox.StandardButton.NoButton, self)
-        box.setWindowModality(Qt.WindowModality.NonModal)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        box.show()
-        self._qr_toast = box
+        """Big popup. auto_ms > 0 closes itself (a retry notice must never
+        stop the retry loop)."""
+        if auto_ms:
+            self._qr_close_toast()
+        box = (Message.error if critical else Message.warn)(
+            self, title, text, auto_ms=auto_ms)
+        if auto_ms:
+            self._qr_toast = box
 
         def close():
             try:
@@ -4342,10 +5186,10 @@ class HeadScreen(BaseScreen):
             self.log("[QR] no master QR configured — build a scene and add "
                      "one (5. QR Scanner)")
             if interactive:
-                QMessageBox.warning(
+                Message.warn(
                     self, "No master QR",
                     "Camera QR scanning is selected, but this model has no "
-                    "master QR.\n\nBuild a scene and use  5. QR Scanner → "
+                    "master QR.\n\nBuild a scene and use  5. QR Scanner -> "
                     "Add QR  to create one (answer Yes to 'master').")
             return False
         if self.busy:
@@ -4357,34 +5201,34 @@ class HeadScreen(BaseScreen):
         """(text, colour) for the panel while there is no scan yet."""
         n, mx = self.qr_attempt, self._qr_max_tries()
         if self.qr_state == "waiting":
-            return (f"⏳ attempt {n}/{mx}: waiting for client signal "
+            return (f"Attempt {n}/{mx}: waiting for client signal "
                     f"'{self._qr_sig('TRIGGER')}'…  (press again to cancel)",
                     "#74c0fc")
         if self.qr_state == "scanning":
-            return f"📷 attempt {n}/{mx}: reading QR…", "#74c0fc"
+            return f"Attempt {n}/{mx}: reading QR…", "#74c0fc"
         if self.qr_state == "retrying":
-            return (f"↻ not read (attempt {n}/{mx}) — sending the signal "
+            return (f"Not read (attempt {n}/{mx}) — sending the signal "
                     "again…  (press to cancel)", "#ffa94d")
         if self.qr_msg:
-            return f"✖ {self.qr_msg}", "#ff8787"
+            return str(self.qr_msg), "#ff8787"
         if not self.qr_master:
-            return "⚠ no master QR configured", "#ff8787"
-        return ("① press 📷 SCAN QR / F2  (detection blocked)", "#ffd43b")
+            return "No main QR code set up", "#ff8787"
+        return ("Press SCAN QR CODE (F2) to start this part", "#ffd43b")
 
     def _qr_sync_buttons(self):
         b = self.scan_btn_qr
         if b is None:
             return
         if self.qr_state in ("waiting", "retrying"):
-            b.setText("✖  Cancel")
+            b.setText("Cancel")
             apply_btn_color(b, "#e03131")
             b.setEnabled(True)
         elif self.qr_state == "scanning":
-            b.setText("📷  reading…")
+            b.setText("reading...")
             apply_btn_color(b, "#3b6ef5")
             b.setEnabled(False)
         else:
-            b.setText("📷  SCAN QR  (F2)")
+            b.setText("SCAN QR CODE  (F2)")
             apply_btn_color(b, "#3b6ef5")
             b.setEnabled(True)
         if self.btn_qr_now is not None:
@@ -4436,7 +5280,7 @@ class HeadScreen(BaseScreen):
                 # operator mode: nothing may run without the client
                 self.qr_state = "idle"
                 self.qr_msg = f"{why} — QR scan not started"
-                self.log(f"[QR] ✖ {why} — scan NOT started (locked mode)")
+                self.log(f"[QR] X {why} — scan NOT started (locked mode)")
                 self.app.comm_log.add("EVT", f"QR scan blocked — {why} "
                                              "(locked)")
                 self._update_scan_panel()
@@ -4449,7 +5293,7 @@ class HeadScreen(BaseScreen):
             # engineering mode: warn, then read anyway
             if req:
                 eng.send(req, why=f"QR scan request {n}/{mx}")
-            self.log(f"[QR] ⚠ {why} — reading the camera anyway "
+            self.log(f"[QR] Warning: {why} — reading the camera anyway "
                      "(unlocked mode)")
             if n == 1:
                 self._qr_popup("Client not connected",
@@ -4464,7 +5308,7 @@ class HeadScreen(BaseScreen):
         if req:
             eng.send(req, why=f"QR scan request {n}/{mx}")
         else:
-            self.log("[QR] no request signal set (Comm Config → CAMERA QR)")
+            self.log("[QR] no request signal set (Comm Config -> CAMERA QR)")
         if not trig:
             self.log("[QR] no trigger signal set — reading the camera now")
             self._qr_begin("MANUAL")
@@ -4555,7 +5399,7 @@ class HeadScreen(BaseScreen):
         self.qr_state = "idle"
         if res.ok:
             self._qr_close_toast()
-            self.log(f"[QR] ✔ '{res.value}'  (attempt {self.qr_attempt}, "
+            self.log(f"[QR] OK '{res.value}'  (attempt {self.qr_attempt}, "
                      f"{res.frames} frames, {res.elapsed:.2f}s, "
                      f"{res.backend})")
             self.app.comm_log.add("EVT", f"QR read OK '{res.value}' "
@@ -4591,7 +5435,7 @@ class HeadScreen(BaseScreen):
             self._qr_gen += 1
             gen = self._qr_gen
             self.qr_state = "retrying"
-            self.log(f"[QR] ✖ attempt {n}/{mx}: {reason} — trying again, "
+            self.log(f"[QR] X attempt {n}/{mx}: {reason} — trying again, "
                      "sending the signal again…")
             self._update_scan_panel()
             self._qr_popup("QR not read",
@@ -4606,7 +5450,7 @@ class HeadScreen(BaseScreen):
         self.qr_state = "idle"
         self.qr_msg = f"QR not read after {mx} attempts — {reason}"
         self._qr_close_toast()
-        self.log(f"[QR] ✖✖ not read after {mx} attempts — {reason}")
+        self.log(f"[QR] XX not read after {mx} attempts — {reason}")
         self.app.comm_log.add("EVT", f"QR FAILED after {mx} attempts")
         ng_sig = self._qr_sig("NG")
         if ng_sig:
@@ -4707,7 +5551,7 @@ class HeadScreen(BaseScreen):
         self._set_mes_status("idle", "")
         self._mes_reset_cycle_data()
         if self.qr_scan_active:
-            self.log("[QR] ready — press 📷 SCAN QR (F2) for the next part")
+            self.log("[QR] ready — press SCAN QR CODE (F2) for the next part")
         elif self.scan_active:
             self.log("[scanner] ready — scan the next barcode")
             if self.scanner_cfg.get("auto_popup", True):
@@ -4718,6 +5562,13 @@ class HeadScreen(BaseScreen):
         self.val_banner.setVisible(self.validation_mode)
 
     def _handle_barcode(self, code, validation=False):
+        code = str(code or "").strip()
+        if len(code) < 2:
+            self.log(f"[scanner] barcode '{code}' is not valid - ignored")
+            Message.error(self, "BARCODE NOT VALID",
+                          "That barcode could not be read properly.\n\n"
+                          "Please scan it again.")
+            return
         # a new serial = a new unit: nothing of the previous one may reach MES
         self._mes_reset_cycle_data()
         self.cycle_scene_results = {}
@@ -4800,10 +5651,8 @@ class HeadScreen(BaseScreen):
                 self.scan_value_lbl.setText("—")
                 return
         if not self.scan_value:
-            self.scan_status_lbl.setText("① waiting for scan…  "
-                                         "press SCAN / F2  (detection "
-                                         "blocked)")
-            self.scan_status_lbl.setStyleSheet("color: #ffd43b;"
+            self.scan_status_lbl.setText("Waiting for the barcode")
+            self.scan_status_lbl.setStyleSheet(f"color: {C_WARN};"
                                                " font-weight: bold;")
             self.scan_value_lbl.setText("—")
             return
@@ -4812,18 +5661,18 @@ class HeadScreen(BaseScreen):
         if self.scanner_cfg.get("send_to_client", True):
             if self.scan_sent:
                 self.scan_status_lbl.setText(
-                    "✔ scanned ")
-                self.scan_status_lbl.setStyleSheet("color: green;"
+                    "Scanned")
+                self.scan_status_lbl.setStyleSheet(f"color: {C_OK};"
                                                    " font-weight: bold;")
             else:
                 self.scan_status_lbl.setText(
-                    "⚠ scanned Not sent to client")
-                self.scan_status_lbl.setStyleSheet("color: green;"
-                                                   " font-weight: bold; font-size: 13pt;")
+                    "Scanned - not sent to the machine")
+                self.scan_status_lbl.setStyleSheet(f"color: {C_OK};"
+                                                   " font-weight: bold;")
         else:
-            self.scan_status_lbl.setText("✔ scanned — detection allowed")
-            self.scan_status_lbl.setStyleSheet("color: #69db7c;"
-                                               " font-weight: bold;  font-size: 13pt;")
+            self.scan_status_lbl.setText("Scanned - you can test the part")
+            self.scan_status_lbl.setStyleSheet(f"color: {C_OK};"
+                                               " font-weight: bold;")
 
     def scanner_gate(self):
         """(allowed, reason). Scanning is mandatory before detection, but a
@@ -4838,7 +5687,7 @@ class HeadScreen(BaseScreen):
                     return False, ("camera QR scanning is selected but the "
                                    "model has no master QR — add one in a "
                                    "scene (5. QR Scanner)")
-                return False, ("scan the QR first — press 📷 SCAN QR (F2); "
+                return False, ("scan the QR first — press  SCAN QR (F2); "
                                "the scan step runs before the scenes")
             return False, ("scan the barcode first — press SCAN (F2); "
                            "the scanner step runs before the scenes")
@@ -4851,7 +5700,7 @@ class HeadScreen(BaseScreen):
         serial = self.scan_value
         validation = self.validation_mode
         # overall CYCLE result: on the UI and in a popup
-        self._set_cycle_result(all_ok, ("🧪 validation part - not sent to MES"
+        self._set_cycle_result(all_ok, ("validation part - not sent to MES"
                                         if validation else ""))
         self._popup_cycle_result(all_ok, scenes, serial, validation)
         if validation:
@@ -4882,7 +5731,7 @@ class HeadScreen(BaseScreen):
         self.compare_targets = [("WHOLE VIEW (all ROIs)", None, None)]
         parents = self.app.heads.list_parents(self.head)
         if not parents and self.parent_btn_lay is not None:
-            e = QLabel("No scenes yet.\nPress + Add Scene")
+            e = QLabel("No scenes yet.\nPress Add Scene")
             e.setStyleSheet("color: #666; font-size: 10pt;")
             e.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.parent_btn_lay.addWidget(e)
@@ -4890,7 +5739,7 @@ class HeadScreen(BaseScreen):
             if self.parent_btn_lay is not None:
                 n = len(self.parent_store.list_children(p))
                 self.parent_btn_lay.addWidget(styled_btn(
-                    self.parent_btn_frame, f"▶  {p}   ({n} area)",
+                    self.parent_btn_frame, f"{p}   ({n} area)",
                     lambda pp=p: self.execute(("parent", pp), "MANUAL")))
             try:
                 cm = self.parent_store.get_child_manager(p)
@@ -4954,7 +5803,7 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     def enter_compare(self):
         if not self.compare_targets or not self._children_cache:
-            QMessageBox.information(self, "No master",
+            Message.info(self, "No master",
                                     "No saved areas yet — nothing to "
                                     "compare.")
             return
@@ -4966,9 +5815,9 @@ class HeadScreen(BaseScreen):
     def set_compare_mode(self, mode):
         self.compare_mode = mode
         apply_btn_color(self.btn_side,
-                        "#3b6ef5" if mode == "side" else "#44444e")
+                        "#0ca678" if mode == "side" else "#44444e")
         apply_btn_color(self.btn_overlay,
-                        "#3b6ef5" if mode == "overlay" else "#44444e")
+                        "#0ca678" if mode == "overlay" else "#44444e")
 
     def _tick_compare(self):
         frame = self.app.camera.get_frame()
@@ -5029,12 +5878,15 @@ class HeadScreen(BaseScreen):
                                     else "FAILED (camera not ready)"))
 
     def add_parent(self):
-        name, ok = QInputDialog.getText(self, "Add Scene", "New scene name:")
-        if not ok or not name or not name.strip():
+        name = ask_text(self, "Name the new scene",
+                        "A scene is one view of the part. Give it a name "
+                        "you will recognise.",
+                        placeholder="for example:  top view")
+        if not name or not name.strip():
             return
         name = name.strip()
         if self.app.heads.scene_exists(self.head, name):
-            QMessageBox.information(self, "Exists",
+            Message.info(self, "Exists",
                                     f"Scene '{name}' already exists.")
             return
         self.app.show_build_parent(self.head, name)
@@ -5042,25 +5894,26 @@ class HeadScreen(BaseScreen):
     def finish_head(self):
         structure = self.app.heads.structure(self.head)
         if not any(children for children in structure.values()):
-            QMessageBox.warning(
+            Message.warn(
                 self, "Detection not finished",
                 "The model needs at least one scene with at least one area "
                 "before it can be finished.")
             return
-        r = QMessageBox.question(
-            self, "Finish model",
-            f"Mark model '{self.head}' as FINISHED?\n\n"
-            "After this you can build the Communication part.")
-        if r == QMessageBox.StandardButton.Yes:
+        if Message.confirm(
+                self, "Finish this model?",
+                "The model is then ready for production.\n\nThe barcode "
+                "scanner, MES and the machine communication can be set up "
+                "after this step.",
+                yes="Finish", no="Not yet"):
             self.app.heads.set_finished(self.head, True)
             self.app.show_head(self.head, announce=False)
 
     def open_comm(self):
         if not self.app.heads.is_finished(self.head):
-            QMessageBox.information(
+            Message.info(
                 self, "Finish detection first",
                 "First finish the detection part completely and press "
-                "'🏁 Finish Model'. Then the Communication builder unlocks.")
+                "'Finish Model'. Then the Communication builder unlocks.")
             return
         self.app.show_comm(self.head)
 
@@ -5075,27 +5928,25 @@ class HeadScreen(BaseScreen):
         allowed, reason = self.scanner_gate()
         if not allowed:
             self.log(f"BLOCKED [{source}]: {reason}")
-            self.app.comm_log.add("EVT", f"run {scope} BLOCKED — {reason}")
-            if source == "MANUAL":
-                if (not self.scan_value and self.scan_active
-                        and not self.qr_scan_active):
-                    # just missing a scan — pop the box and retry
-                    self.open_quick_scan()
-                    if self.scan_value and not self.mes_active:
-                        self.execute(scope, source)
-                else:
-                    QMessageBox.warning(self, "Cannot run", reason)
+            self.app.comm_log.add("EVT", f"run {scope} BLOCKED - {reason}")
+            if (source == "MANUAL" and not self.scan_value
+                    and self.scan_active and not self.qr_scan_active):
+                # only a missing scan - open the scan box and go again
+                self.open_quick_scan()
+                if self.scan_value and not self.mes_active:
+                    self.execute(scope, source)
+                return
+            self._blocked_popup(reason)
             return
         eth_ok, cam_ok = self.app.hardware_ok(self)   # popup if broken
         if not eth_ok:
-            self.log("⚠ Ethernet is NOT connected")
+            self.log("Warning: the network cable is not connected")
         frame = self.app.camera.get_frame()
         if frame is None:
             self.log(f"No camera frame — cannot run {scope} ({source})")
             if cam_ok:      # camera not reported broken, just no frame yet
-                self.app.alert("camera", "No camera frame",
-                               "No image from the camera.\n\n"
-                               f"Reason: {CAM_REASON}",
+                self.app.alert("camera", "CAMERA NOT CONNECTED",
+                               "Reason: camera cable is out or the camera has no power.",
                                retry=self.app.camera.start)
             return
         if self.validation_mode:
@@ -5116,6 +5967,37 @@ class HeadScreen(BaseScreen):
         threading.Thread(target=self._worker,
                          args=(scope, plan, frame, dist_thr),
                          daemon=True).start()
+
+    def _blocked_popup(self, reason):
+        """Why nothing ran, in words an operator can act on."""
+        if not self.scan_value and self.scan_active:
+            if self.qr_scan_active:
+                Message.warn(self, "READ THE QR CODE FIRST",
+                             "Press SCAN QR CODE before testing the part.")
+            else:
+                Message.warn(self, "SCAN THE BARCODE FIRST",
+                             "Scan the barcode on the part before testing "
+                             "it.")
+            return
+        if self.mes_busy:
+            Message.info(self, "PLEASE WAIT",
+                         "The result of the last part is still being sent "
+                         "to MES.", auto_ms=3000)
+            return
+        if self.mes_prev_state == "checking":
+            Message.info(self, "PLEASE WAIT",
+                         "This part is still being checked.", auto_ms=3000)
+            return
+        if self.mes_prev_state == "fail":
+            Message.error(self, "PREVIOUS STATION NOT PASSED",
+                          "Take this part off the station.")
+            return
+        if self.mes_prev_state == "error":
+            Message.error(self, "MES NOT CONNECTED",
+                          "Reason: network cable is out or the MES server "
+                          "is off.")
+            return
+        Message.warn(self, "CANNOT TEST THIS PART", str(reason))
 
     def _worker(self, scope, plan, frame, dist_thr):
         logs = []
@@ -5326,7 +6208,7 @@ class CommScreen(BaseScreen):
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         top = QHBoxLayout()
-        top.addWidget(styled_btn(self, "← Back to Model",
+        top.addWidget(styled_btn(self, "Back to Model",
                                  lambda: app.show_head(head_name,
                                                        announce=False),
                                  color="#44444e"))
@@ -5334,7 +6216,7 @@ class CommScreen(BaseScreen):
         t.setStyleSheet("color: white; font-size: 14pt; font-weight: bold;")
         top.addWidget(t)
         top.addStretch()
-        top.addWidget(styled_btn(self, "🖥 Monitor / Connection",
+        top.addWidget(styled_btn(self, "Connection Monitor",
                                  lambda: CommMonitor(self, app).show(),
                                  color="#845ef7"))
         _mes_on = app.heads.get_mes(head_name).get("enabled")
@@ -5360,7 +6242,7 @@ class CommScreen(BaseScreen):
         left = panel()
         llay = QVBoxLayout(left)
         llay.setContentsMargins(8, 6, 8, 8)
-        lt = QLabel("STRUCTURE — ✔ done   ✖ missing   – optional/skipped")
+        lt = QLabel("STRUCTURE - done / missing / optional")
         lt.setStyleSheet(f"color: {C_MUTED}; font-weight: bold;")
         lt.setAlignment(Qt.AlignmentFlag.AlignCenter)
         llay.addWidget(lt)
@@ -5420,7 +6302,7 @@ class CommScreen(BaseScreen):
         self._items = {}
 
         def label(name, done, miss):
-            return f"{'✔' if done else '✖'}  {name}" + \
+            return f"{'OK' if done else 'X'}  {name}" + \
                    ("" if done else f"   (left: {', '.join(miss)})")
 
         # scanner node FIRST — it runs before the scenes
@@ -5487,7 +6369,7 @@ class CommScreen(BaseScreen):
         dn, total, missing = self.cfg.progress()
         self.progress_lbl.setText(
             f"Progress: {dn} / {total} fields configured"
-            + ("   —  COMPLETE ✔" if dn == total else ""))
+            + ("   —  COMPLETE OK" if dn == total else ""))
         self.remaining_lbl.setText(
             "" if not missing else "Still left:  " + ",  ".join(missing))
         if sel:
@@ -5521,7 +6403,7 @@ class CommScreen(BaseScreen):
         row.setContentsMargins(12, 4, 12, 0)
         l = QLabel(label)
         l.setStyleSheet("color: #c8c8d0;")
-        l.setFixedWidth(160)
+        l.setMinimumWidth(160)
         row.addWidget(l)
         e = QLineEdit(str(initial))
         row.addWidget(e, stretch=1)
@@ -5576,7 +6458,7 @@ class CommScreen(BaseScreen):
             srow.setContentsMargins(12, 4, 12, 0)
             sl = QLabel("Part scan source:")
             sl.setStyleSheet("color: #c8c8d0;")
-            sl.setFixedWidth(160)
+            sl.setMinimumWidth(160)
             srow.addWidget(sl)
             cv = CVar(QComboBox())
             cv.setup(PART_SOURCES, sc.get("source", "scanner"))
@@ -5618,7 +6500,7 @@ class CommScreen(BaseScreen):
                      color="#74c0fc", size=9)
             self.form_vars["REQ"] = self._add_field(
                 f, "Out to client / request:", d["qr"].get("REQ", ""),
-                "sent when the operator presses  📷 SCAN QR  —\n"
+                "sent when the operator presses SCAN QR CODE -\n"
                 "tells the client to present the part")
             self.form_vars["TRIGGER"] = self._add_field(
                 f, "In from client / trigger:", d["qr"].get("TRIGGER", ""),
@@ -5630,7 +6512,7 @@ class CommScreen(BaseScreen):
             self.form_vars["NG"] = self._add_field(
                 f, "Out to client / read NG:", d["qr"].get("NG", ""),
                 "sent when the QR could not be read reliably")
-            note("Each cycle the operator presses  📷 SCAN QR  on the model\n"
+            note("Each cycle the operator presses SCAN QR CODE on the model\n"
                  "page.  If no trigger is set (or no client is connected)\n"
                  "the camera is read immediately.  After a good read the\n"
                  "normal flow continues: MES check, then the barcode\n"
@@ -5679,7 +6561,7 @@ class CommScreen(BaseScreen):
             cc = d["parents"][p]["children"][c]
             title(f"AREA  —  '{p} / {c}'")
             if not bool(d["parents"][p].get("area_wise", True)):
-                note("ℹ  Scene-only mode: area-wise results are "
+                note("Scene-only mode: area-wise results are "
                      f"OFF for '{p}'.\nThese fields are OPTIONAL "
                      "— the scene trigger already runs this "
                      "area.\nFill them only if you also want "
@@ -5697,9 +6579,9 @@ class CommScreen(BaseScreen):
         btnrow = QHBoxLayout()
         btnrow.setContentsMargins(0, 16, 0, 8)
         btnrow.addStretch()
-        btnrow.addWidget(styled_btn(self.form_holder, " Save",
+        btnrow.addWidget(styled_btn(self.form_holder, "Save",
                                     self.save_current, color="#2f9e44"))
-        btnrow.addWidget(styled_btn(self.form_holder, " Clear fields",
+        btnrow.addWidget(styled_btn(self.form_holder, "Clear fields",
                                     self.clear_current, color="#e03131"))
         btnrow.addStretch()
         f.addLayout(btnrow)
@@ -5762,7 +6644,7 @@ class CommScreen(BaseScreen):
             cc.update({k: v.get(k, "") for k in ("PLC", "OK", "NG")})
         dups = self._check_duplicate_triggers()
         if dups:
-            QMessageBox.warning(self, "Duplicate signal",
+            Message.warn(self, "Duplicate signal",
                                 "Warning — same signal string used more "
                                 "than once:\n\n" + "\n".join(dups))
         self.cfg.save()
@@ -5828,7 +6710,7 @@ class QrConfigDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(8)
-        t = QLabel("📷  QR SCANNER SETTINGS")
+        t = QLabel("QR CODE SETTINGS")
         t.setStyleSheet("color: #ffd43b; font-size: 13pt; font-weight: bold;")
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(t)
@@ -5858,7 +6740,7 @@ class QrConfigDialog(QDialog):
 
         row = QHBoxLayout()
         row.addStretch()
-        row.addWidget(styled_btn(self, "Next ▶  select region", self._ok,
+        row.addWidget(styled_btn(self, "Next: select the region", self._ok,
                                  color="#2f9e44"))
         row.addWidget(styled_btn(self, "Cancel", self.reject,
                                  color="#44444e"))
@@ -5868,15 +6750,15 @@ class QrConfigDialog(QDialog):
     def _ok(self):
         name = self.e_name.text().strip()
         if not name or "/" in name or "\\" in name:
-            QMessageBox.warning(self, "Name", "Enter a name (no / or \\).")
+            Message.warn(self, "Name", "Enter a name (no / or \\).")
             return
         if name.lower() in self.taken:
-            QMessageBox.warning(self, "Name",
+            Message.warn(self, "Name",
                                 f"'{name}' is already used in this scene.")
             return
         ltxt = self.e_len.text().strip()
         if ltxt and (not ltxt.isdigit() or int(ltxt) <= 0):
-            QMessageBox.warning(self, "Length",
+            Message.warn(self, "Length",
                                 "Length must be a positive whole number "
                                 "— or empty for 'any'.")
             return
@@ -5932,16 +6814,21 @@ class BuildParentScreen(BaseScreen):
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         top = QHBoxLayout()
-        top.addWidget(styled_btn(self, "← Cancel", self.cancel,
-                                 color="#44444e"))
-        t = QLabel(f"BUILD SCENE  {head_name} / {parent_name}")
-        t.setStyleSheet("color: white; font-size: 14pt; font-weight: bold;")
-        top.addWidget(t)
+        top.setSpacing(10)
+        top.addWidget(btn_group([styled_btn(self, "Cancel", self.cancel,
+                                            color="#44444e")]))
+        top.addWidget(screen_title(f"{head_name}  /  {parent_name}"))
         top.addStretch()
-        self.status_lbl = QLabel("")
-        self.status_lbl.setStyleSheet("color: #ffd43b; font-weight: bold;")
-        top.addWidget(self.status_lbl)
         root.addLayout(top)
+
+        # what to do next, always on the same line under the title
+        self.status_lbl = QLabel("")
+        self.status_lbl.setWordWrap(True)
+        self.status_lbl.setStyleSheet(
+            f"background: {C_PANEL}; border: 1px solid {C_LINE};"
+            " border-radius: 8px; padding: 10px 14px;"
+            f" color: {C_TEXT}; font-size: 11pt; font-weight: 600;")
+        root.addWidget(self.status_lbl)
 
         body = QHBoxLayout()
         root.addLayout(body, stretch=1)
@@ -5956,47 +6843,42 @@ class BuildParentScreen(BaseScreen):
         self.canvas.on_rect_drawn = lambda r: self._update_buttons()
 
         right = panel()
-        right.setFixedWidth(300)
+        right.setFixedWidth(310)
         rlay = QVBoxLayout(right)
-        rlay.setContentsMargins(8, 6, 8, 6)
+        rlay.setContentsMargins(10, 10, 10, 10)
+        rlay.setSpacing(8)
 
-        sec = QGroupBox(" 1. Region (ROI) ")
+        sec = QGroupBox(" STEP 1   AREA TO LOOK AT ")
         s1 = QVBoxLayout(sec)
         self.btn_sel_roi = styled_btn(sec, "Select ROI (drag on video)",
                                       self.start_roi)
         s1.addWidget(self.btn_sel_roi)
-        row = QHBoxLayout()
-        self.btn_confirm_roi = styled_btn(sec, "✔ Confirm ROI",
+        self.btn_confirm_roi = styled_btn(sec, "Confirm Area",
                                           self.confirm_roi, color="#2f9e44")
-        row.addWidget(self.btn_confirm_roi)
-        self.btn_reset_roi = styled_btn(sec, "✖ Reset ROI", self.reset_roi,
+        self.btn_reset_roi = styled_btn(sec, "Clear Area", self.reset_roi,
                                         color="#e03131")
-        row.addWidget(self.btn_reset_roi)
-        s1.addLayout(row)
+        s1.addWidget(btn_row([self.btn_confirm_roi, self.btn_reset_roi]))
         rlay.addWidget(sec)
 
-        sec2 = QGroupBox(" 2. Templates ")
+        sec2 = QGroupBox(" STEP 2   WHAT TO FIND ")
         s2 = QVBoxLayout(sec2)
         self.btn_add_tmpl = styled_btn(sec2, "Select Template (drag)",
                                        self.start_template)
         s2.addWidget(self.btn_add_tmpl)
-        row2 = QHBoxLayout()
-        self.btn_confirm_tmpl = styled_btn(sec2, "✔ Confirm",
+        self.btn_confirm_tmpl = styled_btn(sec2, "Confirm",
                                            self.confirm_template,
                                            color="#2f9e44")
-        row2.addWidget(self.btn_confirm_tmpl)
-        self.btn_reset_tmpl = styled_btn(sec2, "✖ Reset",
+        self.btn_reset_tmpl = styled_btn(sec2, "Clear",
                                          self.reset_template,
                                          color="#e03131")
-        row2.addWidget(self.btn_reset_tmpl)
-        s2.addLayout(row2)
+        s2.addWidget(btn_row([self.btn_confirm_tmpl, self.btn_reset_tmpl]))
         self.tmpl_count_lbl = QLabel("Templates: 0")
         self.tmpl_count_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         self.tmpl_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s2.addWidget(self.tmpl_count_lbl)
         rlay.addWidget(sec2)
 
-        sec3 = QGroupBox(" 3. Settings ")
+        sec3 = QGroupBox(" STEP 3   FINE TUNING ")
         s3 = QGridLayout(sec3)
         self.var_thresh = FVar(QLineEdit("0.8"))
         self.var_smin = FVar(QLineEdit("0.8"))
@@ -6015,52 +6897,52 @@ class BuildParentScreen(BaseScreen):
             s3.addWidget(var.e, i, 1)
         rlay.addWidget(sec3)
         self._area_boxes = [sec, sec2, sec3]
+        self._box_roi, self._box_tmpl, self._box_tune = sec, sec2, sec3
 
-        sec4 = QGroupBox(" 4. Actions ")
+        sec4 = QGroupBox(" STEP 4   CHECK AND SAVE ")
         s4 = QVBoxLayout(sec4)
-        self.btn_test = styled_btn(sec4, "▶ Test Detect", self.test_detect,
+        self.btn_test = styled_btn(sec4, "Test Detect", self.test_detect,
                                    color="#f59f00")
         s4.addWidget(self.btn_test)
         self.btn_back_live = styled_btn(sec4, "Back to Live",
                                         self.back_to_live, color="#44444e")
         s4.addWidget(self.btn_back_live)
-        self.btn_save = styled_btn(sec4, "💾 Save Area", self.save_child,
+        self.btn_save = styled_btn(sec4, "Save Area", self.save_child,
                                    color="#2f9e44")
         s4.addWidget(self.btn_save)
-        self.btn_next = styled_btn(sec4, "➕ Next Area", self.next_child)
+        self.btn_next = styled_btn(sec4, "Next Area", self.next_child,
+                                   color="#44444e")
         s4.addWidget(self.btn_next)
-        self.btn_finish = styled_btn(sec4, "✅ Finish Scene",
-                                     self.finish_parent, color="#845ef7")
+        self.btn_finish = styled_btn(sec4, "Finish Scene",
+                                     self.finish_parent, color="#f59f00")
         s4.addWidget(self.btn_finish)
         s4.addWidget(styled_btn(sec4, "Auto Balance", self.auto_balance,
                                 color="#44444e"))
         rlay.addWidget(sec4)
 
         if self.qr_camera:
-            sec5 = QGroupBox(" 5. QR Scanner (camera) ")
+            sec5 = QGroupBox(" STEP 5   QR CODE (OPTIONAL) ")
             s5 = QVBoxLayout(sec5)
             self.qr_list_lbl = QLabel("")
             self.qr_list_lbl.setWordWrap(True)
             self.qr_list_lbl.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
             s5.addWidget(self.qr_list_lbl)
-            r5 = QHBoxLayout()
-            self.btn_qr_add = styled_btn(sec5, "➕ Add QR", self.qr_add_start,
-                                         color="#0ca678")
-            self.btn_qr_test = styled_btn(sec5, "🔍 Test", self.qr_test_read,
-                                          color="#f59f00")
-            self.btn_qr_del = styled_btn(sec5, "🗑", self.qr_remove,
+            self.btn_qr_add = styled_btn(sec5, "Add QR Code",
+                                         self.qr_add_start, color="#44444e")
+            self.btn_qr_test = styled_btn(sec5, "Test", self.qr_test_read,
+                                          color="#44444e")
+            self.btn_qr_del = styled_btn(sec5, "Remove", self.qr_remove,
                                          color="#e03131")
-            for b in (self.btn_qr_add, self.btn_qr_test, self.btn_qr_del):
-                r5.addWidget(b)
-            s5.addLayout(r5)
+            s5.addWidget(btn_row([self.btn_qr_add, self.btn_qr_test,
+                                  self.btn_qr_del]))
             r5b = QHBoxLayout()
-            self.btn_qr_region = styled_btn(sec5, "✔ Region",
+            self.btn_qr_region = styled_btn(sec5, "Use this region",
                                             self.qr_confirm_region,
                                             color="#2f9e44")
-            self.btn_qr_full = styled_btn(sec5, "⛶ Full frame",
+            self.btn_qr_full = styled_btn(sec5, "Use whole picture",
                                           self.qr_use_full_frame,
-                                          color="#3b6ef5")
-            self.btn_qr_cancel = styled_btn(sec5, "✖", self.qr_cancel,
+                                          color="#44444e")
+            self.btn_qr_cancel = styled_btn(sec5, "Cancel", self.qr_cancel,
                                             color="#44444e")
             for b in (self.btn_qr_region, self.btn_qr_full,
                       self.btn_qr_cancel):
@@ -6068,7 +6950,9 @@ class BuildParentScreen(BaseScreen):
             s5.addLayout(r5b)
             rlay.addWidget(sec5)
             self._qr_refresh_list()
+        self._box_actions = sec4
 
+        rlay.addWidget(section_title("Messages"))
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setStyleSheet(
@@ -6113,6 +6997,19 @@ class BuildParentScreen(BaseScreen):
         self.btn_back_live.setEnabled(self.mode == self.MODE_RESULT)
         self.tmpl_count_lbl.setText(
             f"Templates: {len(self.template_list)}")
+        # a button that cannot be used yet is hidden, so the operator always
+        # sees exactly one next step
+        for b in (self.btn_confirm_roi, self.btn_reset_roi,
+                  self.btn_confirm_tmpl, self.btn_reset_tmpl,
+                  self.btn_test, self.btn_save, self.btn_back_live):
+            b.setVisible(b.isEnabled())
+        # a whole step only appears once the step before it is done
+        if not self.master_scene:
+            has_roi = self.reg is not None
+            has_tmpl = has_roi and bool(self.template_list)
+            self._box_tmpl.setVisible(has_roi)
+            self._box_tune.setVisible(has_tmpl)
+            self._box_actions.setVisible(has_tmpl)
         if self.qr_camera:
             qr_mode = self.mode == self.MODE_QR and self.qr_pending is not None
             self.btn_qr_add.setEnabled(not qr_mode and not self.busy)
@@ -6122,6 +7019,10 @@ class BuildParentScreen(BaseScreen):
             self.btn_qr_test.setEnabled(
                 (qr_mode or bool(self._qr_items)) and not self._qr_testing)
             self.btn_qr_del.setEnabled(bool(self._qr_items) and not qr_mode)
+            for b in (self.btn_qr_region, self.btn_qr_full,
+                      self.btn_qr_cancel, self.btn_qr_test,
+                      self.btn_qr_del):
+                b.setVisible(b.isEnabled())
             if self.master_scene:          # the master QR is all this scene has
                 self.btn_qr_add.setEnabled(False)
         if self.master_scene:
@@ -6182,7 +7083,7 @@ class BuildParentScreen(BaseScreen):
         self.canvas.clear_rect()
         self.mode = self.MODE_LIVE
         self.log(f"ROI confirmed: {self.reg}")
-        self._set_status("ROI confirmed ✔ — now add template(s)")
+        self._set_status("ROI confirmed OK — now add template(s)")
         self._update_buttons()
 
     def reset_roi(self):
@@ -6201,7 +7102,7 @@ class BuildParentScreen(BaseScreen):
         self._qr_cancel_quiet()
         frame = self.app.camera.get_frame()
         if frame is None:
-            QMessageBox.critical(self, "No camera",
+            Message.error(self, "No camera",
                                  "No camera frame available yet.")
             return
         x, y, w, h = [int(v) for v in self.reg]
@@ -6220,7 +7121,7 @@ class BuildParentScreen(BaseScreen):
         tx, ty, tw, th = self.canvas.pending_rect
         template = self.region_snapshot[ty:ty + th, tx:tx + tw].copy()
         if template.size == 0:
-            QMessageBox.critical(self, "Bad template",
+            Message.error(self, "Bad template",
                                  "Template area is empty, redraw it.")
             return
         self.template_list.append(template)
@@ -6232,7 +7133,7 @@ class BuildParentScreen(BaseScreen):
         self.region_snapshot = None
         self.mode = self.MODE_LIVE
         self.canvas.fit()
-        self._set_status("Template added ✔ — add more, or Test Detect")
+        self._set_status("Template added OK — add more, or Test Detect")
         self._update_buttons()
 
     def reset_template(self):
@@ -6295,7 +7196,7 @@ class BuildParentScreen(BaseScreen):
 
     def save_child(self):
         if self.reg is None or not self.template_list or self.matches is None:
-            QMessageBox.warning(self, "Not ready",
+            Message.warn(self, "Not ready",
                                 "Need a confirmed ROI, at least 1 "
                                 "template and a successful Test Detect "
                                 "before saving.")
@@ -6324,16 +7225,15 @@ class BuildParentScreen(BaseScreen):
         self.current_child_saved = True
         self.log(f"Saved area '{self.current_child_name}' under "
                  f"'{self.head}/{self.parent_name}'")
-        self._set_status(f"Area '{self.current_child_name}' saved ✔ — "
+        self._set_status(f"Area '{self.current_child_name}' saved OK — "
                          "Next Area or Finish Scene")
 
     def next_child(self):
         if not self.current_child_saved:
-            r = QMessageBox.question(
-                self, "Not saved",
-                "Current area isn't saved yet — discard it and start "
-                "a new one?")
-            if r != QMessageBox.StandardButton.Yes:
+            if not Message.confirm(
+                    self, "This area is not saved",
+                    "Start a new area and throw away what you just did?",
+                    yes="Throw away", no="Go back"):
                 return
         else:
             self.child_index += 1
@@ -6357,7 +7257,7 @@ class BuildParentScreen(BaseScreen):
         if not children and self.master_scene:
             self.app.heads.add_parent(self.head, self.parent_name)
             self.log(f"Master QR scene '{self.parent_name}' saved")
-            QMessageBox.information(
+            Message.info(
                 self, "Scene finished",
                 f"Master QR scene '{self.parent_name}' saved.\n\nIt has no "
                 "areas — the camera reads its QR when the operator presses "
@@ -6365,14 +7265,14 @@ class BuildParentScreen(BaseScreen):
             self.app.show_head(self.head, announce=False)
             return
         if not children:
-            QMessageBox.warning(self, "No areas",
+            Message.warn(self, "No areas",
                                 "No areas saved yet — save at least one "
                                 "first.")
             return
         self.app.heads.add_parent(self.head, self.parent_name)
         self.log(f"Scene '{self.parent_name}' finished with areas: "
                  f"{children}")
-        QMessageBox.information(self, "Scene finished",
+        Message.info(self, "Scene finished",
                                 f"Scene '{self.parent_name}' saved with "
                                 f"{len(children)} area(s).")
         self.app.show_head(self.head, announce=False)
@@ -6398,7 +7298,7 @@ class BuildParentScreen(BaseScreen):
         self._update_buttons()
         if self.master_scene:
             self._set_status("MASTER QR scene — only the QR lives here, no "
-                             "areas.  Press ✅ Finish Scene to save it.")
+                             "areas.  Press Finish Scene to save it.")
 
     def _qr_refresh_list(self):
         self._qr_items = self.app.heads.qr_scanners_for_scene(
@@ -6407,7 +7307,7 @@ class BuildParentScreen(BaseScreen):
         if self.qr_list_lbl is None:
             return
         if self._qr_items:
-            lines = [f"{'★' if q['master'] else '•'} {q['name']}"
+            lines = [f"{'*' if q['master'] else '-'} {q['name']}"
                      f"{' (MASTER)' if q['master'] else ''} — "
                      f"{'region' if q.get('roi_norm') else 'full frame'}, "
                      f"{QrRules.from_dict(q).describe()}"
@@ -6417,19 +7317,19 @@ class BuildParentScreen(BaseScreen):
         m = self.app.heads.get_master_qr(self.head,
                                          include_scene=self.parent_name)
         lines.append(f"master: '{m['name']}' (scene {m['scene']})" if m
-                     else "⚠ the model has no master QR yet")
+                     else "This model has no main QR code yet")
         self.qr_list_lbl.setText("\n".join(lines))
 
     def qr_add_start(self):
         if self.master_scene:
-            QMessageBox.information(
+            Message.info(
                 self, "Master QR scene",
                 "This scene holds the master QR — a master scene contains "
                 "only that QR (no areas, no other QR).\n\nRemove it first "
-                "(🗑) to change it, or create another scene.")
+                "(Remove) to change it, or create another scene.")
             return
         if self.mode not in (self.MODE_LIVE, self.MODE_RESULT):
-            QMessageBox.information(
+            Message.info(
                 self, "Finish this step first",
                 "Finish or reset the ROI / template selection first, "
                 "then add the QR scanner.")
@@ -6448,8 +7348,8 @@ class BuildParentScreen(BaseScreen):
         self.mode = self.MODE_QR
         self.canvas.select_enabled = True
         self.canvas.clear_rect()
-        self._set_status("Drag a rectangle around the QR code, then ✔ Region "
-                         "(or ⛶ Full frame to search the whole image)")
+        self._set_status("Drag a rectangle around the QR code, then press Use this region "
+                         "(or Use whole picture to search everywhere)")
         self._update_buttons()
 
     def qr_confirm_region(self):
@@ -6457,7 +7357,7 @@ class BuildParentScreen(BaseScreen):
                 or self.canvas.pending_rect is None):
             return
         if not self._live_wh:
-            QMessageBox.critical(self, "No camera",
+            Message.error(self, "No camera",
                                  "No camera frame available yet.")
             return
         w, h = self._live_wh
@@ -6470,7 +7370,6 @@ class BuildParentScreen(BaseScreen):
 
     def _qr_save_pending(self, norm):
         cfg = self.qr_pending
-        Y, N = QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No
         existing = self.app.heads.get_master_qr(self.head,
                                                 include_scene=self.parent_name)
         # a master scene holds ONLY the master QR: it must be alone in a
@@ -6482,32 +7381,28 @@ class BuildParentScreen(BaseScreen):
         alone = not self._qr_items and not has_areas
         master = False
         if not alone:
-            QMessageBox.information(
+            Message.info(
                 self, "Not a master scene",
                 f"'{cfg['name']}' is saved as a normal QR of this scene.\n\n"
                 "A MASTER QR needs a scene of its own: no areas and no other "
-                "QR.  To make a master, press + Add Scene on the model page "
+                "QR.  To make a master, press Add Scene on the model page "
                 "and add the QR there.")
         elif existing is None:
-            r = QMessageBox.question(
-                self, "Master QR?",
-                f"Is '{cfg['name']}' the MASTER QR?\n\n"
-                "The master QR is the one the camera reads at the start of "
-                "every cycle (📷 SCAN QR button, after Finish Model).  "
-                "Only ONE master is allowed per model, and its scene then "
-                "contains only this QR — no areas can be added.\n\n"
-                "Yes = master      No = normal QR of this scene "
-                "(read whenever the scene runs)", Y | N, N)
-            master = (r == Y)
+            master = Message.confirm(
+                self, "Is this the main QR code?",
+                f"The main QR code is the one the camera reads at the start "
+                f"of every part.\n\nA model can have only one main QR code, "
+                f"and its scene then holds nothing else.\n\nChoose No to "
+                f"use '{cfg['name']}' as an ordinary QR check in this scene.",
+                yes="Yes, main QR", no="No, ordinary QR")
         else:
-            r = QMessageBox.question(
-                self, "Master QR?",
-                f"The model already has a master QR: '{existing['name']}' "
-                f"(scene '{existing['scene']}').\nOnly one is allowed.\n\n"
-                f"Make '{cfg['name']}' the master instead?  The old master "
-                "is removed.  This scene then holds only this QR — no areas "
-                "can be added.", Y | N, N)
-            master = (r == Y)
+            master = Message.confirm(
+                self, "This model already has a main QR code",
+                f"The main QR code is now '{existing['name']}', in the scene "
+                f"'{existing['scene']}'. Only one is allowed.\n\nUse "
+                f"'{cfg['name']}' as the main QR code instead? The old one "
+                f"is removed.",
+                yes="Use the new one", no="Keep the old one")
         item = self.app.heads.add_qr_scanner(
             self.head, self.parent_name, cfg["name"], norm,
             cfg["length"], cfg["starts_with"], master)
@@ -6520,7 +7415,7 @@ class BuildParentScreen(BaseScreen):
         self.canvas.select_enabled = False
         self.canvas.clear_rect()
         self._qr_refresh_list()
-        self._set_status(f"QR scanner '{item['name']}' saved ✔ — use 🔍 Test "
+        self._set_status(f"QR scanner '{item['name']}' saved OK — use Test "
                          "to check the reading")
         self._apply_master_lock()
 
@@ -6553,7 +7448,7 @@ class BuildParentScreen(BaseScreen):
         self._qr_refresh_list()
         self._apply_master_lock()
         if q["master"]:
-            QMessageBox.warning(
+            Message.warn(
                 self, "Master removed",
                 "That was the master QR — the model has no master now.  "
                 "Add another QR scanner and mark it as master.")
@@ -6604,11 +7499,11 @@ class BuildParentScreen(BaseScreen):
                     return
                 for label, res in out:
                     if res.ok:
-                        self.log(f"QR '{label}': ✔ '{res.value}'  "
+                        self.log(f"QR '{label}': OK '{res.value}'  "
                                  f"({res.frames} frames · {res.elapsed:.2f}s "
                                  f"· {res.backend})")
                     else:
-                        self.log(f"QR '{label}': ✖ {res.reason}")
+                        self.log(f"QR '{label}': X {res.reason}")
                 self._qr_testing = False
                 self._update_buttons()
             self.after(0, apply)

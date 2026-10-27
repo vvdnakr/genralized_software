@@ -31,3 +31,14 @@ parents:
         PLC: ''
         OK: ''
         NG: ''
+  hju:
+    PLC: s3
+    OK: ok
+    NG: ng
+    area_wise: false
+    combine: true
+    children:
+      a1:
+        PLC: ''
+        OK: ''
+        NG: ''
