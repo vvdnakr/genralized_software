@@ -1,0 +1,33 @@
+head:
+  SELECT: '2'
+  PLC: '23'
+  OK: ok
+  NG: ng
+qr:
+  REQ: ''
+  TRIGGER: ''
+  OK: ''
+  NG: ''
+parents:
+  you:
+    PLC: '12'
+    OK: ok
+    NG: ng
+    area_wise: false
+    combine: true
+    children:
+      area1:
+        PLC: ''
+        OK: ''
+        NG: ''
+  see:
+    PLC: '13'
+    OK: ok
+    NG: ng
+    area_wise: false
+    combine: true
+    children:
+      area2:
+        PLC: ''
+        OK: ''
+        NG: ''

@@ -4802,7 +4802,7 @@ class HeadScreen(BaseScreen):
             "pass":     ("Previous station passed", C_OK),
             "all_passed": ("Already passed by this station", C_OK),
             "fail":     ("Previous station NOT passed", C_NG),
-            "error":    ("MES not connected", C_NG),
+            "error":    ("Serial no is not valid", C_NG),
             "sending":  ("Sending the result to MES...", C_WARN),
             "sent":     ("Result sent to MES", C_OK),
             "senderr":  ("Result NOT sent to MES", C_NG),

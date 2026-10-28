@@ -1,0 +1,26 @@
+{
+  "cycle": {
+    "ok": 0,
+    "ng": 4
+  },
+  "scenes": {
+    "see": {
+      "ok": 0,
+      "ng": 4
+    },
+    "you": {
+      "ok": 0,
+      "ng": 4
+    }
+  },
+  "areas": {
+    "see/area2": {
+      "ok": 0,
+      "ng": 4
+    },
+    "you/area1": {
+      "ok": 0,
+      "ng": 4
+    }
+  }
+}

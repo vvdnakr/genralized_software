@@ -1,0 +1,2197 @@
+======================================================================
+Time     : 2026-10-28 10:11:45 UTC
+URL      : http://172.17.192.237/user/user_login/
+Payload  :
+{
+  "username": "pt2user",
+  "password": "****",
+  "stage_name": "pt2"
+}
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "username": "pt2user",
+    "user_id": 1047,
+    "message": "USER_LOGIN_SUCCESS",
+    "status": 200,
+    "is_admin": false,
+    "stage_name": "pt2",
+    "permissions": [
+      "default_permissions",
+      "default_permissions",
+      "default_permissions",
+      "pt2",
+      "ageingtesting",
+      "airleakagetest",
+      "bomconfiguration",
+      "get_user_projects",
+      "is_project_allowed_to_user"
+    ],
+    "is_staff": false,
+    "restrict_key": false,
+    "auto_save_required": true,
+    "line_details": null,
+    "workorder_details": {
+      "order": ""
+    },
+    "stages": [
+      {
+        "stage": 99,
+        "product": "901-1-04216",
+        "projectName": "MNMI_IVIS",
+        "projectId": 938,
+        "productName": "901-1-04216-UPP",
+        "stageName": "PT2",
+        "board_type": "board",
+        "serial_pattern": "UPP:1501AAA01831N:DDV00056AA",
+        "serial_character_len": "53",
+        "ct_pattern": null,
+        "ct_character_len": null,
+        "sequence": 10,
+        "details": {
+          "printing": "false",
+          "components": [],
+          "printingIp": "false",
+          "no_of_files": 1,
+          "serial_range": "",
+          "waiting_data": {
+            "waiting": false
+          },
+          "ovenCuringOut": "false",
+          "sampling_data": {
+            "sampling_type": "p",
+            "sampling_totalCount": 100,
+            "sampling_no_of_hours": 1
+          },
+          "failApiCallReq": "false",
+          "serial_no_data": [],
+          "tool_validation": {
+            "is_required": false,
+            "tool_details": []
+          },
+          "curingOutMaxCount": 1,
+          "validation_string": "",
+          "is_print_required_in_fail": "true"
+        },
+        "type": 2,
+        "serial_suffix": null,
+        "mask_name": "Pin Bend Testing",
+        "model_part_number": "3654",
+        "vendor_code": "DDV00056AA",
+        "serial_check": false,
+        "label_tag": null
+      }
+    ],
+    "pts_line_details": {
+      "id": 1486,
+      "line_data": [
+        {
+          "id": 5652,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-10-08T17:00:33.514612Z",
+          "updated_at": "2026-10-08T17:00:33.514704Z",
+          "product": "701-1-06145",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            }
+          ]
+        },
+        {
+          "id": 5538,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-09-06T04:07:29.827017Z",
+          "updated_at": "2026-09-06T04:07:29.827042Z",
+          "product": "701-1-06130",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            }
+          ]
+        },
+        {
+          "id": 5019,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-06-25T11:50:25.514952Z",
+          "updated_at": "2026-06-25T11:50:25.514974Z",
+          "product": "901-1-04218",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 153,
+              "stage__name": "T1"
+            }
+          ]
+        },
+        {
+          "id": 4639,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-05-15T09:41:57.187556Z",
+          "updated_at": "2026-05-15T09:41:57.187575Z",
+          "product": "701-1-06103",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 17,
+              "stage__name": "Visual Inspection 1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 35,
+              "stage__name": "Visual Inspection"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 110,
+              "stage__name": "PCBA VI 2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            }
+          ]
+        },
+        {
+          "id": 4197,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-13T04:16:44.599223Z",
+          "updated_at": "2026-03-13T04:16:44.599246Z",
+          "product": "701-1-05766",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        },
+        {
+          "id": 4196,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:22:45.553538Z",
+          "updated_at": "2026-03-12T13:22:45.553562Z",
+          "product": "901-1-04216",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 99,
+              "stage__name": "PT2"
+            }
+          ]
+        },
+        {
+          "id": 4195,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:18:17.512557Z",
+          "updated_at": "2026-03-12T13:18:17.512581Z",
+          "product": "701-1-05765",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        }
+      ],
+      "line_name": "MNMI_IVIS",
+      "line_no": "MNMI_IVIS",
+      "aoi_machine_no": "172.17.192.11",
+      "is_active": true,
+      "ip_address": [
+        "172.17.20.168",
+        "172.17.20.175",
+        "172.17.20.165",
+        "172.17.203.247",
+        "172.17.20.230",
+        "172.17.20.118",
+        "172.17.188.129",
+        "172.19.0.1",
+        "172.17.201.228",
+        "172.25.112.10",
+        "172.17.188.129",
+        "172.17.183.216",
+        "172.17.203.242",
+        "172.17.168.121",
+        "172.17.20.118",
+        "172.17.201.128",
+        "172.17.180.166"
+      ],
+      "reflow_machine_ip": "1.1.1.1",
+      "reflow_machine_port": "1230",
+      "type": 2,
+      "product": "901-1-04216"
+    }
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:11:47 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:12:07 UTC
+URL      : http://172.17.192.237/user/user_logout/
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "message": "User logged out successfully",
+    "status": 200
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:13:31 UTC
+URL      : http://172.17.192.237/user/user_login/
+Payload  :
+{
+  "username": "pt2user",
+  "password": "****",
+  "stage_name": "pt2"
+}
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "username": "pt2user",
+    "user_id": 1047,
+    "message": "USER_LOGIN_SUCCESS",
+    "status": 200,
+    "is_admin": false,
+    "stage_name": "pt2",
+    "permissions": [
+      "default_permissions",
+      "default_permissions",
+      "default_permissions",
+      "pt2",
+      "ageingtesting",
+      "airleakagetest",
+      "bomconfiguration",
+      "get_user_projects",
+      "is_project_allowed_to_user"
+    ],
+    "is_staff": false,
+    "restrict_key": false,
+    "auto_save_required": true,
+    "line_details": null,
+    "workorder_details": {
+      "order": ""
+    },
+    "stages": [
+      {
+        "stage": 99,
+        "product": "901-1-04216",
+        "projectName": "MNMI_IVIS",
+        "projectId": 938,
+        "productName": "901-1-04216-UPP",
+        "stageName": "PT2",
+        "board_type": "board",
+        "serial_pattern": "UPP:1501AAA01831N:DDV00056AA",
+        "serial_character_len": "53",
+        "ct_pattern": null,
+        "ct_character_len": null,
+        "sequence": 10,
+        "details": {
+          "printing": "false",
+          "components": [],
+          "printingIp": "false",
+          "no_of_files": 1,
+          "serial_range": "",
+          "waiting_data": {
+            "waiting": false
+          },
+          "ovenCuringOut": "false",
+          "sampling_data": {
+            "sampling_type": "p",
+            "sampling_totalCount": 100,
+            "sampling_no_of_hours": 1
+          },
+          "failApiCallReq": "false",
+          "serial_no_data": [],
+          "tool_validation": {
+            "is_required": false,
+            "tool_details": []
+          },
+          "curingOutMaxCount": 1,
+          "validation_string": "",
+          "is_print_required_in_fail": "true"
+        },
+        "type": 2,
+        "serial_suffix": null,
+        "mask_name": "Pin Bend Testing",
+        "model_part_number": "3654",
+        "vendor_code": "DDV00056AA",
+        "serial_check": false,
+        "label_tag": null
+      }
+    ],
+    "pts_line_details": {
+      "id": 1486,
+      "line_data": [
+        {
+          "id": 5652,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-10-08T17:00:33.514612Z",
+          "updated_at": "2026-10-08T17:00:33.514704Z",
+          "product": "701-1-06145",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            }
+          ]
+        },
+        {
+          "id": 5538,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-09-06T04:07:29.827017Z",
+          "updated_at": "2026-09-06T04:07:29.827042Z",
+          "product": "701-1-06130",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            }
+          ]
+        },
+        {
+          "id": 5019,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-06-25T11:50:25.514952Z",
+          "updated_at": "2026-06-25T11:50:25.514974Z",
+          "product": "901-1-04218",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 153,
+              "stage__name": "T1"
+            }
+          ]
+        },
+        {
+          "id": 4639,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-05-15T09:41:57.187556Z",
+          "updated_at": "2026-05-15T09:41:57.187575Z",
+          "product": "701-1-06103",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 17,
+              "stage__name": "Visual Inspection 1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 35,
+              "stage__name": "Visual Inspection"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 110,
+              "stage__name": "PCBA VI 2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            }
+          ]
+        },
+        {
+          "id": 4197,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-13T04:16:44.599223Z",
+          "updated_at": "2026-03-13T04:16:44.599246Z",
+          "product": "701-1-05766",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        },
+        {
+          "id": 4196,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:22:45.553538Z",
+          "updated_at": "2026-03-12T13:22:45.553562Z",
+          "product": "901-1-04216",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 99,
+              "stage__name": "PT2"
+            }
+          ]
+        },
+        {
+          "id": 4195,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:18:17.512557Z",
+          "updated_at": "2026-03-12T13:18:17.512581Z",
+          "product": "701-1-05765",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        }
+      ],
+      "line_name": "MNMI_IVIS",
+      "line_no": "MNMI_IVIS",
+      "aoi_machine_no": "172.17.192.11",
+      "is_active": true,
+      "ip_address": [
+        "172.17.20.168",
+        "172.17.20.175",
+        "172.17.20.165",
+        "172.17.203.247",
+        "172.17.20.230",
+        "172.17.20.118",
+        "172.17.188.129",
+        "172.19.0.1",
+        "172.17.201.228",
+        "172.25.112.10",
+        "172.17.188.129",
+        "172.17.183.216",
+        "172.17.203.242",
+        "172.17.168.121",
+        "172.17.20.118",
+        "172.17.201.128",
+        "172.17.180.166"
+      ],
+      "reflow_machine_ip": "1.1.1.1",
+      "reflow_machine_port": "1230",
+      "type": 2,
+      "product": "901-1-04216"
+    }
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:13:33 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:33:01 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:35:58 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+HTTPConnectionPool(host='172.17.192.237', port=80): Read timed out. (read timeout=15)
+
+======================================================================
+Time     : 2026-10-28 10:38:35 UTC
+URL      : http://172.17.192.237/user/user_login/
+Payload  :
+{
+  "username": "pt2user",
+  "password": "****",
+  "stage_name": "pt2"
+}
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "username": "pt2user",
+    "user_id": 1047,
+    "message": "USER_LOGIN_SUCCESS",
+    "status": 200,
+    "is_admin": false,
+    "stage_name": "pt2",
+    "permissions": [
+      "default_permissions",
+      "default_permissions",
+      "default_permissions",
+      "pt2",
+      "ageingtesting",
+      "airleakagetest",
+      "bomconfiguration",
+      "get_user_projects",
+      "is_project_allowed_to_user"
+    ],
+    "is_staff": false,
+    "restrict_key": false,
+    "auto_save_required": true,
+    "line_details": null,
+    "workorder_details": {
+      "order": ""
+    },
+    "stages": [
+      {
+        "stage": 99,
+        "product": "901-1-04216",
+        "projectName": "MNMI_IVIS",
+        "projectId": 938,
+        "productName": "901-1-04216-UPP",
+        "stageName": "PT2",
+        "board_type": "board",
+        "serial_pattern": "UPP:1501AAA01831N:DDV00056AA",
+        "serial_character_len": "53",
+        "ct_pattern": null,
+        "ct_character_len": null,
+        "sequence": 10,
+        "details": {
+          "printing": "false",
+          "components": [],
+          "printingIp": "false",
+          "no_of_files": 1,
+          "serial_range": "",
+          "waiting_data": {
+            "waiting": false
+          },
+          "ovenCuringOut": "false",
+          "sampling_data": {
+            "sampling_type": "p",
+            "sampling_totalCount": 100,
+            "sampling_no_of_hours": 1
+          },
+          "failApiCallReq": "false",
+          "serial_no_data": [],
+          "tool_validation": {
+            "is_required": false,
+            "tool_details": []
+          },
+          "curingOutMaxCount": 1,
+          "validation_string": "",
+          "is_print_required_in_fail": "true"
+        },
+        "type": 2,
+        "serial_suffix": null,
+        "mask_name": "Pin Bend Testing",
+        "model_part_number": "3654",
+        "vendor_code": "DDV00056AA",
+        "serial_check": false,
+        "label_tag": null
+      }
+    ],
+    "pts_line_details": {
+      "id": 1486,
+      "line_data": [
+        {
+          "id": 5652,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-10-08T17:00:33.514612Z",
+          "updated_at": "2026-10-08T17:00:33.514704Z",
+          "product": "701-1-06145",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            }
+          ]
+        },
+        {
+          "id": 5538,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-09-06T04:07:29.827017Z",
+          "updated_at": "2026-09-06T04:07:29.827042Z",
+          "product": "701-1-06130",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            }
+          ]
+        },
+        {
+          "id": 5019,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-06-25T11:50:25.514952Z",
+          "updated_at": "2026-06-25T11:50:25.514974Z",
+          "product": "901-1-04218",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 153,
+              "stage__name": "T1"
+            }
+          ]
+        },
+        {
+          "id": 4639,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-05-15T09:41:57.187556Z",
+          "updated_at": "2026-05-15T09:41:57.187575Z",
+          "product": "701-1-06103",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 17,
+              "stage__name": "Visual Inspection 1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 35,
+              "stage__name": "Visual Inspection"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 110,
+              "stage__name": "PCBA VI 2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            }
+          ]
+        },
+        {
+          "id": 4197,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-13T04:16:44.599223Z",
+          "updated_at": "2026-03-13T04:16:44.599246Z",
+          "product": "701-1-05766",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        },
+        {
+          "id": 4196,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:22:45.553538Z",
+          "updated_at": "2026-03-12T13:22:45.553562Z",
+          "product": "901-1-04216",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 99,
+              "stage__name": "PT2"
+            }
+          ]
+        },
+        {
+          "id": 4195,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:18:17.512557Z",
+          "updated_at": "2026-03-12T13:18:17.512581Z",
+          "product": "701-1-05765",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        }
+      ],
+      "line_name": "MNMI_IVIS",
+      "line_no": "MNMI_IVIS",
+      "aoi_machine_no": "172.17.192.11",
+      "is_active": true,
+      "ip_address": [
+        "172.17.20.168",
+        "172.17.20.175",
+        "172.17.20.165",
+        "172.17.203.247",
+        "172.17.20.230",
+        "172.17.20.118",
+        "172.17.188.129",
+        "172.19.0.1",
+        "172.17.201.228",
+        "172.25.112.10",
+        "172.17.188.129",
+        "172.17.183.216",
+        "172.17.203.242",
+        "172.17.168.121",
+        "172.17.20.118",
+        "172.17.201.128",
+        "172.17.180.166"
+      ],
+      "reflow_machine_ip": "1.1.1.1",
+      "reflow_machine_port": "1230",
+      "type": 2,
+      "product": "901-1-04216"
+    }
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:38:36 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:39:43 UTC
+URL      : http://172.17.192.237/user/user_login/
+Payload  :
+{
+  "username": "pt2user",
+  "password": "****",
+  "stage_name": "pt2"
+}
+Response :
+{
+  "status_code": 200,
+  "body": {
+    "username": "pt2user",
+    "user_id": 1047,
+    "message": "USER_LOGIN_SUCCESS",
+    "status": 200,
+    "is_admin": false,
+    "stage_name": "pt2",
+    "permissions": [
+      "default_permissions",
+      "default_permissions",
+      "default_permissions",
+      "pt2",
+      "ageingtesting",
+      "airleakagetest",
+      "bomconfiguration",
+      "get_user_projects",
+      "is_project_allowed_to_user"
+    ],
+    "is_staff": false,
+    "restrict_key": false,
+    "auto_save_required": true,
+    "line_details": null,
+    "workorder_details": {
+      "order": ""
+    },
+    "stages": [
+      {
+        "stage": 99,
+        "product": "901-1-04216",
+        "projectName": "MNMI_IVIS",
+        "projectId": 938,
+        "productName": "901-1-04216-UPP",
+        "stageName": "PT2",
+        "board_type": "board",
+        "serial_pattern": "UPP:1501AAA01831N:DDV00056AA",
+        "serial_character_len": "53",
+        "ct_pattern": null,
+        "ct_character_len": null,
+        "sequence": 10,
+        "details": {
+          "printing": "false",
+          "components": [],
+          "printingIp": "false",
+          "no_of_files": 1,
+          "serial_range": "",
+          "waiting_data": {
+            "waiting": false
+          },
+          "ovenCuringOut": "false",
+          "sampling_data": {
+            "sampling_type": "p",
+            "sampling_totalCount": 100,
+            "sampling_no_of_hours": 1
+          },
+          "failApiCallReq": "false",
+          "serial_no_data": [],
+          "tool_validation": {
+            "is_required": false,
+            "tool_details": []
+          },
+          "curingOutMaxCount": 1,
+          "validation_string": "",
+          "is_print_required_in_fail": "true"
+        },
+        "type": 2,
+        "serial_suffix": null,
+        "mask_name": "Pin Bend Testing",
+        "model_part_number": "3654",
+        "vendor_code": "DDV00056AA",
+        "serial_check": false,
+        "label_tag": null
+      }
+    ],
+    "pts_line_details": {
+      "id": 1486,
+      "line_data": [
+        {
+          "id": 5652,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-10-08T17:00:33.514612Z",
+          "updated_at": "2026-10-08T17:00:33.514704Z",
+          "product": "701-1-06145",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            }
+          ]
+        },
+        {
+          "id": 5538,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-09-06T04:07:29.827017Z",
+          "updated_at": "2026-09-06T04:07:29.827042Z",
+          "product": "701-1-06130",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 7,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 70,
+              "stage__name": "SMT Visual Inspection"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 116,
+              "stage__name": "Pre Wave VI"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 51,
+              "stage__name": "Post Wave Inspection"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            }
+          ]
+        },
+        {
+          "id": 5019,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-06-25T11:50:25.514952Z",
+          "updated_at": "2026-06-25T11:50:25.514974Z",
+          "product": "901-1-04218",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 153,
+              "stage__name": "T1"
+            }
+          ]
+        },
+        {
+          "id": 4639,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-05-15T09:41:57.187556Z",
+          "updated_at": "2026-05-15T09:41:57.187575Z",
+          "product": "701-1-06103",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 107,
+              "stage__name": "PCBA VI"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 17,
+              "stage__name": "Visual Inspection 1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 35,
+              "stage__name": "Visual Inspection"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 110,
+              "stage__name": "PCBA VI 2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            }
+          ]
+        },
+        {
+          "id": 4197,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-13T04:16:44.599223Z",
+          "updated_at": "2026-03-13T04:16:44.599246Z",
+          "product": "701-1-05766",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        },
+        {
+          "id": 4196,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:22:45.553538Z",
+          "updated_at": "2026-03-12T13:22:45.553562Z",
+          "product": "901-1-04216",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 1,
+              "stage_id": 98,
+              "stage__name": "PT1"
+            },
+            {
+              "sequence": 2,
+              "stage_id": 189,
+              "stage__name": "Testing Stage-1"
+            },
+            {
+              "sequence": 3,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            },
+            {
+              "sequence": 4,
+              "stage_id": 190,
+              "stage__name": "Testing Stage-2"
+            },
+            {
+              "sequence": 5,
+              "stage_id": 191,
+              "stage__name": "Testing Stage-3"
+            },
+            {
+              "sequence": 6,
+              "stage_id": 192,
+              "stage__name": "Testing Stage-4"
+            },
+            {
+              "sequence": 7,
+              "stage_id": 193,
+              "stage__name": "Testing Stage-5"
+            },
+            {
+              "sequence": 8,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 9,
+              "stage_id": 43,
+              "stage__name": "FQC"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 99,
+              "stage__name": "PT2"
+            }
+          ]
+        },
+        {
+          "id": 4195,
+          "workorder": {
+            "order": ""
+          },
+          "line_name": "MNMI_IVIS",
+          "work_order": 0,
+          "is_active": true,
+          "created_at": "2026-03-12T13:18:17.512557Z",
+          "updated_at": "2026-03-12T13:18:17.512581Z",
+          "product": "701-1-05765",
+          "line": 1486,
+          "stage_sequence": [
+            {
+              "sequence": 9,
+              "stage_id": 18,
+              "stage__name": "X Ray"
+            },
+            {
+              "sequence": 10,
+              "stage_id": 101,
+              "stage__name": "FT1"
+            },
+            {
+              "sequence": 11,
+              "stage_id": 34,
+              "stage__name": "Panel linking"
+            },
+            {
+              "sequence": 12,
+              "stage_id": 14,
+              "stage__name": "SMT FQC"
+            },
+            {
+              "sequence": 13,
+              "stage_id": 93,
+              "stage__name": "Dispatch"
+            },
+            {
+              "sequence": 14,
+              "stage_id": 173,
+              "stage__name": "SSN labeling and MAP ( Asus )"
+            },
+            {
+              "sequence": 15,
+              "stage_id": 153,
+              "stage__name": "T1"
+            },
+            {
+              "sequence": 16,
+              "stage_id": 102,
+              "stage__name": "FT2"
+            },
+            {
+              "sequence": 17,
+              "stage_id": 154,
+              "stage__name": "T2"
+            },
+            {
+              "sequence": 18,
+              "stage_id": 174,
+              "stage__name": "Map and assembly main board ( Asus )"
+            }
+          ]
+        }
+      ],
+      "line_name": "MNMI_IVIS",
+      "line_no": "MNMI_IVIS",
+      "aoi_machine_no": "172.17.192.11",
+      "is_active": true,
+      "ip_address": [
+        "172.17.20.168",
+        "172.17.20.175",
+        "172.17.20.165",
+        "172.17.203.247",
+        "172.17.20.230",
+        "172.17.20.118",
+        "172.17.188.129",
+        "172.19.0.1",
+        "172.17.201.228",
+        "172.25.112.10",
+        "172.17.188.129",
+        "172.17.183.216",
+        "172.17.203.242",
+        "172.17.168.121",
+        "172.17.20.118",
+        "172.17.201.128",
+        "172.17.180.166"
+      ],
+      "reflow_machine_ip": "1.1.1.1",
+      "reflow_machine_port": "1230",
+      "type": 2,
+      "product": "901-1-04216"
+    }
+  }
+}
+
+======================================================================
+Time     : 2026-10-28 10:39:45 UTC
+URL      : http://172.17.192.237/api/StageReport/previous_stage_result_pts/123/99
+Payload  :
+  (none)
+Response :
+{
+  "status_code": 400,
+  "body": {
+    "error": "Please try again! The entered input does not contain any valid serial number.",
+    "data": null,
+    "response_code": 400
+  }
+}
+

@@ -1,0 +1,46 @@
+==================================================================
+DETECTION REPORT
+==================================================================
+model            : user
+serial number    : UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D
+operator        : vvdn123  (from mes.yaml)
+machine          : 2
+stage            : 99 Pin Bend Testing
+product          : 901-1-04216 901-1-04216-UPP
+time             : 2026-10-28 16:02:34
+previous stage   : ALL_PASSED — UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D: Board has passed all stages already.
+CYCLE RESULT     : FAIL
+
+------------------------------------------------------------------
+DETECTION LOG
+------------------------------------------------------------------
+
+[16:02:31]  RUN  you
+     area1        NG  0/1 pins ok   shift +0,+0 px   missing #1
+     RESULT       NG   (0/1 areas ok)
+
+[16:02:34]  RUN  see
+     area2        NG  0/1 pins ok   shift +0,+0 px   missing #1
+     RESULT       NG   (0/1 areas ok)
+
+------------------------------------------------------------------
+IMAGES UPLOADED TO MES
+------------------------------------------------------------------
+camera view            UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D_20261028_160234_00_camera_view.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27066051
+you [result]           UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D_20261028_160234_01_you__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27066052
+you [pins]             UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D_20261028_160234_02_you__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27066053
+see [result]           UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D_20261028_160234_03_see__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27066054
+see [pins]             UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D_20261028_160234_04_see__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27066055
+
+------------------------------------------------------------------
+MES STAGE REPORT
+------------------------------------------------------------------
+report download link : https://mes.vvdntech.com/uploads/file_download/27066056
+status sent          : FAIL
+MES response         : ERROR — This serial_no UPP:1501AAA01831N:DDV00056AA:270826:02:0000304:3638:D is Passed from all the stages
+time                 : 2026-10-28 16:02:46
