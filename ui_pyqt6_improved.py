@@ -51,6 +51,10 @@ APP_CONFIG_PATH = os.path.join(MODELS_BASE, "app_config.yaml")
 # ============================================================================
 # APP CONFIG  (password, lock state, ui parameters)
 # ============================================================================
+from camera_calibration import (CameraHub, ModelCameraWizard,
+                                image_stats, drift_check)
+
+
 class AppConfig:
     def __init__(self):
         self.data = {
@@ -162,6 +166,18 @@ class HeadManager:
 
     def __init__(self, base_dir=MODELS_BASE):
         self.heads_dir = os.path.join(base_dir, "heads")
+        self._cam_stores = {}
+
+    def camera_store(self, head):
+        """The cameras of a model: which ones, their settings sets, the
+        camera of every scene and the light reference."""
+        from camera_calibration import ModelCameras
+        st = self._cam_stores.get(head)
+        if st is None:
+            st = ModelCameras(os.path.join(self._head_dir(head),
+                                           "cameras.json"))
+            self._cam_stores[head] = st
+        return st
 
     def _head_dir(self, head):
         return os.path.join(self.heads_dir, head)
@@ -184,6 +200,7 @@ class HeadManager:
             self._save(head, {"parents": [], "finished": False})
 
     def delete(self, head):
+        self._cam_stores.pop(head, None)
         hdir = self._head_dir(head)
         if os.path.exists(hdir):
             shutil.rmtree(hdir, ignore_errors=True)
@@ -1305,6 +1322,25 @@ class CameraFeed:
         self._raw_seq = 0
         self._reset_cb = None
         self._reset_req = False
+        self._thread = None
+
+    def release(self):
+        """Stop the grab thread and let go of the camera(s), so the Camera
+        Setup screen can open them.  start() opens them again."""
+        self._running = False
+        t = self._thread
+        if t is not None and t is not threading.current_thread():
+            t.join(timeout=3.0)
+        self._thread = None
+        for c in (self._cams or []):
+            try:
+                c.close()
+            except Exception:
+                pass
+        self._cams = None
+        with self._lock:
+            self._latest = None
+            self._latest_raw = None
 
     def is_usb(self):
         return bool(self._cams) and getattr(self._cams[0], "camtype",
@@ -1341,13 +1377,19 @@ class CameraFeed:
         if self._running:
             return
         self._running = True
-        threading.Thread(target=self._loop, daemon=True).start()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
 
     def _open(self):
         """Open the camera and apply the fixed settings (raises if absent)."""
         cams = _init_cameras()
         if not cams:
             raise IndexError("no camera")
+        try:                                   # camera chosen in Camera Setup
+            import camera_calibration as _cc
+            cams = _cc.pick_main_first(cams)
+        except Exception:
+            _cc = None
         cams[0].get_things(exposure=34005, work_mode="Exposure")
         cams[0].get_things(exposure=34005, work_mode="Exposure")
         cams[0].get_things(exposure=74005, work_mode="Exposure")
@@ -1357,6 +1399,10 @@ class CameraFeed:
         cams[0].get_things(saturation=130, work_mode="Saturation")
         cams[0].get_things(sharpnes=30, work_mode="Sharpness")
         cams[0].get_things(work_mode="auto_balance")
+        if _cc is not None:                    # settings saved in Camera Setup
+            bad = _cc.apply_saved_profile(cams[0])
+            if bad:
+                print("[camera] saved settings not accepted:", bad)
         return cams
 
     def _loop(self):
@@ -2692,9 +2738,10 @@ class App(QMainWindow):
         self._fit_window_to_screen()
         self.app_config = AppConfig()
         self.heads = HeadManager()
-        self.camera = CameraFeed(
+        self.camera = CameraHub(
             frame_scale=float(self.app_config.data["ui"]
                               .get("frame_scale", 0.6)))
+        self.camera.ui_call = self.after
         self.comm_settings = GlobalCommSettings()
         self.comm_log = CommLog()
         self.engine = CommEngine(self, self.comm_settings, self.comm_log)
@@ -2913,6 +2960,10 @@ class App(QMainWindow):
             self.show_head(self._nav[1], announce=False)
         elif self._nav[0] == "comm":
             self.show_comm(self._nav[1])
+        elif self._nav[0] == "camera":
+            self.show_camera_setup()
+        elif self._nav[0] == "cameras":
+            self.show_cameras(self._nav[1])
         elif self._nav[0] == "build":
             self.show_build_parent(self._nav[1], self._nav[2])
 
@@ -2925,6 +2976,7 @@ class App(QMainWindow):
         if self._operator_head not in (None, head_name):
             self.clear_operator()      # a different model -> new operator
         self._nav = ("head", head_name)
+        self.camera.set_model(self.heads.camera_store(head_name))
         self._swap(HeadScreen, head_name)
         if not announce:
             return
@@ -2940,10 +2992,40 @@ class App(QMainWindow):
        
     def show_build_parent(self, head_name, parent_name):
         self._nav = ("build", head_name, parent_name)
+        self.camera.set_model(self.heads.camera_store(head_name))
         self._swap(BuildParentScreen, head_name, parent_name)
+
+    def show_camera_setup(self):
+        self._nav = ("camera",)
+        self._swap(CameraSetupScreen)
+
+    def show_cameras(self, head_name, on_done=None, start="auto"):
+        """The model's cameras: choose them (with previews), then tune."""
+        self._nav = ("cameras", head_name)
+        self.camera.set_model(self.heads.camera_store(head_name))
+        self._swap(ModelCamerasScreen, head_name, on_done, start)
+
+    def finish_new_model(self, name):
+        """The rest of 'Add Model' after the cameras are chosen."""
+        if Message.confirm(
+                self, "Use MES for this model?",
+                "Choose Yes if the results of this model must be sent to "
+                "MES.\n\nYou can fill in the MES details later, with the "
+                "MES button, after the model is finished."):
+            self.heads.set_mes(name, enabled=True)
+        if Message.confirm(
+                self, "Use a barcode scanner?",
+                "Choose Yes if the operator must scan a barcode before "
+                "every test.\n\nYou can also set this up later, with the "
+                "Scanner button."):
+            ScannerDialog(self, self, name,
+                          on_close=lambda: self.show_head(name)).show()
+        else:
+            self.show_head(name)
 
     def show_comm(self, head_name):
         self._nav = ("comm", head_name)
+        self.camera.set_model(self.heads.camera_store(head_name))
         self._swap(CommScreen, head_name)
 
     # -- global trigger map --------------------------------------------------
@@ -3910,6 +3992,10 @@ class HomeScreen(BaseScreen):
         head.addWidget(sub)
         top.addLayout(head)
         top.addStretch()
+        if not app.is_locked():
+            top.addWidget(styled_btn(self, "Camera Setup",
+                                     app.show_camera_setup,
+                                     color="#44444e"))
         top.addWidget(app.lock_button(self))
         lay.addLayout(top)
         if not app.is_locked():
@@ -4004,24 +4090,11 @@ class HomeScreen(BaseScreen):
             self.app.show_head(name)
             return
         self.app.heads.create(name)
-        # ask about MES integration at model creation (details are filled in
-        # later, once the model is finalised)
-        if Message.confirm(
-                self, "Use MES for this model?",
-                "Choose Yes if the results of this model must be sent to "
-                "MES.\n\nYou can fill in the MES details later, with the "
-                "MES button, after the model is finished."):
-            self.app.heads.set_mes(name, enabled=True)
-        # ask to add the barcode scanner right at model creation
-        if Message.confirm(
-                self, "Use a barcode scanner?",
-                "Choose Yes if the operator must scan a barcode before "
-                "every test.\n\nYou can also set this up later, with the "
-                "Scanner button."):
-            ScannerDialog(self, self.app, name,
-                          on_close=lambda: self.app.show_head(name)).show()
-        else:
-            self.app.show_head(name)
+        # first step of a new model: which cameras it uses (previews, order,
+        # tuning); then the MES and barcode questions
+        app = self.app
+        app.show_cameras(name, on_done=lambda: app.finish_new_model(name),
+                         start="picker")
 
     def delete_head(self, head_name):
         if Message.confirm(
@@ -4231,6 +4304,9 @@ class HeadScreen(BaseScreen):
                                color="#44444e")]))
             tl.addStretch()
             tools = []
+            tools.append(styled_btn(self, "Cameras",
+                                    lambda: app.show_cameras(self.head),
+                                    color="#44444e"))
             if self.n_scenes:
                 tools.append(styled_btn(self, "Reset Camera",
                                         self.reset_camera, color="#44444e"))
@@ -6413,117 +6489,188 @@ class HeadScreen(BaseScreen):
             return
         Message.warn(self, "CANNOT TEST THIS PART", str(reason))
 
+    def _run_group(self, plan, frame, dist_thr, logs, results):
+        """Run the scenes of `plan` on one camera picture."""
+        frame_h, frame_w = frame.shape[:2]
+        out_frame = frame.copy()
+        proc = np.ones_like(frame)
+        child_boxes = []
+        pin_overlays = []
+        any_output = False
+        for parent_name, child_filter in plan:
+            children_data = self.parent_store.load_all_children(
+                parent_name)
+            if child_filter is not None:
+                children_data = [(n, d) for n, d in children_data
+                                 if n in child_filter]
+            if not children_data:
+                logs.append(f"[{parent_name}] no loadable areas.")
+                continue
+            results[parent_name] = {}
+            for child_name, cd in children_data:
+                reg = cd["reg"]
+                cfg = cd["config"]
+                x, y, w, h = [int(v) for v in reg]
+                x0 = max(0, min(x, frame_w))
+                y0 = max(0, min(y, frame_h))
+                x1 = max(0, min(x + w, frame_w))
+                y1 = max(0, min(y + h, frame_h))
+                if x1 <= x0 or y1 <= y0:
+                    logs.append(f"[{parent_name}/{child_name}] SKIPPED: "
+                                "ROI outside frame.")
+                    results[parent_name][child_name] = {
+                        "detected": 0,
+                        "master": len(cfg.get("matches", [])),
+                        "ok": False}
+                    continue
+                region = frame[y0:y1, x0:x1]
+                matches, output, mask = run_detection(
+                    detect_multi_scale_templates(
+                        image=region, template=cd["templates"],
+                        scale_range=tuple(cfg["scale_range"]),
+                        scale_steps=cfg["scale_steps"],
+                        threshold=cfg["threshold"],
+                        max_matches=cfg["max_matches"],
+                        visualize=True, t=time.time(),
+                        config=cd, name=child_name))
+                ok, pins, summ = analyze_pins(cfg.get("matches", []),
+                                              matches, dist_thr)
+                master_n = summ["total"] if summ["total"] else \
+                    len(cfg.get("matches", []))
+                results[parent_name][child_name] = {
+                    "detected": len(matches), "master": master_n,
+                    "ok": ok, "pins": summ}
+                if summ["total"]:
+                    line = (f" {child_name:<12} "
+                            f"{'OK ' if ok else 'NG '}"
+                            f" {summ['in_range']}/{summ['total']} pins ok"
+                            f"   shift {summ['mean_dx']:+.0f},"
+                            f"{summ['mean_dy']:+.0f} px")
+                    n_shift = sum(1 for p in pins
+                                  if p["paired"] and not p["in_range"])
+                    n_miss = sum(1 for p in pins if not p["paired"])
+                    if n_shift:
+                        line += (f"   {n_shift} too far "
+                                 f"(max {summ['max_dist']:.0f} px)")
+                    if n_miss:
+                        miss_ids = ",".join(str(i + 1)
+                                            for i, p in enumerate(pins)
+                                            if not p["paired"])
+                        line += f"   missing #{miss_ids}"
+                    logs.append(line)
+                else:
+                    logs.append(f" {child_name:<12} "
+                                f"{'OK ' if ok else 'NG '}"
+                                f" {len(matches)} found "
+                                "(no master pins)")
+                oh, ow = output.shape[:2]
+                out_frame[y0:y0 + oh, x0:x0 + ow] = output
+                if mask is not None:
+                    mh, mw = mask.shape[:2]
+                    mh = min(mh, y1 - y0)
+                    mw = min(mw, x1 - x0)
+                    proc[y0:y0 + mh, x0:x0 + mw] = mask[:mh, :mw]
+                if summ["total"]:
+                    shift_txt = (f"  d({summ['mean_dx']:+.0f},"
+                                 f"{summ['mean_dy']:+.0f})px")
+                    count_txt = f"{summ['in_range']}/{summ['total']}"
+                else:
+                    shift_txt = ""
+                    count_txt = f"{len(matches)}/{master_n}"
+                child_boxes.append(
+                    (x0, y0, x1 - x0, y1 - y0,
+                     f"{child_name} {'OK' if ok else 'NG'} "
+                     f"{count_txt}{shift_txt}", ok))
+                pin_overlays.append((pins, x0, y0))
+                any_output = True
+
+            # camera QR scanners of this scene (full-scene / model runs)
+            if self.qr_camera and child_filter is None:
+                if self._qr_scene_checks(parent_name, frame_w, frame_h,
+                                         results, child_boxes, logs):
+                    any_output = True
+
+        return {"frame": frame, "out_frame": out_frame, "proc": proc,
+                "child_boxes": child_boxes, "pin_overlays": pin_overlays,
+                "any_output": any_output}
+
+    def _camera_groups(self, plan, frame, logs, drift_msgs):
+        """Split the run by camera + settings set; one picture per group.
+        Also compares the light with the reference of the first scene."""
+        store = self.app.heads.camera_store(self.head)
+        hub = self.app.camera
+        groups, order = {}, []
+        for item in plan:
+            if store.has_cameras():
+                sc = store.scene(item[0])
+                key = (sc["cam_id"], sc["profile"])
+            else:
+                key = (None, "")
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(item)
+        th = store.drift()
+        out = []
+        for key in order:
+            if key[0] is None or key == hub.active_key():
+                f = frame
+            else:
+                f = hub.capture(key[0], key[1])
+                if f is None:
+                    logs.append("[camera] no picture from "
+                                f"{store.cam_name(key[0])} - using the "
+                                "last one")
+                    f = frame
+            first = groups[key][0][0]
+            ref = store.get_ref(first)
+            if th.get("enabled") and ref and f is not None:
+                ch, bad = drift_check(ref, image_stats(f), th)
+                logs.append(f"[light] {first}: brightness "
+                            f"{ch['brightness']:+.0f}%  contrast "
+                            f"{ch['contrast']:+.0f}%  sharpness "
+                            f"{ch['sharpness']:+.0f}%")
+                if bad:
+                    drift_msgs.append((first, bad))
+            out.append((groups[key], f))
+        return out
+
+    def _show_drift(self, msgs):
+        first, bad = msgs[0]
+        text = "\n".join(bad[:3])
+        if len(msgs) > 1:
+            text += f"\n(and {len(msgs) - 1} more scene(s))"
+        text += "\nCheck the lamp, the lens and the camera."
+        self.app.comm_log.add("EVT", f"light changed in scene '{first}': "
+                                     + " ".join(bad))
+        Message.warn(self, "THE LIGHT HAS CHANGED", text)
+
     def _worker(self, scope, plan, frame, dist_thr):
         logs = []
         results = {}
         views = {}
         run_summary = None
+        drift_msgs = []
         try:
-            frame_h, frame_w = frame.shape[:2]
-            out_frame = frame.copy()
-            proc = np.ones_like(frame)
-            child_boxes = []
-            pin_overlays = []
-            any_output = False
-            for parent_name, child_filter in plan:
-                children_data = self.parent_store.load_all_children(
-                    parent_name)
-                if child_filter is not None:
-                    children_data = [(n, d) for n, d in children_data
-                                     if n in child_filter]
-                if not children_data:
-                    logs.append(f"[{parent_name}] no loadable areas.")
-                    continue
-                results[parent_name] = {}
-                for child_name, cd in children_data:
-                    reg = cd["reg"]
-                    cfg = cd["config"]
-                    x, y, w, h = [int(v) for v in reg]
-                    x0 = max(0, min(x, frame_w))
-                    y0 = max(0, min(y, frame_h))
-                    x1 = max(0, min(x + w, frame_w))
-                    y1 = max(0, min(y + h, frame_h))
-                    if x1 <= x0 or y1 <= y0:
-                        logs.append(f"[{parent_name}/{child_name}] SKIPPED: "
-                                    "ROI outside frame.")
-                        results[parent_name][child_name] = {
-                            "detected": 0,
-                            "master": len(cfg.get("matches", [])),
-                            "ok": False}
-                        continue
-                    region = frame[y0:y1, x0:x1]
-                    matches, output, mask = run_detection(
-                        detect_multi_scale_templates(
-                            image=region, template=cd["templates"],
-                            scale_range=tuple(cfg["scale_range"]),
-                            scale_steps=cfg["scale_steps"],
-                            threshold=cfg["threshold"],
-                            max_matches=cfg["max_matches"],
-                            visualize=True, t=time.time(),
-                            config=cd, name=child_name))
-                    ok, pins, summ = analyze_pins(cfg.get("matches", []),
-                                                  matches, dist_thr)
-                    master_n = summ["total"] if summ["total"] else \
-                        len(cfg.get("matches", []))
-                    results[parent_name][child_name] = {
-                        "detected": len(matches), "master": master_n,
-                        "ok": ok, "pins": summ}
-                    if summ["total"]:
-                        line = (f" {child_name:<12} "
-                                f"{'OK ' if ok else 'NG '}"
-                                f" {summ['in_range']}/{summ['total']} pins ok"
-                                f"   shift {summ['mean_dx']:+.0f},"
-                                f"{summ['mean_dy']:+.0f} px")
-                        n_shift = sum(1 for p in pins
-                                      if p["paired"] and not p["in_range"])
-                        n_miss = sum(1 for p in pins if not p["paired"])
-                        if n_shift:
-                            line += (f"   {n_shift} too far "
-                                     f"(max {summ['max_dist']:.0f} px)")
-                        if n_miss:
-                            miss_ids = ",".join(str(i + 1)
-                                                for i, p in enumerate(pins)
-                                                if not p["paired"])
-                            line += f"   missing #{miss_ids}"
-                        logs.append(line)
-                    else:
-                        logs.append(f" {child_name:<12} "
-                                    f"{'OK ' if ok else 'NG '}"
-                                    f" {len(matches)} found "
-                                    "(no master pins)")
-                    oh, ow = output.shape[:2]
-                    out_frame[y0:y0 + oh, x0:x0 + ow] = output
-                    if mask is not None:
-                        mh, mw = mask.shape[:2]
-                        mh = min(mh, y1 - y0)
-                        mw = min(mw, x1 - x0)
-                        proc[y0:y0 + mh, x0:x0 + mw] = mask[:mh, :mw]
-                    if summ["total"]:
-                        shift_txt = (f"  d({summ['mean_dx']:+.0f},"
-                                     f"{summ['mean_dy']:+.0f})px")
-                        count_txt = f"{summ['in_range']}/{summ['total']}"
-                    else:
-                        shift_txt = ""
-                        count_txt = f"{len(matches)}/{master_n}"
-                    child_boxes.append(
-                        (x0, y0, x1 - x0, y1 - y0,
-                         f"{child_name} {'OK' if ok else 'NG'} "
-                         f"{count_txt}{shift_txt}", ok))
-                    pin_overlays.append((pins, x0, y0))
-                    any_output = True
-
-                # camera QR scanners of this scene (full-scene / model runs)
-                if self.qr_camera and child_filter is None:
-                    if self._qr_scene_checks(parent_name, frame_w, frame_h,
-                                             results, child_boxes, logs):
-                        any_output = True
-
-            if any_output:
-                for pins, ox, oy in pin_overlays:
-                    draw_pin_overlay(out_frame, pins, ox, oy, dist_thr)
-                for (bx, by, bw, bh, text, ok) in child_boxes:
-                    label_box(out_frame, bx, by, bw, bh, text, ok)
-                    label_box(proc, bx, by, bw, bh, text, ok)
+            groups = self._camera_groups(plan, frame, logs, drift_msgs)
+            parts = [self._run_group(gp, gf, dist_thr, logs, results)
+                     for gp, gf in groups]
+            for g in parts:
+                if g["any_output"]:
+                    for pins, ox, oy in g["pin_overlays"]:
+                        draw_pin_overlay(g["out_frame"], pins, ox, oy,
+                                         dist_thr)
+                    for (bx, by, bw, bh, text, ok) in g["child_boxes"]:
+                        label_box(g["out_frame"], bx, by, bw, bh, text, ok)
+                        label_box(g["proc"], bx, by, bw, bh, text, ok)
+                    g["ok"] = all(b[5] for b in g["child_boxes"])
+            outs = [g for g in parts if g["any_output"]]
+            if outs:
+                # the picture shown: the first camera that failed, else
+                # the first one
+                g = next((x for x in outs if not x["ok"]), outs[0])
+                out_frame, proc, frame = (g["out_frame"], g["proc"],
+                                          g["frame"])
                 all_ok = all(r["ok"] for pr in results.values()
                              for r in pr.values())
                 n_ok = sum(1 for pr in results.values()
@@ -6555,6 +6702,8 @@ class HeadScreen(BaseScreen):
                 return
             for m in logs:
                 self.log(m)
+            if drift_msgs:
+                self._show_drift(drift_msgs)
             if run_summary is not None:
                 self.set_big_status(run_summary[0], run_summary[1])
             if views:
@@ -7053,6 +7202,63 @@ class CycleDashboard(QDialog):
 # ============================================================================
 # SCREEN 3 — COMMUNICATION BUILDER (scanner node FIRST, then model/scenes)
 # ============================================================================
+class ModelCamerasScreen(BaseScreen):
+    """The cameras of one model: choose them (live previews, order), then
+    tune each one.  The inspection cameras are released while it is open."""
+
+    def __init__(self, master, app, head, on_done=None, start="auto"):
+        super().__init__(master, app)
+        self.head = head
+        self._was_running = app.camera._running
+        self._on_done = on_done
+        app.camera.release()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.wizard = ModelCameraWizard(app.heads.camera_store(head),
+                                        start=start)
+        self.wizard.done.connect(self._finish)
+        lay.addWidget(self.wizard)
+
+    def _finish(self):
+        cb = self._on_done or (lambda: self.app.show_head(
+            self.head, announce=False))
+        cb()
+
+    def destroy_screen(self):
+        try:
+            self.wizard.shutdown()
+        except Exception:
+            pass
+        if self._was_running:
+            self.app.camera.start()
+        super().destroy_screen()
+
+
+class CameraSetupScreen(BaseScreen):
+    """Camera Setup (camera_calibration.CalibrationPanel) inside the app.
+    The inspection camera is released while this screen is open."""
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self._was_running = app.camera._running
+        app.camera.release()
+        from camera_calibration import CalibrationPanel
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.panel = CalibrationPanel(embedded=True)
+        self.panel.back.connect(app.show_home)
+        lay.addWidget(self.panel)
+
+    def destroy_screen(self):
+        try:
+            self.panel.shutdown()
+        except Exception:
+            pass
+        if self._was_running:
+            self.app.camera.start()       # inspection camera comes back
+        super().destroy_screen()
+
+
 class CommScreen(BaseScreen):
     def __init__(self, master, app, head_name):
         super().__init__(master, app)
@@ -7213,6 +7419,12 @@ class CommScreen(BaseScreen):
             area_wise = bool(self.cfg.data["parents"][p]
                              .get("area_wise", True))
             ptxt = label(f"scene: {p}", done, miss)
+            _st = self.app.heads.camera_store(self.head)
+            if _st.has_cameras():
+                _sc = _st.scene(p)
+                ptxt += (f"   [{_st.cam_name(_sc['cam_id'])}"
+                         + (f" - {_sc['profile']}" if _sc["profile"] else "")
+                         + "]")
             if not area_wise:
                 ptxt += "   [scene-only: trigger runs all areas]"
             p_item = self._mk_item(head_item, pid, ptxt,
@@ -7753,6 +7965,49 @@ class BuildParentScreen(BaseScreen):
         scroll.viewport().setStyleSheet("background: transparent;")
         rlay.addWidget(scroll, stretch=1)
 
+        self._cam_store = app.heads.camera_store(head_name)
+        self.cmb_cam = self.cmb_prof = None
+        if self._cam_store.has_cameras():
+            sec0 = QGroupBox(" CAMERA FOR THIS SCENE ")
+            s0 = QVBoxLayout(sec0)
+            self.cmb_cam = QComboBox()
+            self.cmb_prof = QComboBox()
+            for cb in (self.cmb_cam, self.cmb_prof):
+                cb.setStyleSheet(
+                    f"QComboBox {{ color: {C_TEXT}; background: {C_FIELD};"
+                    f" border: 1px solid {C_LINE}; border-radius: 6px;"
+                    " padding: 5px 8px; }}"
+                    f"QComboBox QAbstractItemView {{ color: {C_TEXT};"
+                    f" background: {C_PANEL}; }}")
+            for sl in self._cam_store.slots():
+                self.cmb_cam.addItem(f"Camera {sl['slot']}  -  {sl['name']}",
+                                     sl["id"])
+            cur = self._cam_store.scene(parent_name)
+            self.cmb_cam.setCurrentIndex(max(0, self.cmb_cam.findData(
+                cur["cam_id"])))
+            self._fill_prof(cur["profile"])
+            l1 = QLabel("Camera")
+            l2 = QLabel("Settings set (light and picture)")
+            for l in (l1, l2):
+                l.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
+            s0.addWidget(l1)
+            s0.addWidget(self.cmb_cam)
+            s0.addWidget(l2)
+            s0.addWidget(self.cmb_prof)
+            self.cmb_cam.currentIndexChanged.connect(self._cam_changed)
+            self.cmb_prof.currentIndexChanged.connect(self._prof_changed)
+            s0.addWidget(btn_row([
+                styled_btn(sec0, "Tune camera", self.tune_camera,
+                           color="#44444e"),
+                styled_btn(sec0, "Set light reference", self.set_light_ref,
+                           color="#44444e")]))
+            self.lbl_ref = QLabel("")
+            self.lbl_ref.setWordWrap(True)
+            self.lbl_ref.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
+            s0.addWidget(self.lbl_ref)
+            self._show_ref()
+            clay2.addWidget(sec0)
+
         sec = QGroupBox(" STEP 1   AREA TO LOOK AT ")
         s1 = QVBoxLayout(sec)
         self.btn_sel_roi = styled_btn(sec, "Select ROI (drag on video)",
@@ -7867,6 +8122,7 @@ class BuildParentScreen(BaseScreen):
         body.addWidget(right)
 
         self.app.camera.start()
+        self._apply_camera_choice()
         self._update_buttons()
      
         self._set_status(f"Area: area_{self.child_index} — select ROI first")
@@ -8130,6 +8386,15 @@ class BuildParentScreen(BaseScreen):
                                 int(self.var_steps.get()),
                                 int(self.var_maxm.get()),
                                 self.matches)
+        try:                         # camera of the scene + light reference
+            cid, prof = self._cam_choice()
+            if cid:
+                self._cam_store.set_scene(self.parent_name, cid, prof)
+            if not self._cam_store.get_ref(self.parent_name):
+                self._cam_store.set_ref(self.parent_name, image_stats(frame))
+                self._show_ref()
+        except Exception:
+            self.log("light reference not saved:\n" + traceback.format_exc())
         self.parent_store.add_child(self.parent_name,
                                     self.current_child_name)
         self.app.heads.add_parent(self.head, self.parent_name)
@@ -8419,6 +8684,80 @@ class BuildParentScreen(BaseScreen):
                 self._update_buttons()
             self.after(0, apply)
         threading.Thread(target=work, daemon=True).start()
+
+    # -- camera of this scene ----------------------------------------------
+    def _fill_prof(self, current=""):
+        self.cmb_prof.blockSignals(True)
+        self.cmb_prof.clear()
+        cid = self.cmb_cam.currentData()
+        for n in self._cam_store.profiles_for(cid):
+            self.cmb_prof.addItem(n, n)
+        if self.cmb_prof.count() == 0:
+            self.cmb_prof.addItem("(none saved - use Tune camera)", "")
+        self.cmb_prof.setCurrentIndex(max(0, self.cmb_prof.findData(current)))
+        self.cmb_prof.blockSignals(False)
+
+    def _cam_choice(self):
+        if self.cmb_cam is None:
+            return None, ""
+        return self.cmb_cam.currentData(), self.cmb_prof.currentData() or ""
+
+    def _apply_camera_choice(self):
+        cid, prof = self._cam_choice()
+        if cid:
+            self.app.camera.use(cid, prof)
+
+    def _cam_changed(self, _i=None):
+        self._fill_prof("")
+        self._prof_changed()
+
+    def _prof_changed(self, _i=None):
+        cid, prof = self._cam_choice()
+        self._cam_store.set_scene(self.parent_name, cid, prof)
+        self._apply_camera_choice()
+        self._show_ref()
+
+    def _show_ref(self):
+        if self.cmb_cam is None:
+            return
+        ref = self._cam_store.get_ref(self.parent_name)
+        self.lbl_ref.setText(
+            f"Light reference: brightness {ref['mean']:.0f}, sharpness "
+            f"{ref['sharp']:.0f}  ({ref['when'][:16].replace('T', ' ')})"
+            if ref else
+            "Light reference: not set yet. It is set when you save the "
+            "first area.")
+
+    def set_light_ref(self):
+        frame = self.app.camera.get_frame()
+        if frame is None:
+            Message.error(self, "No camera",
+                          "No camera picture available yet.")
+            return
+        self._cam_store.set_ref(self.parent_name, image_stats(frame))
+        self._show_ref()
+        Message.ok(self, "Light reference saved",
+                   "The operator is warned when the light changes too "
+                   "much from this picture.")
+
+    def tune_camera(self):
+        """Full-screen camera tuning (same as the model's Cameras screen)."""
+        app = self.app
+        app.camera.release()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Tune the cameras")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        wz = ModelCameraWizard(self._cam_store, start="panel")
+        wz.done.connect(dlg.accept)
+        lay.addWidget(wz)
+        dlg.showMaximized()
+        dlg.exec()
+        wz.shutdown()
+        cur = self._cam_choice()
+        self._fill_prof(cur[1])
+        app.camera.start()
+        self._prof_changed()
 
     def auto_balance(self):
         ok = self.app.camera.auto_balance()

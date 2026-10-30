@@ -68,6 +68,7 @@ class CameraWrapper:
         self.ggain=gGain
         self.bgain=bGain 
         self.cam_port='None'
+        self.dev_info=dev_info
         self.camtype="mindvision"
         self.H_W={}
         self.height=2160

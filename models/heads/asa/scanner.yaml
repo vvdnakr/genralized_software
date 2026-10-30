@@ -1,6 +1,0 @@
-enabled: true
-prefix: qr
-send_to_client: true
-auto_popup: true
-require_operator: true
-source: scanner

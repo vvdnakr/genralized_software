@@ -1,0 +1,15 @@
+{
+  "cameras": {
+    "demo:1": {
+      "name": "Demo camera 1",
+      "kind": "demo",
+      "params": {
+        "exposure_us": 8000.0,
+        "analog_gain": 4,
+        "trigger_mode": 0
+      },
+      "saved": "2026-10-31T01:37:11"
+    }
+  },
+  "main": "demo:1"
+}
