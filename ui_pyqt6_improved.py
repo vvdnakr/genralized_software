@@ -1,4 +1,5 @@
 import os
+import sys
 
 os.environ["QT_XCB_FORCE_SOFTWARE_OPENGL"] = "1"
 os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
@@ -22,9 +23,10 @@ try:                      # optional: precise Ethernet link detection
 except ImportError:       # pip install psutil
     psutil = None
 
-from PyQt6.QtCore import Qt, QTimer, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (QImage, QPixmap, QPainter, QColor, QPen, QFont,
-                         QBrush, QCursor, QShortcut, QKeySequence)
+                         QBrush, QCursor, QShortcut, QKeySequence,
+                         QPainterPath, QLinearGradient)
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QDialog, QLabel, QPushButton,
     QLineEdit, QTextEdit, QCheckBox, QComboBox, QVBoxLayout, QHBoxLayout,
@@ -57,7 +59,8 @@ class AppConfig:
             # (a part that is run but NEVER reported to MES)
             "validation_password": "5678",
             "locked": False,
-            "ui": {"frame_scale": 0.6},  # same 0.6 resize as two_point.py
+            "ui": {"frame_scale": 0.6,
+                   "show_regions_live": False},  # same 0.6 resize as two_point.py
             "scanner": {"test_timeout_s": 10},
             # camera QR reading (only used when the part-scan source = camera)
             "qr": {"timeout_s": 6.0,         # one camera read: give up after
@@ -480,6 +483,27 @@ class HeadManager:
             json.dump({"cycle": {"ok": 0, "ng": 0},
                        "scenes": {}, "areas": {}}, f, indent=2)
 
+    # -- finished cycles (for the dashboard), last 300 kept ------------------
+    def _cycles_path(self, head):
+        return os.path.join(self._head_dir(head), "cycle_history.json")
+
+    def get_cycles(self, head):
+        try:
+            with open(self._cycles_path(head)) as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def add_cycle_record(self, head, rec, keep=300):
+        items = self.get_cycles(head)
+        items.append(rec)
+        try:
+            with open(self._cycles_path(head), "w") as f:
+                json.dump(items[-keep:], f)
+        except OSError:
+            pass
+
 
 # ============================================================================
 # QUICK INPUT SCAN BOX  (global always-on-top grab — replaces the hidraw
@@ -880,7 +904,7 @@ class CommConfig:
     (head/parents/children/PLC) so existing files still load; only the UI
     wording is model/scene/area/client."""
 
-    HEAD_FIELDS = ["SELECT", "PLC", "OK", "NG"]
+    HEAD_FIELDS = ["SELECT", "OK", "NG"]
     PARENT_FIELDS = ["PLC", "OK", "NG"]
     CHILD_FIELDS = ["OK", "NG"]
     # camera-QR node (only when part-scan source = camera AND a master QR
@@ -888,6 +912,11 @@ class CommConfig:
     #           TRIGGER = client sends it -> camera reads now,
     #           OK / NG = we send the read result
     QR_FIELDS = ["REQ", "TRIGGER", "OK", "NG"]
+    # client messages that open a popup (all optional):
+    #   BACK        = exact signal -> popup "go back to models / continue"
+    #   ERROR_PREFIX / WARN_PREFIX = any message that STARTS with it is shown
+    #   in a popup (with the text after the prefix) and asks the same
+    EVENT_FIELDS = ["ASK_MODEL", "BACK", "ERROR_PREFIX", "WARN_PREFIX"]
 
     def __init__(self, heads: HeadManager, head_name: str):
         self.heads = heads
@@ -897,8 +926,10 @@ class CommConfig:
 
     def _defaults(self):
         structure = self.heads.structure(self.head)
-        d = {"head": {"SELECT": "", "PLC": "", "OK": "", "NG": ""},
+        d = {"head": {"SELECT": "", "OK": "", "NG": ""},
              "qr": {"REQ": "", "TRIGGER": "", "OK": "", "NG": ""},
+             "events": {"ASK_MODEL": "", "BACK": "", "ERROR_PREFIX": "",
+                        "WARN_PREFIX": ""},
              "parents": {}}
         for p, children in structure.items():
             d["parents"][p] = {
@@ -924,6 +955,9 @@ class CommConfig:
             for k, v in (saved.get("qr") or {}).items():
                 if k in base["qr"]:
                     base["qr"][k] = v
+            for k, v in (saved.get("events") or {}).items():
+                if k in base["events"]:
+                    base["events"][k] = v
             for p, pconf in (saved.get("parents") or {}).items():
                 if p not in base["parents"]:
                     continue
@@ -1196,7 +1230,8 @@ class CommEngine:
             return
         scope = self.app.build_trigger_map().get(text)
         if scope is None:
-            self.log.add("EVT", f"'{text}' matches no configured signal")
+            # not an exact signal: is it an ERROR... / WARNING... message?
+            self.app.after(0, lambda: self.app.client_message(text, source))
             return
         self.app.after(0, lambda: self.app.dispatch_comm_trigger(scope, source))
 
@@ -1555,20 +1590,21 @@ def draw_pin_overlay(img, pins, off_x, off_y, dist_thr):
 # Qt STYLE HELPERS  (professional dark theme)
 # ============================================================================
 # -- palette: graphite + teal (industrial inspection look) -------------------
-C_BG      = "#0d1117"      # window
-C_PANEL   = "#161b22"      # panels / group boxes
-C_ELEV    = "#1c232d"      # raised rows
-C_LINE    = "#232b35"      # borders
-C_FIELD   = "#0a0e13"      # inputs
-C_TEXT    = "#e6edf3"
-C_MUTED   = "#8b98a5"
-C_FAINT   = "#5c6773"
-C_ACCENT  = "#12a594"      # primary action (teal)
-C_BLUE    = "#3d6ff5"
-C_OK      = "#1f9d55"
-C_NG      = "#d93a3a"
-C_WARN    = "#c9821a"
-C_NEUTRAL = "#242c38"
+C_BG      = "#0a0c1a"      # window  (deep indigo-black)
+C_PANEL   = "#121530"      # panels / group boxes
+C_ELEV    = "#1a1e42"      # raised rows
+C_LINE    = "#272c58"      # borders
+C_FIELD   = "#080a17"      # inputs
+C_TEXT    = "#eef0ff"
+C_MUTED   = "#9aa3d0"
+C_FAINT   = "#6a72a3"
+C_ACCENT  = "#8b5cf6"      # primary action (violet -> pink gradient)
+C_ACCENT2 = "#ec4899"      # second end of the brand gradient
+C_BLUE    = "#4f7cff"
+C_OK      = "#10b981"
+C_NG      = "#f43f5e"
+C_WARN    = "#f59e0b"
+C_NEUTRAL = "#1b2048"
 
 # THE WHOLE UI USES FOUR BUTTON COLOURS, NOTHING ELSE:
 #   teal  = the main action of the screen
@@ -1599,10 +1635,10 @@ QMainWindow, QDialog {{ background: {C_BG}; }}
 QWidget {{ color: {C_TEXT}; font-size: 10pt; }}
 QLabel {{ background: transparent; border: none; }}
 QFrame#card {{
-    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 10px;
+    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 14px;
 }}
 QGroupBox {{
-    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 10px;
+    background: {C_PANEL}; border: 1px solid {C_LINE}; border-radius: 14px;
     margin-top: 14px; padding: 10px 8px 8px 8px;
     font-weight: 700; color: {C_MUTED}; font-size: 8pt;
 }}
@@ -1611,11 +1647,11 @@ QGroupBox::title {{
     letter-spacing: 1px;
 }}
 QLineEdit, QComboBox {{
-    background: {C_FIELD}; color: {C_TEXT}; border: 1px solid #2b333e;
-    border-radius: 6px; padding: 7px 10px; font-size: 10pt;
+    background: {C_FIELD}; color: {C_TEXT}; border: 1px solid #323867;
+    border-radius: 10px; padding: 8px 12px; font-size: 10pt;
     selection-background-color: {C_ACCENT};
 }}
-QLineEdit:focus, QComboBox:focus {{ border: 1px solid {C_ACCENT}; }}
+QLineEdit:focus, QComboBox:focus {{ border: 1px solid #a78bfa; }}
 QLineEdit:disabled {{ background: #10151b; color: {C_FAINT}; }}
 QComboBox QAbstractItemView {{
     background: {C_PANEL}; color: {C_TEXT}; border: 1px solid {C_LINE};
@@ -1632,7 +1668,7 @@ QCheckBox::indicator {{
     border: 1px solid #39424e; background: {C_FIELD};
 }}
 QCheckBox::indicator:checked {{
-    background: {C_ACCENT}; border-color: {C_ACCENT};
+    background: {C_ACCENT}; border-color: #a78bfa;
 }}
 QListWidget, QTreeWidget {{
     background: {C_FIELD}; border: 1px solid #222a34; border-radius: 8px;
@@ -1640,13 +1676,18 @@ QListWidget, QTreeWidget {{
 }}
 QListWidget::item, QTreeWidget::item {{ height: 26px; padding-left: 4px; }}
 QListWidget::item:selected, QTreeWidget::item:selected {{
-    background: #1d3a4d; color: white;
+    background: #2b2368; color: white;
 }}
 QScrollBar:vertical {{ background: transparent; width: 11px; margin: 2px; }}
 QScrollBar::handle:vertical {{
-    background: #333c48; border-radius: 5px; min-height: 28px;
+    background: #3a3f78; border-radius: 5px; min-height: 28px;
 }}
-QScrollBar::handle:vertical:hover {{ background: #414c5a; }}
+QScrollBar::handle:vertical:hover {{ background: #5b61a8; }}
+QScrollBar:horizontal {{ background: transparent; height: 11px; margin: 2px; }}
+QScrollBar::handle:horizontal {{
+    background: #3a3f78; border-radius: 5px; min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: #5b61a8; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollArea {{ border: none; background: transparent; }}
 QMessageBox, QInputDialog {{ background: {C_PANEL}; font-size: 11pt; }}
@@ -1679,19 +1720,39 @@ def fit_size(want_w, want_h, min_w=420, min_h=320):
     return w, h
 
 
+def _grad(c1, c2):
+    return (f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {c1},"
+            f" stop:1 {c2})")
+
+
 def apply_btn_color(btn, color):
     color = _BTN_MAP.get(str(color).lower(), color)
-    border = ("1px solid #2f3a46" if color == C_NEUTRAL
-              else f"1px solid {_shade(color, 0.86)}")
+    if color == C_ACCENT:                     # main action: brand gradient
+        bg, hov, prs = (_grad(C_ACCENT, C_ACCENT2),
+                        _grad(_shade(C_ACCENT, 1.18), _shade(C_ACCENT2, 1.12)),
+                        _grad(_shade(C_ACCENT, 0.82), _shade(C_ACCENT2, 0.82)))
+        border = "1px solid #a78bfa"
+    elif color == C_NG:                       # delete / reset
+        bg, hov, prs = (_grad("#e11d48", "#fb7185"),
+                        _grad("#f43f5e", "#fda4af"),
+                        _grad("#be123c", "#e11d48"))
+        border = "1px solid #fb7185"
+    elif color == C_NEUTRAL:                  # ordinary button
+        bg, hov, prs = (C_NEUTRAL, "#272e63", "#151a3b")
+        border = f"1px solid {C_LINE}"
+    else:
+        bg, hov, prs = (color, _shade(color, 1.16), _shade(color, 0.84))
+        border = f"1px solid {_shade(color, 0.86)}"
     btn.setStyleSheet(
-        f"QPushButton {{ background: {color}; color: white;"
+        f"QPushButton {{ background: {bg}; color: white;"
         f" border: {border};"
-        f" border-radius: 6px; padding: 8px 14px; font-weight: 600;"
+        f" border-radius: 10px; padding: 8px 14px; font-weight: 600;"
         f" font-size: 10pt; }}"
-        f" QPushButton:hover {{ background: {_shade(color, 1.16)}; }}"
-        f" QPushButton:pressed {{ background: {_shade(color, 0.84)}; }}"
-        f" QPushButton:disabled {{ background: #141a21;"
-        f" border: 1px solid #1e252d; color: #46505b; }}")
+        f" QPushButton:hover {{ background: {hov};"
+        f" border: 1px solid #c4b5fd; }}"
+        f" QPushButton:pressed {{ background: {prs}; }}"
+        f" QPushButton:disabled {{ background: #0f1230;"
+        f" border: 1px solid #1a1e42; color: #4a5080; }}")
 
 
 class FitButton(QPushButton):
@@ -1791,7 +1852,7 @@ def card(title=None, name="card", bg=None):
     f = QFrame()
     f.setObjectName(name)
     f.setStyleSheet(f"QFrame#{name} {{ background: {bg or C_PANEL};"
-                    f" border: 1px solid {C_LINE}; border-radius: 10px; }}"
+                    f" border: 1px solid {C_LINE}; border-radius: 14px; }}"
                     " QLabel { background: transparent; border: none; }")
     lay = QVBoxLayout(f)
     lay.setContentsMargins(12, 10, 12, 12)
@@ -1904,7 +1965,7 @@ def step_bar(steps, current):
     carries the instruction.  steps = [(short name, what to do), ...]"""
     f = QFrame()
     f.setStyleSheet(f"QFrame {{ background: {C_PANEL};"
-                    f" border: 1px solid {C_LINE}; border-radius: 10px; }}"
+                    f" border: 1px solid {C_LINE}; border-radius: 14px; }}"
                     " QLabel { background: transparent; border: none; }")
     lay = QVBoxLayout(f)
     lay.setContentsMargins(14, 10, 14, 10)
@@ -1938,7 +1999,7 @@ def step_bar(steps, current):
     return f
 
 
-def panel(bg=C_PANEL, radius=10):
+def panel(bg=C_PANEL, radius=14):
     w = QFrame()
     w.setStyleSheet(f"QFrame {{ background: {bg};"
                     f" border: 1px solid {C_LINE};"
@@ -1952,6 +2013,7 @@ def clear_layout(lay):
         it = lay.takeAt(0)
         w = it.widget()
         if w is not None:
+            w.hide()               # gone at once, deleted when idle
             w.deleteLater()
         elif it.layout() is not None:
             clear_layout(it.layout())
@@ -2288,6 +2350,49 @@ def ethernet_connected():
         return True       # cannot tell -> do not raise a false alarm
 
 
+def _band(headline, color, pt=22):
+    """Popup header: gradient band with a round icon and the headline."""
+    icon = {C_NG: "\u2715", C_WARN: "!", C_OK: "\u2713"}.get(color, "i")
+    f = QFrame()
+    f.setStyleSheet(
+        "QFrame { border: none; border-top-left-radius: 11px;"
+        " border-top-right-radius: 11px; background: qlineargradient("
+        f"x1:0,y1:0,x2:1,y2:1, stop:0 {color}, stop:1 {_shade(color, 1.35)}); }}"
+        " QLabel { background: transparent; border: none; color: white; }")
+    l = QVBoxLayout(f)
+    l.setContentsMargins(20, 16, 20, 16)
+    l.setSpacing(6)
+    ic = QLabel(icon)
+    ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    ic.setFixedSize(40, 40)
+    ic.setStyleSheet("QLabel { background: rgba(255,255,255,0.25);"
+                     " border-radius: 20px; font-size: 18pt;"
+                     " font-weight: 800; color: white; }")
+    row = QHBoxLayout()
+    row.addStretch()
+    row.addWidget(ic)
+    row.addStretch()
+    l.addLayout(row)
+    t = QLabel(str(headline))
+    t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    t.setWordWrap(True)
+    t.setStyleSheet(f"font-size: {pt}pt; font-weight: 800;"
+                    " letter-spacing: 0.4px;")
+    l.addWidget(t)
+    return f
+
+
+def _dlg_qss(color):
+    return (f"QDialog {{ background: {C_PANEL}; border: 1px solid {color};"
+            " border-radius: 12px; }")
+
+
+def _premium_dialog(dlg, color):
+    """Rounded, floating look (no OS title bar) for every popup."""
+    dlg.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    dlg.setStyleSheet(_dlg_qss(color))
+
+
 def ask_text(parent, headline, body="", placeholder="", password=False):
     """Big, clear text box.  Returns the typed text, or None if cancelled."""
     dlg = QDialog(parent)
@@ -2295,18 +2400,11 @@ def ask_text(parent, headline, body="", placeholder="", password=False):
     dlg.setModal(True)
     dlg.setMinimumWidth(560)
     accent = C_ACCENT
-    dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
-                      f" border: 2px solid {accent}; border-radius: 12px; }}")
+    _premium_dialog(dlg, accent)
     lay = QVBoxLayout(dlg)
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(0)
-    band = QLabel(headline)
-    band.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    band.setWordWrap(True)
-    band.setStyleSheet(f"background: {accent}; color: white;"
-                       " font-size: 22pt; font-weight: 800; padding: 20px;"
-                       " border-top-left-radius: 10px;"
-                       " border-top-right-radius: 10px;")
+    band = _band(headline, accent)
     lay.addWidget(band)
     inner = QVBoxLayout()
     inner.setContentsMargins(26, 22, 26, 22)
@@ -2341,7 +2439,7 @@ def ask_text(parent, headline, body="", placeholder="", password=False):
     bo = QPushButton("Continue")
     bo.setMinimumHeight(50)
     bo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    apply_btn_color(bo, C_OK)
+    apply_btn_color(bo, C_ACCENT)
     bo.setStyleSheet(bo.styleSheet() + " QPushButton { font-size: 13pt; }")
     bo.clicked.connect(dlg.accept)
     row.addWidget(bo, stretch=1)
@@ -2359,18 +2457,11 @@ def ask_password(parent, headline, body=""):
     dlg.setWindowTitle("Password")
     dlg.setModal(True)
     dlg.setMinimumWidth(560)
-    dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
-                      f" border: 2px solid {C_WARN}; border-radius: 12px; }}")
+    _premium_dialog(dlg, C_WARN)
     lay = QVBoxLayout(dlg)
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(0)
-    band = QLabel(headline)
-    band.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    band.setWordWrap(True)
-    band.setStyleSheet(f"background: {C_WARN}; color: white;"
-                       " font-size: 22pt; font-weight: 800; padding: 20px;"
-                       " border-top-left-radius: 10px;"
-                       " border-top-right-radius: 10px;")
+    band = _band(headline, C_WARN)
     lay.addWidget(band)
     inner = QVBoxLayout()
     inner.setContentsMargins(26, 22, 26, 22)
@@ -2402,7 +2493,7 @@ def ask_password(parent, headline, body=""):
     bo = QPushButton("Continue")
     bo.setMinimumHeight(50)
     bo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    apply_btn_color(bo, C_OK)
+    apply_btn_color(bo, C_ACCENT)
     bo.setStyleSheet(bo.styleSheet() + " QPushButton { font-size: 13pt; }")
     bo.clicked.connect(dlg.accept)
     row.addWidget(bo, stretch=1)
@@ -2438,21 +2529,13 @@ class Message(QDialog):
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setModal(False)
         self.setMinimumWidth(min(600, fit_size(600, 300)[0]))
-        self.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
-                           f" border: 2px solid {color}; border-radius: 12px; }}")
+        _premium_dialog(self, color)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        band = QLabel(str(headline))
-        band.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        band.setWordWrap(True)
-        band.setStyleSheet(f"background: {color}; color: white;"
-                           " font-size: 26pt; font-weight: 800;"
-                           " padding: 22px 20px; border-top-left-radius: 10px;"
-                           " border-top-right-radius: 10px;"
-                           " letter-spacing: 0.5px;")
+        band = _band(str(headline), color)
         lay.addWidget(band)
 
         body = QVBoxLayout()
@@ -2473,7 +2556,7 @@ class Message(QDialog):
         brow.setSpacing(10)
         if retry is not None:
             rb = QPushButton(retry_text)
-            rb.setMinimumHeight(52)
+            rb.setMinimumHeight(46)
             rb.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             apply_btn_color(rb, C_ACCENT)
             rb.setStyleSheet(rb.styleSheet()
@@ -2538,20 +2621,11 @@ class Message(QDialog):
         dlg.setWindowTitle("Please confirm")
         dlg.setModal(True)
         dlg.setMinimumWidth(640)
-        dlg.setStyleSheet(f"QDialog {{ background: {C_PANEL};"
-                          f" border: 2px solid {color};"
-                          f" border-radius: 12px; }}")
+        _premium_dialog(dlg, color)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-        band = QLabel(str(headline))
-        band.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        band.setWordWrap(True)
-        band.setStyleSheet(f"background: {color}; color: white;"
-                           " font-size: 24pt; font-weight: 800;"
-                           " padding: 22px 20px;"
-                           " border-top-left-radius: 10px;"
-                           " border-top-right-radius: 10px;")
+        band = _band(str(headline), color)
         lay.addWidget(band)
         inner = QVBoxLayout()
         inner.setContentsMargins(26, 22, 26, 22)
@@ -2565,16 +2639,16 @@ class Message(QDialog):
         row = QHBoxLayout()
         row.setSpacing(10)
         bn = QPushButton(no)
-        bn.setMinimumHeight(52)
+        bn.setMinimumHeight(46)
         bn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         apply_btn_color(bn, C_NEUTRAL)
         bn.setStyleSheet(bn.styleSheet() + " QPushButton { font-size: 13pt; }")
         bn.clicked.connect(dlg.reject)
         row.addWidget(bn, stretch=1)
         by = QPushButton(yes)
-        by.setMinimumHeight(52)
+        by.setMinimumHeight(46)
         by.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        apply_btn_color(by, C_OK)
+        apply_btn_color(by, C_ACCENT)
         by.setStyleSheet(by.styleSheet() + " QPushButton { font-size: 13pt; }")
         by.clicked.connect(dlg.accept)
         row.addWidget(by, stretch=1)
@@ -2590,6 +2664,15 @@ def _first_line(text, n=70):
     t = str(text).strip().splitlines()
     t = t[-1] if t else ""
     return t if len(t) <= n else t[:n - 3] + "..."
+
+
+def wrap_anywhere(text, n=18):
+    """Let a long value with no spaces (an 80-character QR) break onto the
+    next line instead of stretching the panel: a zero-width space is put
+    every n characters.  Display only - the real value is not changed."""
+    text = str(text)
+    return "\u200b".join(text[i:i + n] for i in range(0, len(text), n)) \
+        if len(text) > n else text
 
 
 def _short_text(text):
@@ -2625,6 +2708,13 @@ class App(QMainWindow):
         self.container = QWidget()
         self.container_lay = QVBoxLayout(self.container)
         self.container_lay.setContentsMargins(0, 0, 0, 0)
+        self.container_lay.setSpacing(0)
+        # brand strip on top: the page feels like a web app
+        strip = QFrame()
+        strip.setFixedHeight(4)
+        strip.setStyleSheet(
+            f"QFrame {{ border: none; background: {_grad('#6366f1', C_ACCENT2)}; }}")
+        self.container_lay.addWidget(strip)
         self.setCentralWidget(self.container)
         self.current_screen = None
         self._nav = ("home",)
@@ -2637,6 +2727,8 @@ class App(QMainWindow):
         self._health_timer.start(max(500, int(float(
             self.app_config.data["health"].get("interval_s", 2)) * 1000)))
         QTimer.singleShot(800, self._health_tick)
+        QTimer.singleShot(1000, self.engine.start)  # start the comm engine after the UI is up
+
         self.show_home()
 
     # -- window always matches the screen it opens on ------------------------
@@ -2657,9 +2749,8 @@ class App(QMainWindow):
         self.resize(w, h)
         self.move(geo.x() + (geo.width() - w) // 2,
                   geo.y() + (geo.height() - h) // 2)
-        # A small panel screen: use all of it rather than leaving a margin.
-        if geo.width() <= 1366 or geo.height() <= 800:
-            self.showMaximized()
+        # fill the whole display, whatever its size
+        self.showMaximized()
 
     # -- popups: lost Ethernet / lost camera ----------------------------------
     def alert(self, key, headline, text, retry=None):
@@ -2872,7 +2963,9 @@ class App(QMainWindow):
         for h in self.heads.list_heads():
             cfg = CommConfig(self.heads, h)
             put(cfg.data["head"].get("SELECT"), ("select", h), f"{h}.SELECT")
-            put(cfg.data["head"].get("PLC"), ("run", h, ("head",)), f"{h}.run")
+            put(cfg.data["events"].get("ASK_MODEL"), ("ask",),
+                f"{h}.ASK_MODEL")
+            put(cfg.data["events"].get("BACK"), ("back",), f"{h}.BACK")
             if self.heads.camera_qr_enabled(h):
                 put(cfg.data["qr"].get("TRIGGER"), ("qr", h),
                     f"{h}.qr_trigger")
@@ -2907,6 +3000,28 @@ class App(QMainWindow):
                 return
             self.current_screen.execute(run_scope, source)
             return
+        if scope[0] == "ask":
+            # the client asks "which model is running?" -> answer with the
+            # Select-signal of the model that is open right now
+            cur = self._running_head()
+            if not cur:
+                self.comm_log.add("EVT", "client asked for the current "
+                                         "model - no model is open")
+                return
+            sel = CommConfig(self.heads, cur).data["head"].get("SELECT", "")
+            self.comm_log.add("EVT", f"client asked current model -> '{cur}'")
+            self.engine.send(sel, why=f"current model is '{cur}'")
+            return
+        if scope[0] == "back":
+            head = self._running_head()
+            if not head:
+                self.comm_log.add("EVT", "back signal IGNORED — no model "
+                                         "is open")
+                return
+            self.ask_client_notice(
+                head, "back", "THE MACHINE ASKS TO GO BACK",
+                "Go back to the model list, or continue with this model?")
+            return
         if scope[0] == "qr":
             # the client says: part is in position -> read the QR by camera
             head = scope[1]
@@ -2918,6 +3033,119 @@ class App(QMainWindow):
                            "Select-signal first)")
                 return
             self.current_screen.qr_client_trigger(source)
+
+
+    def _running_head(self):
+        scr = self.current_screen
+        if isinstance(scr, HeadScreen):
+            return scr.head
+        return None
+
+    # -- client messages: ERROR... / WARNING... / back signal -----------------
+    def client_message(self, text, source):
+        """A line that is not a normal signal.  If it starts with the model's
+        error / warning prefix, show it and ask: go back or continue."""
+        scr = self.current_screen
+        if not isinstance(scr, HeadScreen):
+            self.comm_log.add("EVT", f"'{text}' matches no configured signal")
+            return
+        ev = CommConfig(self.heads, scr.head).data["events"]
+        low = text.lower()
+        for key, kind, head_txt in (("ERROR_PREFIX", "error", "ERROR FROM THE MACHINE"),
+                                    ("WARN_PREFIX", "warn", "WARNING FROM THE MACHINE")):
+            pre = str(ev.get(key, "") or "").strip()
+            if pre and low.startswith(pre.lower()):
+                msg = text[len(pre):].lstrip(" :-\t") or text
+                self.comm_log.add("EVT", f"{kind} message from client: {msg}")
+                self.ask_client_notice(scr.head, kind, head_txt, msg)
+                return
+        self.comm_log.add("EVT", f"'{text}' matches no configured signal")
+
+    def ask_client_notice(self, head, kind, headline, text):
+        old = self._alerts.pop("client_notice", None)
+        if old is not None:
+            old.close()
+        dlg = ClientNotice(self, head, kind, headline, text)
+        self._alerts["client_notice"] = dlg
+        dlg.show()
+        dlg.raise_()
+
+
+class ClientNotice(QDialog):
+    """Popup for an error / warning / back request sent by the client.
+    Two buttons: go back to the model list, or continue.  Continue - or no
+    answer for 10 s - sends the model's Select-signal back to the client."""
+    WAIT_S = 10
+
+    def __init__(self, app, head, kind, headline, text):
+        super().__init__(app)
+        self.app, self.head = app, head
+        self._left = self.WAIT_S
+        color = {"error": C_NG, "warn": C_WARN}.get(kind, "#2563c9")
+        self.setWindowTitle("Message from the machine")
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setModal(False)
+        self.setMinimumWidth(min(620, fit_size(620, 300)[0]))
+        _premium_dialog(self, color)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        band = _band(headline, color)
+        lay.addWidget(band)
+        body = QVBoxLayout()
+        body.setContentsMargins(24, 18, 24, 18)
+        body.setSpacing(14)
+        t = QLabel(_short_text(text))
+        t.setWordWrap(True)
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 15pt;")
+        body.addWidget(t)
+        self.cd = QLabel("")
+        self.cd.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cd.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+        body.addWidget(self.cd)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        for txt, col, fn in (("Go back to models", C_NEUTRAL, self._back),
+                             ("Continue", C_OK, self._continue)):
+            b = QPushButton(txt)
+            b.setMinimumHeight(48)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            apply_btn_color(b, col)
+            b.setStyleSheet(b.styleSheet() + " QPushButton { font-size: 13pt; }")
+            b.clicked.connect(fn)
+            row.addWidget(b, stretch=1)
+        body.addLayout(row)
+        lay.addLayout(body)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(1000)
+        self._tick(first=True)
+
+    def _tick(self, first=False):
+        if not first:
+            self._left -= 1
+        if self._left <= 0:
+            self._continue()          # no answer: send the model signal
+            return
+        self.cd.setText(f"Continues automatically in {self._left} s")
+
+    def _done(self):
+        self._timer.stop()
+        if self.app._alerts.get("client_notice") is self:
+            self.app._alerts.pop("client_notice", None)
+        self.close()
+
+    def _back(self):
+        self._done()
+        self.app.comm_log.add("EVT", "operator chose: go back to models")
+        self.app.show_home()
+
+    def _continue(self):
+        self._done()
+        sel = CommConfig(self.app.heads, self.head).data["head"].get("SELECT", "")
+        self.app.comm_log.add("EVT", "operator chose / timed out: continue")
+        self.app.engine.send(sel, why=f"continue - model '{self.head}' signal")
 
 
 class BaseScreen(QWidget):
@@ -3915,6 +4143,15 @@ class HeadScreen(BaseScreen):
         # cycle tracking: a cycle completes when EVERY scene has been run
         # (in any order — scene1 then scene2, or one RUN MODEL)
         self.cycle_scene_results = {}
+        # area-by-area result of the cycle that is running now, and the one
+        # that finished last (shown under Details and in the Dashboard)
+        self.cycle_areas = {}          # {scene: {area: bool}}
+        self.cycle_started = None      # "HH:MM:SS" of the first result
+        self.prev_cycle = None
+        recent = app.heads.get_cycles(head_name)
+        if recent:
+            self.prev_cycle = recent[-1]
+        self._dash = None
 
         # ============================================================ HEADER
         #  [Back]  MODEL name   OPERATOR id [Change]     o Camera o Network
@@ -4182,6 +4419,8 @@ class HeadScreen(BaseScreen):
                               else "Part barcode", "part")
             self.scan_value_lbl = QLabel("—")
             self.scan_value_lbl.setWordWrap(True)
+            self.scan_value_lbl.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                              QSizePolicy.Policy.Preferred)
             self.scan_value_lbl.setStyleSheet(
                 f"background: {C_FIELD}; color: {C_TEXT}; padding: 6px 10px;"
                 " border-radius: 6px; font-family: Consolas, monospace;"
@@ -4200,7 +4439,6 @@ class HeadScreen(BaseScreen):
                 self.scan_btn_qr = styled_btn(pcard, "Scan QR Code  (F2)",
                                               self.qr_button_pressed,
                                               color="#2f9e44")
-                pcl.addWidget(self.scan_btn_qr)
                 if self._qr_sig("TRIGGER") and not locked:
                     self.btn_qr_now = styled_btn(pcard, "Scan Now",
                                                  self.qr_scan_now,
@@ -4208,15 +4446,21 @@ class HeadScreen(BaseScreen):
                     self.btn_qr_now.setToolTip("Read the QR now, without "
                                                "waiting for the machine")
                     pcl.addWidget(self.btn_qr_now)
+                    self.btn_qr_now.setVisible(False)
+                scan_b = self.scan_btn_qr
             else:
-                pcl.addWidget(styled_btn(pcard, "Scan Barcode  (F2)",
-                                         self.open_quick_scan,
-                                         color="#2f9e44"))
-            pcl.addWidget(btn_row([
-                styled_btn(pcard, "Clear", self.clear_barcode,
-                           color="#44444e"),
-                styled_btn(pcard, "Resend", self.resend_barcode,
-                           color="#44444e")]))
+                scan_b = styled_btn(pcard, "Scan Barcode  (F2)",
+                                    self.open_quick_scan, color="#2f9e44")
+            # one compact row: the scan button is the wide one
+            rowb = btn_row([scan_b,
+                            styled_btn(pcard, "Clear", self.clear_barcode,
+                                       color="#44444e"),
+                            styled_btn(pcard, "Resend", self.resend_barcode,
+                                       color="#44444e")])
+            rowb.layout().setStretch(0, 3)
+            rowb.layout().setStretch(1, 2)
+            rowb.layout().setStretch(2, 2)
+            pcl.addWidget(rowb)
             rlay.addWidget(pcard)
             QShortcut(QKeySequence("F2"), self,
                       activated=(self.qr_button_pressed
@@ -4269,21 +4513,22 @@ class HeadScreen(BaseScreen):
         ccl.addLayout(crow)
         self.btn_expand = styled_btn(ccard, "Show Details",
                                      self.toggle_counters, color="#44444e")
+        self.btn_dash = styled_btn(ccard, "Dashboard", self.open_dashboard,
+                                   color="#3b6ef5")
         if locked:
-            ccl.addWidget(self.btn_expand)
+            ccl.addWidget(btn_row([self.btn_expand, self.btn_dash]))
         else:
-            ccl.addWidget(btn_row([
-                self.btn_expand,
-                styled_btn(ccard, "Reset", self.reset_counters,
-                           color="#e03131")]))
+            ccl.addWidget(btn_row([self.btn_expand, self.btn_dash]))
+            ccl.addWidget(styled_btn(ccard, "Reset", self.reset_counters,
+                                     color="#e03131"))
         self.counter_detail = QWidget()
         self.counter_detail.setObjectName("cdet")
         self.counter_detail.setStyleSheet(
-            f"QWidget#cdet {{ background: {C_FIELD}; border-radius: 6px; }}"
+            "QWidget#cdet { background: transparent; }"
             " QLabel { background: transparent; }")
         self.counter_detail_lay = QVBoxLayout(self.counter_detail)
-        self.counter_detail_lay.setContentsMargins(4, 4, 4, 4)
-        self.counter_detail_lay.setSpacing(2)
+        self.counter_detail_lay.setContentsMargins(0, 4, 0, 0)
+        self.counter_detail_lay.setSpacing(8)
         self.counter_detail.setVisible(False)
         ccl.addWidget(self.counter_detail)
         self.counters_expanded = False
@@ -4601,32 +4846,58 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     # OK/NG COUNTERS
     # ------------------------------------------------------------------
-    def _counter_row(self, lay, name, ok, ng, indent=8, bold=False):
-        row = QWidget()
-        rl = QHBoxLayout(row)
-        rl.setContentsMargins(indent, 0, 8, 0)
-        rl.setSpacing(4)
+    def _counter_row(self, lay, name, ok, ng, indent=0, bold=False):
+        """name  [yield bar]  OK n  NG n  pct"""
+        n = ok + ng
+        pct = 100.0 * ok / n if n else 0.0
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(indent, 2, 0, 2)
+        v.setSpacing(3)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
         nm = QLabel(name)
-        nm.setStyleSheet(
-            f"color: {'#e2e2d2' if bold else '#c8c8d0'}; font-size: 9pt;"
-            + (" font-weight: bold;" if bold else ""))
-        rl.addWidget(nm, stretch=1)
-        okl = QLabel(f"OK {ok}")
-        okl.setStyleSheet(f"background: {'#2f9e44' if ok else '#3a3a44'};"
-                          " color: white; font-size: 9pt; font-weight: bold;"
-                          " padding: 1px 7px; border-radius: 4px;")
-        rl.addWidget(okl)
-        ngl = QLabel(f"NG {ng}")
-        ngl.setStyleSheet(f"background: {'#c92a2a' if ng else '#3a3a44'};"
-                          " color: white; font-size: 9pt; font-weight: bold;"
-                          " padding: 1px 7px; border-radius: 4px;")
-        rl.addWidget(ngl)
-        lay.addWidget(row)
+        nm.setStyleSheet(f"color: {C_TEXT if bold else C_MUTED};"
+                         f" font-size: {10 if bold else 9}pt;"
+                         + (" font-weight: 700;" if bold else ""))
+        top.addWidget(nm, stretch=1)
+        top.addWidget(self._chip(f"OK {ok}", True if ok else None))
+        top.addWidget(self._chip(f"NG {ng}", False if ng else None))
+        pl = QLabel(f"{pct:.0f}%" if n else "-")
+        pl.setMinimumWidth(34)
+        pl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        pl.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
+        top.addWidget(pl)
+        v.addLayout(top)
+        bar = QFrame()
+        bar.setFixedHeight(6)
+        stop = pct / 100
+        bar.setStyleSheet(
+            "QFrame { border: none; border-radius: 3px; background:"
+            " qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            f" stop:0 {C_ACCENT}, stop:{max(0.0, stop - 0.001):.3f} "
+            f"{C_ACCENT2}, stop:{stop:.3f} #20254f, stop:1 #20254f); }}")
+        v.addWidget(bar)
+        lay.addWidget(box)
 
     def _counter_section(self, lay, title):
         s = QLabel(title)
-        s.setStyleSheet("color: #8f8f9a; font-size: 8pt; font-weight: bold;")
+        s.setStyleSheet(f"color: {C_FAINT}; font-size: 8pt;"
+                        " font-weight: 700; letter-spacing: 1px;")
         lay.addWidget(s)
+
+    def _dcard(self, title):
+        f = QFrame()
+        f.setObjectName("dsub")
+        f.setStyleSheet(f"QFrame#dsub {{ background: {C_ELEV};"
+                        f" border: 1px solid {C_LINE}; border-radius: 12px; }}"
+                        " QLabel { background: transparent; border: none; }")
+        l = QVBoxLayout(f)
+        l.setContentsMargins(10, 8, 10, 10)
+        l.setSpacing(4)
+        self._counter_section(l, title)
+        self.counter_detail_lay.addWidget(f)
+        return l
 
     def refresh_counters(self):
         c = self.app.heads.get_counters(self.head)
@@ -4635,28 +4906,154 @@ class HeadScreen(BaseScreen):
         if not self.counters_expanded:
             return
         clear_layout(self.counter_detail_lay)
-        self._counter_section(self.counter_detail_lay, "SCENE WISE")
+        tot = c["cycle"]["ok"] + c["cycle"]["ng"]
+        yld = (f"{100.0 * c['cycle']['ok'] / tot:.1f}%" if tot else "-")
+        lay = self._dcard("OVERALL")
+        row = QHBoxLayout()
+        for big, small in ((str(tot), "cycles"), (yld, "yield")):
+            col = QVBoxLayout()
+            col.setSpacing(0)
+            b1 = QLabel(big)
+            b1.setStyleSheet(f"color: {C_TEXT}; font-size: 18pt;"
+                             " font-weight: 800;")
+            b2 = QLabel(small)
+            b2.setStyleSheet(f"color: {C_MUTED}; font-size: 8pt;")
+            col.addWidget(b1)
+            col.addWidget(b2)
+            row.addLayout(col, stretch=1)
+        lay.addLayout(row)
+        lay = self._dcard("THIS CYCLE")
+        self._cycle_block(lay, "", self._current_cycle_view())
+        if self.prev_cycle:
+            lay = self._dcard("PREVIOUS CYCLE")
+            self._cycle_block(lay, "", self.prev_cycle)
+        lay = self._dcard("SCENES AND AREAS  (every run)")
         if not c["scenes"]:
             e = QLabel("no runs yet")
-            e.setStyleSheet("color: #55555f; font-size: 8pt;")
-            self.counter_detail_lay.addWidget(e)
-        for s, v in sorted(c["scenes"].items()):
-            self._counter_row(self.counter_detail_lay, s, v["ok"], v["ng"],
-                              indent=8, bold=True)
-            # its areas directly underneath, indented
+            e.setStyleSheet(f"color: {C_FAINT}; font-size: 9pt;")
+            lay.addWidget(e)
+        for sc, v in sorted(c["scenes"].items()):
+            self._counter_row(lay, sc, v["ok"], v["ng"], bold=True)
             for a, av in sorted(c["areas"].items()):
-                if a.startswith(s + "/"):
-                    self._counter_row(self.counter_detail_lay,
-                                      "  " + a.split("/", 1)[1],
-                                      av["ok"], av["ng"], indent=20)
-        # areas of scenes that no longer exist (renamed etc.)
+                if a.startswith(sc + "/"):
+                    self._counter_row(lay, a.split("/", 1)[1],
+                                      av["ok"], av["ng"], indent=14)
         orphans = [(a, v) for a, v in sorted(c["areas"].items())
                    if a.split("/", 1)[0] not in c["scenes"]]
         if orphans:
-            self._counter_section(self.counter_detail_lay, "OTHER AREAS")
+            lay = self._dcard("OTHER AREAS")
             for a, v in orphans:
-                self._counter_row(self.counter_detail_lay, a,
-                                  v["ok"], v["ng"], indent=20)
+                self._counter_row(lay, a, v["ok"], v["ng"], indent=14)
+        self.counter_detail_lay.addWidget(
+            styled_btn(self.counter_detail, "Open full dashboard",
+                       self.open_dashboard, color="#2f9e44"))
+
+    # -- cycle status (this / previous) --------------------------------------
+    def _current_cycle_view(self):
+        """The running cycle as a record; pending areas are None."""
+        scenes = {}
+        for sc in sorted(set(self.app.heads.list_parents(self.head))
+                         | set(self.cycle_areas)):
+            done = self.cycle_areas.get(sc, {})
+            names = list(self.parent_store.list_children(sc)) \
+                if hasattr(self, "parent_store") else []
+            scenes[sc] = {a: done.get(a) for a in (names or done)}
+            for a, v in done.items():
+                scenes[sc][a] = v
+        vals = [v for ar in scenes.values() for v in ar.values()]
+        if not vals or all(v is None for v in vals):
+            state = None
+        elif any(v is False for v in vals):
+            state = False
+        else:
+            state = True if all(v is True for v in vals) else None
+        return {"serial": self.scan_value or "", "operator": self.operator_id
+                or "", "time": self.cycle_started or "", "ok": state,
+                "scenes": scenes, "running": True}
+
+    def _chip(self, text, ok):
+        l = QLabel(text)
+        col = {True: C_OK, False: C_NG, None: "#2a3070"}[ok]
+        l.setStyleSheet(f"background: {col}; color: white; font-size: 8pt;"
+                        " font-weight: 700; padding: 2px 8px;"
+                        " border-radius: 8px;")
+        return l
+
+    def _cycle_block(self, lay, title, rec):
+        if title:
+            self._counter_section(lay, title)
+        ok = rec.get("ok")
+        word = ("running..." if rec.get("running") and ok is None
+                else "OK" if ok else "NG" if ok is False else "waiting")
+        head = QWidget()
+        hl = QHBoxLayout(head)
+        hl.setContentsMargins(0, 0, 0, 0)
+        who = (rec.get("serial") or "no serial")
+        if rec.get("operator"):
+            who += f"  ·  {rec['operator']}"
+        if rec.get("time"):
+            who += f"  ·  {rec['time']}"
+        t = QLabel(who)
+        t.setWordWrap(True)
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 9pt;")
+        t.setSizePolicy(QSizePolicy.Policy.Ignored,
+                        QSizePolicy.Policy.Preferred)
+        hl.addWidget(t, stretch=1)
+        hl.addWidget(self._chip(word, ok))
+        lay.addWidget(head)
+        for sc, areas in sorted((rec.get("scenes") or {}).items()):
+            vals = list(areas.values())
+            sok = (None if not vals or any(v is None for v in vals)
+                   and not any(v is False for v in vals)
+                   else all(v is True for v in vals))
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            nm = QLabel(sc)
+            nm.setStyleSheet(f"color: {C_TEXT}; font-size: 9pt;"
+                             " font-weight: bold;")
+            rl.addWidget(nm, stretch=1)
+            rl.addWidget(self._chip("OK" if sok else "NG" if sok is False
+                                    else "-", sok))
+            lay.addWidget(row)
+            for a, v in sorted(areas.items()):
+                r2 = QWidget()
+                r2l = QHBoxLayout(r2)
+                r2l.setContentsMargins(14, 0, 0, 0)
+                al = QLabel(a)
+                al.setStyleSheet(f"color: {C_MUTED}; font-size: 8pt;")
+                r2l.addWidget(al, stretch=1)
+                r2l.addWidget(self._chip("OK" if v else "NG" if v is False
+                                         else "-", v))
+                lay.addWidget(r2)
+
+    def _track_areas(self, results):
+        if self.cycle_started is None:
+            self.cycle_started = datetime.datetime.now().strftime("%H:%M:%S")
+        for sc, areas in results.items():
+            for a, r in (areas or {}).items():
+                self.cycle_areas.setdefault(sc, {})[a] = bool(r["ok"])
+
+    def _archive_cycle(self, all_ok, serial, validation):
+        rec = {"serial": serial or "", "operator": self.operator_id or "",
+               "time": self.cycle_started
+               or datetime.datetime.now().strftime("%H:%M:%S"),
+               "date": datetime.date.today().isoformat(),
+               "ok": bool(all_ok), "validation": bool(validation),
+               "scenes": {sc: dict(ar) for sc, ar in self.cycle_areas.items()}}
+        self.prev_cycle = rec
+        self.app.heads.add_cycle_record(self.head, rec)
+        self.cycle_areas, self.cycle_started = {}, None
+        if self._dash is not None:
+            self._dash.refresh()
+
+    def open_dashboard(self):
+        if self._dash is not None and self._dash.isVisible():
+            self._dash.raise_()
+            self._dash.refresh()
+            return
+        self._dash = CycleDashboard(self)
+        self._dash.show()
 
     def toggle_counters(self):
         self.counters_expanded = not self.counters_expanded
@@ -4802,7 +5199,7 @@ class HeadScreen(BaseScreen):
             "pass":     ("Previous station passed", C_OK),
             "all_passed": ("Already passed by this station", C_OK),
             "fail":     ("Previous station NOT passed", C_NG),
-            "error":    ("Serial No is Not Valid ", C_NG),
+            "error":    ("MES not connected", C_NG),
             "sending":  ("Sending the result to MES...", C_WARN),
             "sent":     ("Result sent to MES", C_OK),
             "senderr":  ("Result NOT sent to MES", C_NG),
@@ -5260,7 +5657,15 @@ class HeadScreen(BaseScreen):
             return
         self._qr_reset_for_new_scan()
         self._qr_request()
-
+    def _qr_send_model_signal(self, attempt):
+        """First attempt of a scan: tell the client which model is running
+        (the Select signal) BEFORE the QR request signal."""
+        if attempt != 1:
+            return
+        sel = str(self.comm_cfg.data["head"].get("SELECT", "") or "").strip()
+        if sel:
+            self.app.engine.send(sel, why=f"model signal before QR scan "
+                                          f"('{self.head}')")
     def _qr_request(self):
         """One attempt: send the request signal, then wait for the client's
         answer (trigger), then read.  Called for attempt 1 and for every
@@ -5291,6 +5696,7 @@ class HeadScreen(BaseScreen):
                                "again.", critical=True)
                 return
             # engineering mode: warn, then read anyway
+            self._qr_send_model_signal(n)
             if req:
                 eng.send(req, why=f"QR scan request {n}/{mx}")
             self.log(f"[QR] Warning: {why} — reading the camera anyway "
@@ -5304,7 +5710,7 @@ class HeadScreen(BaseScreen):
                     return
             self._qr_begin("MANUAL")
             return
-
+        self._qr_send_model_signal(n)
         if req:
             eng.send(req, why=f"QR scan request {n}/{mx}")
         else:
@@ -5572,6 +5978,7 @@ class HeadScreen(BaseScreen):
         # a new serial = a new unit: nothing of the previous one may reach MES
         self._mes_reset_cycle_data()
         self.cycle_scene_results = {}
+        self.cycle_areas, self.cycle_started = {}, None
         validation = validation or self._is_validation_serial(code)
         self._set_validation(validation)
         self._set_cycle_result(None, "cycle in progress…")
@@ -5657,7 +6064,7 @@ class HeadScreen(BaseScreen):
             self.scan_value_lbl.setText("—")
             return
         self.scan_value_lbl.setText(
-            f"{self.scan_value}   ({self.scan_time})")
+            wrap_anywhere(self.scan_value) + f"   ({self.scan_time})")
         if self.scanner_cfg.get("send_to_client", True):
             if self.scan_sent:
                 self.scan_status_lbl.setText(
@@ -5699,6 +6106,7 @@ class HeadScreen(BaseScreen):
         self.cycle_scene_results = {}
         serial = self.scan_value
         validation = self.validation_mode
+        self._archive_cycle(all_ok, serial, validation)
         # overall CYCLE result: on the UI and in a popup
         self._set_cycle_result(all_ok, ("validation part - not sent to MES"
                                         if validation else ""))
@@ -5785,12 +6193,18 @@ class HeadScreen(BaseScreen):
             if self.view == self.VIEW_LIVE:
                 frame = self.app.camera.get_frame()
                 if frame is not None:
-                    disp = frame.copy()
-                    for regs in self._roi_cache.values():
-                        for _, reg in regs:
-                            x, y, w, h = [int(v) for v in reg]
-                            cv2.rectangle(disp, (x, y), (x + w, y + h),
-                                          (255, 0, 0), 2)
+                    disp = frame
+                    # live view is clean: the saved regions are NOT drawn
+                    # (set ui: show_regions_live: true in app_config.yaml
+                    # to bring them back)
+                    if self.app.app_config.data["ui"].get(
+                            "show_regions_live", False):
+                        disp = frame.copy()
+                        for regs in self._roi_cache.values():
+                            for _, reg in regs:
+                                x, y, w, h = [int(v) for v in reg]
+                                cv2.rectangle(disp, (x, y), (x + w, y + h),
+                                              (255, 0, 0), 2)
                     self.canvas.show(disp)
                 elif self.app.camera.error:
                     self._show_cam_error()
@@ -6156,6 +6570,7 @@ class HeadScreen(BaseScreen):
             if results:
                 self._mes_collect(scope, logs, views, results)
                 self.app.heads.add_result_counts(self.head, scope, results)
+                self._track_areas(results)
                 try:
                     self.app.engine.send_results(self.comm_cfg, scope,
                                                  results)
@@ -6191,6 +6606,448 @@ class HeadScreen(BaseScreen):
                                  "left: " + ", ".join(left))
                 self.refresh_counters()
         self.after(0, apply)
+
+
+class _Donut(QWidget):
+    """Ring chart: parts = [(value, color), ...]; centre text."""
+    def __init__(self, parts, centre, sub=""):
+        super().__init__()
+        self.parts, self.centre, self.sub = parts, centre, sub
+        self.setMinimumSize(170, 170)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) - 16
+        r = QRectF((self.width() - side) / 2, (self.height() - side) / 2,
+                   side, side)
+        pen_w = max(14, side * 0.16)
+        total = sum(v for v, _ in self.parts)
+        a0 = 90 * 16
+        if total <= 0:
+            pen = QPen(QColor("#e6e2ee"), pen_w)
+            p.setPen(pen)
+            p.drawArc(r.adjusted(pen_w / 2, pen_w / 2, -pen_w / 2, -pen_w / 2),
+                      0, 360 * 16)
+        else:
+            for v, col in self.parts:
+                if v <= 0:
+                    continue
+                span = -int(360 * 16 * v / total)
+                pen = QPen(QColor(col), pen_w)
+                pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+                p.setPen(pen)
+                p.drawArc(r.adjusted(pen_w / 2, pen_w / 2, -pen_w / 2,
+                                     -pen_w / 2), a0, span)
+                a0 += span
+        p.setPen(QColor("#2b2f3a"))
+        f = p.font()
+        f.setPointSize(18)
+        f.setBold(True)
+        p.setFont(f)
+        p.drawText(r.adjusted(0, -10, 0, -10), Qt.AlignmentFlag.AlignCenter,
+                   self.centre)
+        f.setPointSize(9)
+        f.setBold(False)
+        p.setFont(f)
+        p.setPen(QColor("#8a90a0"))
+        p.drawText(r.adjusted(0, 34, 0, 34), Qt.AlignmentFlag.AlignCenter,
+                   self.sub)
+
+
+class _Trend(QWidget):
+    """Yield line: rolling OK-% over the last cycles, OK/NG dots below."""
+    def __init__(self, flags):
+        super().__init__()
+        self.flags = list(flags)
+        self.setMinimumHeight(170)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H = self.width(), self.height()
+        L, R, T, B = 34, 10, 10, 34
+        pw, ph = W - L - R, H - T - B
+        p.setPen(QPen(QColor("#ece9f2"), 1))
+        f = p.font()
+        f.setPointSize(8)
+        p.setFont(f)
+        for pct in (0, 25, 50, 75, 100):
+            y = T + ph * (1 - pct / 100)
+            p.setPen(QPen(QColor("#ece9f2"), 1))
+            p.drawLine(int(L), int(y), int(W - R), int(y))
+            p.setPen(QColor("#9aa0ad"))
+            p.drawText(0, int(y) - 7, L - 6, 14,
+                       Qt.AlignmentFlag.AlignRight
+                       | Qt.AlignmentFlag.AlignVCenter, f"{pct}")
+        n = len(self.flags)
+        if n == 0:
+            p.setPen(QColor("#9aa0ad"))
+            p.drawText(QRectF(L, T, pw, ph), Qt.AlignmentFlag.AlignCenter,
+                       "no finished cycle yet")
+            return
+        pts, ok = [], 0
+        for i, fl in enumerate(self.flags):
+            ok += 1 if fl else 0
+            x = L + (pw * (i / (n - 1)) if n > 1 else pw / 2)
+            y = T + ph * (1 - (100.0 * ok / (i + 1)) / 100)
+            pts.append(QPointF(x, y))
+        path = QPainterPath(pts[0])
+        for q in pts[1:]:
+            path.lineTo(q)
+        fill = QPainterPath(path)
+        fill.lineTo(pts[-1].x(), T + ph)
+        fill.lineTo(pts[0].x(), T + ph)
+        fill.closeSubpath()
+        g = QLinearGradient(0, T, 0, T + ph)
+        g.setColorAt(0, QColor(236, 72, 153, 90))
+        g.setColorAt(1, QColor(124, 58, 237, 10))
+        p.fillPath(fill, QBrush(g))
+        p.setPen(QPen(QColor("#ec4899"), 2.4))
+        p.drawPath(path)
+        for i, q in enumerate(pts):
+            p.setBrush(QColor("#2f9e44" if self.flags[i] else "#e03131"))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(q.x(), T + ph + 9), 3.5, 3.5)
+        p.setPen(QColor("#9aa0ad"))
+        p.drawText(L, H - 4, "oldest")
+        p.drawText(int(W - R - 60), H - 16, 60, 14,
+                   Qt.AlignmentFlag.AlignRight, "latest")
+
+
+_DASH_QSS = """
+QDialog { background: #f4f1f8; }
+QWidget { color: #2b2f3a; }
+QLabel { background: transparent; border: none; }
+QFrame#dcard { background: white; border: 1px solid #ebe7f2;
+               border-radius: 10px; }
+QScrollArea { background: transparent; border: none; }
+QScrollBar:vertical { background: transparent; width: 10px; }
+QScrollBar::handle:vertical { background: #d6d0e2; border-radius: 5px; }
+"""
+
+
+class CycleDashboard(QDialog):
+    """One page with everything, in a light dashboard style: totals, yield
+    trend, OK/NG share, this / previous cycle, scene + area results and the
+    latest cycles."""
+    N_TREND = 40
+
+    def __init__(self, hs):
+        super().__init__(hs)
+        self.hs = hs
+        self.setWindowTitle(f"Dashboard - {hs.head}")
+        w, h = fit_size(1120, 740)
+        self.resize(w, h)
+        self.setStyleSheet(_DASH_QSS)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(14, 12, 14, 12)
+        root.setSpacing(10)
+        top = QHBoxLayout()
+        self.title = QLabel(f"Dashboard  -  {hs.head}")
+        self.title.setStyleSheet("font-size: 16pt; font-weight: 800;")
+        top.addWidget(self.title, stretch=1)
+        self.stamp = QLabel("")
+        self.stamp.setStyleSheet("color: #8a90a0; font-size: 9pt;")
+        top.addWidget(self.stamp)
+        b = styled_btn(self, "Refresh", self.refresh, color="#ec4899")
+        top.addWidget(b)
+        root.addLayout(top)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        body = QWidget()
+        body.setObjectName("dbody")
+        body.setStyleSheet("QWidget#dbody { background: #f4f1f8; }")
+        self.body = QVBoxLayout(body)
+        self.body.setContentsMargins(0, 0, 6, 0)
+        self.body.setSpacing(12)
+        scroll.setWidget(body)
+        scroll.viewport().setStyleSheet("background: #f4f1f8;")
+        root.addWidget(scroll, stretch=1)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.refresh)
+        self._timer.start(2000)
+        self.refresh()
+
+    def closeEvent(self, e):
+        self._timer.stop()
+        e.accept()
+
+    # -- small builders ------------------------------------------------------
+    def _card(self, title, sub=""):
+        f = QFrame()
+        f.setObjectName("dcard")
+        lay = QVBoxLayout(f)
+        lay.setContentsMargins(16, 12, 16, 14)
+        lay.setSpacing(6)
+        t = QLabel(title)
+        t.setStyleSheet("font-size: 10pt; font-weight: 700;")
+        lay.addWidget(t)
+        if sub:
+            s = QLabel(sub)
+            s.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
+            lay.addWidget(s)
+        return f, lay
+
+    def _tile(self, label, value, note, c1, c2):
+        f = QFrame()
+        f.setObjectName("tile")
+        f.setMinimumHeight(96)
+        f.setStyleSheet(
+            "QFrame#tile { border-radius: 10px; background: qlineargradient("
+            f"x1:0,y1:0,x2:1,y2:1, stop:0 {c1}, stop:1 {c2}); }}"
+            " QLabel { color: white; background: transparent; }")
+        l = QVBoxLayout(f)
+        l.setContentsMargins(16, 10, 16, 10)
+        l.setSpacing(0)
+        k = QLabel(label)
+        k.setStyleSheet("font-size: 9pt;")
+        v = QLabel(str(value))
+        v.setStyleSheet("font-size: 24pt; font-weight: 800;")
+        n = QLabel(note)
+        n.setStyleSheet("font-size: 8pt;")
+        l.addWidget(k)
+        l.addWidget(v)
+        l.addWidget(n)
+        return f
+
+    @staticmethod
+    def _pill(text, ok):
+        col = {True: "#2f9e44", False: "#e03131", None: "#b8bcc8"}[ok]
+        l = QLabel(text)
+        l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        l.setFixedWidth(64)
+        l.setStyleSheet(f"background: {col}; color: white; font-size: 8pt;"
+                        " font-weight: 700; padding: 2px 0; border-radius: 4px;")
+        return l
+
+    def _clear(self):
+        while self.body.count():
+            it = self.body.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+
+    # -- content -------------------------------------------------------------
+    def refresh(self):
+        hs = self.hs
+        if not hs._alive:
+            self.close()
+            return
+        c = hs.app.heads.get_counters(hs.head)
+        ok, ng = c["cycle"]["ok"], c["cycle"]["ng"]
+        tot = ok + ng
+        yld = f"{100.0 * ok / tot:.1f}%" if tot else "-"
+        hist = hs.app.heads.get_cycles(hs.head)
+        self.stamp.setText("updated " + datetime.datetime.now()
+                           .strftime("%H:%M:%S"))
+        self._clear()
+
+        # 1) four gradient tiles
+        tr = QHBoxLayout()
+        tr.setSpacing(10)
+        w = QWidget()
+        w.setLayout(tr)
+        tr.setContentsMargins(0, 0, 0, 0)
+        for args in (("CYCLES", tot, "all finished cycles", "#ec4899", "#f472b6"),
+                     ("OK", ok, "good parts", "#7c3aed", "#6366f1"),
+                     ("NG", ng, "bad parts", "#f59e0b", "#fb923c"),
+                     ("YIELD", yld, "OK share", "#0ea5e9", "#38bdf8")):
+            tr.addWidget(self._tile(*args), stretch=1)
+        self.body.addWidget(w)
+
+        # 2) trend + donut
+        mid = QHBoxLayout()
+        mid.setSpacing(12)
+        mw = QWidget()
+        mw.setLayout(mid)
+        mid.setContentsMargins(0, 0, 0, 0)
+        card, lay = self._card("Yield trend",
+                               f"rolling OK share over the last "
+                               f"{self.N_TREND} cycles")
+        lay.addWidget(_Trend([bool(r.get("ok")) for r in
+                              hist[-self.N_TREND:]]), stretch=1)
+        mid.addWidget(card, stretch=3)
+        card, lay = self._card("OK / NG share", "all finished cycles")
+        lay.addWidget(_Donut([(ok, "#7c3aed"), (ng, "#f59e0b")],
+                             yld, "yield"), stretch=1)
+        leg = QHBoxLayout()
+        for txt, col, val in (("OK", "#7c3aed", ok), ("NG", "#f59e0b", ng)):
+            l = QLabel(f"<span style='color:{col}; font-size:14pt;'>&#9679;"
+                       f"</span> <b>{val}</b> {txt}")
+            leg.addWidget(l)
+        lay.addLayout(leg)
+        mid.addWidget(card, stretch=2)
+        self.body.addWidget(mw)
+
+        # 3) this / previous cycle
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        rw = QWidget()
+        rw.setLayout(row)
+        row.setContentsMargins(0, 0, 0, 0)
+        for title, rec in (("This cycle", hs._current_cycle_view()),
+                           ("Previous cycle", hs.prev_cycle)):
+            card, lay = self._card(title)
+            if rec:
+                self._cycle_rows(lay, rec)
+            else:
+                lay.addWidget(QLabel("no cycle yet"))
+            lay.addStretch()
+            row.addWidget(card, stretch=1)
+        self.body.addWidget(rw)
+
+        # 4) scenes / areas yield bars
+        card, lay = self._card("Scenes and areas", "every run, OK share")
+        if not c["scenes"]:
+            lay.addWidget(QLabel("no runs yet"))
+        for sc, v in sorted(c["scenes"].items()):
+            self._perf_row(lay, sc, v, bold=True)
+            for a, av in sorted(c["areas"].items()):
+                if a.startswith(sc + "/"):
+                    self._perf_row(lay, a.split("/", 1)[1], av, indent=22)
+        self.body.addWidget(card)
+
+        # 5) recent activity + table
+        bot = QHBoxLayout()
+        bot.setSpacing(12)
+        bw = QWidget()
+        bw.setLayout(bot)
+        bot.setContentsMargins(0, 0, 0, 0)
+        recent = hist[-8:][::-1]
+        card, lay = self._card("Recent activity", "latest finished cycles")
+        if not recent:
+            lay.addWidget(QLabel("nothing yet"))
+        for r in recent:
+            line = QHBoxLayout()
+            dot = QLabel("●")
+            dot.setStyleSheet("color: "
+                              + ("#2f9e44" if r.get("ok") else "#e03131")
+                              + "; font-size: 14pt;")
+            line.addWidget(dot)
+            col = QVBoxLayout()
+            col.setSpacing(0)
+            a = QLabel(f"{r.get('serial') or 'no serial'}  "
+                       f"{'OK' if r.get('ok') else 'NG'}")
+            a.setStyleSheet("font-weight: 700; font-size: 9pt;")
+            a.setWordWrap(True)
+            b2 = QLabel(f"{r.get('date', '')} {r.get('time', '')}"
+                        + (f"  {r['operator']}" if r.get("operator") else ""))
+            b2.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
+            col.addWidget(a)
+            col.addWidget(b2)
+            line.addLayout(col, stretch=1)
+            lay.addLayout(line)
+        lay.addStretch()
+        bot.addWidget(card, stretch=2)
+
+        card, lay = self._card("Cycle table", "latest 12, newest first")
+        head = QFrame()
+        head.setStyleSheet("QFrame { background: #2f3a4c; border-radius: 4px; }"
+                           " QLabel { color: white; font-size: 8pt;"
+                           " font-weight: 700; }")
+        hl = QHBoxLayout(head)
+        hl.setContentsMargins(8, 4, 8, 4)
+        for txt, st in (("TIME", 2), ("SERIAL", 3), ("OPERATOR", 2),
+                        ("FAILED", 3), ("RESULT", 1)):
+            q = QLabel(txt)
+            hl.addWidget(q, stretch=st)
+        lay.addWidget(head)
+        if not hist:
+            lay.addWidget(QLabel("no finished cycle yet"))
+        for r in hist[-12:][::-1]:
+            failed = [f"{sc}/{a}" for sc, ar in (r.get("scenes") or {}).items()
+                      for a, v in ar.items() if v is False]
+            line = QWidget()
+            ll = QHBoxLayout(line)
+            ll.setContentsMargins(8, 2, 8, 2)
+            cells = (f"{r.get('time', '')}", r.get("serial") or "-",
+                     r.get("operator") or "-",
+                     ", ".join(failed) or "-")
+            for txt, st in zip(cells, (2, 3, 2, 3)):
+                q = QLabel(txt)
+                q.setWordWrap(True)
+                q.setStyleSheet("font-size: 9pt;")
+                q.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                QSizePolicy.Policy.Preferred)
+                ll.addWidget(q, stretch=st)
+            pill = self._pill("OK" if r.get("ok") else "NG",
+                              bool(r.get("ok")))
+            ll.addWidget(pill, stretch=1)
+            line.setStyleSheet("QWidget { border-bottom: 1px solid #f0edf5; }")
+            lay.addWidget(line)
+        lay.addStretch()
+        bot.addWidget(card, stretch=5)
+        self.body.addWidget(bw)
+        self.body.addStretch()
+
+    def _cycle_rows(self, lay, rec):
+        ok = rec.get("ok")
+        word = ("running" if rec.get("running") and ok is None
+                else "OK" if ok else "NG" if ok is False else "waiting")
+        head = QHBoxLayout()
+        who = (rec.get("serial") or "no serial")
+        t = QLabel(who)
+        t.setWordWrap(True)
+        t.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        t.setStyleSheet("font-weight: 700; font-size: 10pt;")
+        head.addWidget(t, stretch=1)
+        head.addWidget(self._pill(word.upper(), ok))
+        lay.addLayout(head)
+        sub = "  ".join(x for x in (rec.get("operator"), rec.get("time")) if x)
+        if sub:
+            s = QLabel(sub)
+            s.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
+            lay.addWidget(s)
+        for sc, areas in sorted((rec.get("scenes") or {}).items()):
+            vals = list(areas.values())
+            sok = (False if any(v is False for v in vals)
+                   else True if vals and all(v is True for v in vals)
+                   else None)
+            r1 = QHBoxLayout()
+            n1 = QLabel(sc)
+            n1.setStyleSheet("font-weight: 700; font-size: 9pt;")
+            r1.addWidget(n1, stretch=1)
+            r1.addWidget(self._pill("OK" if sok else "NG" if sok is False
+                                    else "-", sok))
+            lay.addLayout(r1)
+            for a, v in sorted(areas.items()):
+                r2 = QHBoxLayout()
+                r2.setContentsMargins(18, 0, 0, 0)
+                n2 = QLabel(a)
+                n2.setStyleSheet("color: #6b7280; font-size: 8pt;")
+                r2.addWidget(n2, stretch=1)
+                r2.addWidget(self._pill("OK" if v else "NG" if v is False
+                                        else "-", v))
+                lay.addLayout(r2)
+
+    def _perf_row(self, lay, name, v, indent=0, bold=False):
+        n = v["ok"] + v["ng"]
+        pct = 100.0 * v["ok"] / n if n else 0.0
+        row = QHBoxLayout()
+        row.setContentsMargins(indent, 0, 0, 0)
+        nm = QLabel(name)
+        nm.setMinimumWidth(140)
+        nm.setStyleSheet("font-size: 10pt;"
+                         + (" font-weight: 700;" if bold else
+                            " color: #6b7280;"))
+        row.addWidget(nm)
+        bar = QFrame()
+        bar.setFixedHeight(10)
+        stop = pct / 100
+        bar.setStyleSheet(
+            "QFrame { border-radius: 5px; background: qlineargradient("
+            "x1:0,y1:0,x2:1,y2:0, "
+            f"stop:0 #7c3aed, stop:{max(0.0, stop - 0.001):.3f} #ec4899, "
+            f"stop:{stop:.3f} #f1ecf7, stop:1 #f1ecf7); }}")
+        row.addWidget(bar, stretch=1)
+        t = QLabel(f"OK {v['ok']}   NG {v['ng']}   {pct:.0f}%" if n else "-")
+        t.setMinimumWidth(150)
+        t.setStyleSheet("color: #6b7280; font-size: 9pt;")
+        row.addWidget(t)
+        lay.addLayout(row)
 
 
 # ============================================================================
@@ -6265,6 +7122,8 @@ class CommScreen(BaseScreen):
         if kind == "scanner":
             # quick-input scanning has nothing that can be left blank
             return (True, [])
+        if kind == "events":
+            return (True, [])        # all optional
         if kind == "qr":
             miss = [f for f in CommConfig.QR_FIELDS
                     if not str(d["qr"].get(f, "")).strip()]
@@ -6332,6 +7191,15 @@ class CommScreen(BaseScreen):
                               "–  CAMERA QR (no master QR yet — add one "
                               "in a scene)", "optional", ("qr",))
 
+        ev = self.cfg.data["events"]
+        n_ev = sum(1 for k in CommConfig.EVENT_FIELDS
+                   if str(ev.get(k, "")).strip())
+        self._mk_item(None, "events",
+                      ("OK  MACHINE MESSAGES"
+                       if n_ev else
+                       "–  MACHINE MESSAGES  (optional)"),
+                      "done" if n_ev else "optional", ("events",))
+
         done, miss = self._node_status("head")
         head_item = self._mk_item(
             None, "head",
@@ -6374,6 +7242,7 @@ class CommScreen(BaseScreen):
             "" if not missing else "Still left:  " + ",  ".join(missing))
         if sel:
             iid = {"scanner": "scanner", "qr": "qr", "head": "head",
+                   "events": "events",
                    "parent": f"parent::{sel[1]}" if len(sel) > 1 else None,
                    "child": (f"child::{sel[1]}::{sel[2]}"
                              if len(sel) > 2 else None)}[sel[0]]
@@ -6489,6 +7358,28 @@ class CommScreen(BaseScreen):
                  "SCAN / F2 on the model page, or use  Scanner  there\n"
                  "for the live scan test.")
 
+        elif kind == "events":
+            title("MACHINE MESSAGES  (optional)")
+            self.form_vars["ASK_MODEL"] = self._add_field(
+                f, "Ask current model:", d["events"].get("ASK_MODEL", ""),
+                "client sends this -> we answer with the Select signal\n"
+                "of the model that is running now (e.g. md)")
+            self.form_vars["BACK"] = self._add_field(
+                f, "Back-to-models signal:", d["events"].get("BACK", ""),
+                "client sends this exact text -> a popup asks:\n"
+                "go back to the model list, or continue")
+            self.form_vars["ERROR_PREFIX"] = self._add_field(
+                f, "Error message starts with:", d["events"].get("ERROR_PREFIX", ""),
+                "e.g. error  -> a client message that starts with it\n"
+                "shows an ERROR popup with the text after it")
+            self.form_vars["WARN_PREFIX"] = self._add_field(
+                f, "Warning message starts with:", d["events"].get("WARN_PREFIX", ""),
+                "e.g. warning  -> shows a WARNING popup with the text")
+            note("In every popup the operator can press  Go back to models  or\n"
+                 "Continue.  Continue - or no answer for 10 seconds - sends\n"
+                 "this model's Select signal back to the client.\n"
+                 "Leave a box empty to switch that message off.")
+
         elif kind == "qr":
             master = self.app.heads.get_master_qr(self.head)
             title("CAMERA QR  (master scan)")
@@ -6524,9 +7415,6 @@ class CommScreen(BaseScreen):
                 f, "Select signal:", d["head"].get("SELECT", ""),
                 "two directions: client sends it -> this model opens;\n"
                 "you open this model in the UI -> we send it to the client")
-            self.form_vars["PLC"] = self._add_field(
-                f, "In from client (run):", d["head"].get("PLC", ""),
-                "when received -> the whole model runs (all scenes)")
             self.form_vars["OK"] = self._add_field(
                 f, "Out to client / OK:", d["head"].get("OK", ""),
                 "sent when EVERY scene result is OK")
@@ -6605,7 +7493,6 @@ class CommScreen(BaseScreen):
             cfg = self.cfg if h == self.head \
                 else CommConfig(self.app.heads, h)
             put(cfg.data["head"].get("SELECT"), f"{h}.SELECT")
-            put(cfg.data["head"].get("PLC"), f"{h}.run")
             if self.app.heads.camera_qr_enabled(h):
                 put(cfg.data["qr"].get("TRIGGER"), f"{h}.qr_trigger")
             for p, pc in cfg.data["parents"].items():
@@ -6631,9 +7518,11 @@ class CommScreen(BaseScreen):
             return
         if sel[0] == "head":
             d["head"].update({k: v.get(k, "")
-                              for k in ("SELECT", "PLC", "OK", "NG")})
+                              for k in ("SELECT", "OK", "NG")})
         elif sel[0] == "qr":
             d["qr"].update({k: v.get(k, "") for k in CommConfig.QR_FIELDS})
+        elif sel[0] == "events":
+            d["events"].update({k: v.get(k, "") for k in CommConfig.EVENT_FIELDS})
         elif sel[0] == "parent":
             pc = d["parents"][sel[1]]
             pc.update({k: v.get(k, "") for k in ("PLC", "OK", "NG")})
@@ -6843,10 +7732,26 @@ class BuildParentScreen(BaseScreen):
         self.canvas.on_rect_drawn = lambda r: self._update_buttons()
 
         right = panel()
-        right.setFixedWidth(360)
+        right.setFixedWidth(372)
         rlay = QVBoxLayout(right)
-        rlay.setContentsMargins(10, 10, 10, 10)
-        rlay.setSpacing(8)
+        rlay.setContentsMargins(6, 8, 6, 8)
+        rlay.setSpacing(6)
+        # all the steps live in a scroll area: on a small screen the boxes
+        # keep their own height and you scroll, instead of being squashed
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        ctrl = QWidget()
+        ctrl.setStyleSheet("QWidget#ctrl { background: transparent; }")
+        ctrl.setObjectName("ctrl")
+        clay2 = QVBoxLayout(ctrl)
+        clay2.setContentsMargins(0, 0, 4, 0)
+        clay2.setSpacing(6)
+        scroll.setWidget(ctrl)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        rlay.addWidget(scroll, stretch=1)
 
         sec = QGroupBox(" STEP 1   AREA TO LOOK AT ")
         s1 = QVBoxLayout(sec)
@@ -6858,7 +7763,7 @@ class BuildParentScreen(BaseScreen):
         self.btn_reset_roi = styled_btn(sec, "Clear Area", self.reset_roi,
                                         color="#e03131")
         s1.addWidget(btn_row([self.btn_confirm_roi, self.btn_reset_roi]))
-        rlay.addWidget(sec)
+        clay2.addWidget(sec)
 
         sec2 = QGroupBox(" STEP 2   WHAT TO FIND ")
         s2 = QVBoxLayout(sec2)
@@ -6876,7 +7781,7 @@ class BuildParentScreen(BaseScreen):
         self.tmpl_count_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         self.tmpl_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s2.addWidget(self.tmpl_count_lbl)
-        rlay.addWidget(sec2)
+        clay2.addWidget(sec2)
 
         sec3 = QGroupBox(" STEP 3   FINE TUNING ")
         s3 = QGridLayout(sec3)
@@ -6895,7 +7800,7 @@ class BuildParentScreen(BaseScreen):
             s3.addWidget(l, i, 0)
             var.e.setFixedWidth(72)
             s3.addWidget(var.e, i, 1)
-        rlay.addWidget(sec3)
+        clay2.addWidget(sec3)
         self._area_boxes = [sec, sec2, sec3]
         self._box_roi, self._box_tmpl, self._box_tune = sec, sec2, sec3
 
@@ -6903,22 +7808,21 @@ class BuildParentScreen(BaseScreen):
         s4 = QVBoxLayout(sec4)
         self.btn_test = styled_btn(sec4, "Test Detect", self.test_detect,
                                    color="#f59f00")
-        s4.addWidget(self.btn_test)
         self.btn_back_live = styled_btn(sec4, "Back to Live",
                                         self.back_to_live, color="#44444e")
-        s4.addWidget(self.btn_back_live)
         self.btn_save = styled_btn(sec4, "Save Area", self.save_child,
                                    color="#2f9e44")
-        s4.addWidget(self.btn_save)
         self.btn_next = styled_btn(sec4, "Next Area", self.next_child,
                                    color="#44444e")
-        s4.addWidget(self.btn_next)
         self.btn_finish = styled_btn(sec4, "Finish Scene",
                                      self.finish_parent, color="#f59f00")
-        s4.addWidget(self.btn_finish)
-        s4.addWidget(styled_btn(sec4, "Auto Balance", self.auto_balance,
-                                color="#44444e"))
-        rlay.addWidget(sec4)
+        self.btn_balance = styled_btn(sec4, "Auto Balance", self.auto_balance,
+                                      color="#44444e")
+        # two buttons per row: short, side by side, never stretched tall
+        s4.addWidget(btn_row([self.btn_test, self.btn_back_live]))
+        s4.addWidget(btn_row([self.btn_save, self.btn_next]))
+        s4.addWidget(btn_row([self.btn_finish, self.btn_balance]))
+        clay2.addWidget(sec4)
 
         if self.qr_camera:
             sec5 = QGroupBox(" STEP 5   QR CODE (OPTIONAL) ")
@@ -6948,7 +7852,7 @@ class BuildParentScreen(BaseScreen):
             # into one row, which truncated the text.
             s5.addWidget(btn_row([self.btn_qr_region, self.btn_qr_full]))
             s5.addWidget(self.btn_qr_cancel)
-            rlay.addWidget(sec5)
+            clay2.addWidget(sec5)
             self._qr_refresh_list()
         self._box_actions = sec4
 
@@ -6958,7 +7862,8 @@ class BuildParentScreen(BaseScreen):
         self.log_box.setStyleSheet(
             f"QTextEdit {{ background: {C_FIELD}; color: #c8c8d0;"
             f" border: none; border-radius: 6px; font-size: 8pt; }}")
-        rlay.addWidget(self.log_box, stretch=1)
+        self.log_box.setFixedHeight(84)
+        rlay.addWidget(self.log_box)
         body.addWidget(right)
 
         self.app.camera.start()
@@ -7521,8 +8426,59 @@ class BuildParentScreen(BaseScreen):
 
 
 # ============================================================================
+# AUTO SCALE  -  one factor from the real screen, applied to EVERYTHING
+# (fonts, buttons, panels, popups, spacing) so the same program looks right
+# on a 1280x720 panel PC, a 1080p monitor or a 4K screen.
+#   design size = 1600 x 900  ->  factor 1.0
+#   1366x768 -> 0.85      1920x1080 -> 1.2      3840x2160 (100%) -> 2.0 (max)
+# Override: set  ui: scale: 1.3  in models/app_config.yaml,
+#           or the environment variable VISION_UI_SCALE=1.3
+# ============================================================================
+DESIGN_W, DESIGN_H = 1600.0, 900.0
+SCALE_MIN, SCALE_MAX = 0.8, 2.0
+
+
+def auto_ui_scale(screen_w, screen_h):
+    f = min(screen_w / DESIGN_W, screen_h / DESIGN_H)
+    return max(SCALE_MIN, min(SCALE_MAX, f))
+
+
+def _forced_scale():
+    """A scale the user fixed by hand (env var or app_config.yaml), or None."""
+    val = os.environ.get("VISION_UI_SCALE")
+    if not val:
+        try:
+            with open(APP_CONFIG_PATH) as f:
+                val = ((yaml.safe_load(f) or {}).get("ui") or {}).get("scale")
+        except (OSError, yaml.YAMLError, AttributeError):
+            val = None
+    try:
+        v = float(val)
+        return max(0.5, min(3.0, v)) if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _prepare_scale():
+    """Must run BEFORE the QApplication exists: reads the screen with a
+    throw-away QGuiApplication, then sets QT_SCALE_FACTOR."""
+    if os.environ.get("QT_SCALE_FACTOR"):
+        return
+    from PyQt6.QtGui import QGuiApplication
+    from PyQt6 import sip
+    f = _forced_scale()
+    if f is None:
+        tmp = QGuiApplication(sys.argv)
+        scr = tmp.primaryScreen()
+        geo = scr.size() if scr is not None else None
+        f = auto_ui_scale(geo.width(), geo.height()) if geo else 1.0
+        sip.delete(tmp)
+    os.environ["QT_SCALE_FACTOR"] = f"{f:.2f}"
+
+
 if __name__ == "__main__":
     import sys
+    _prepare_scale()
     qt_app = QApplication(sys.argv)
     qt_app.setStyleSheet(GLOBAL_QSS)
     app = App()

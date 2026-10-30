@@ -3,6 +3,7 @@ validation_password: '5678'
 locked: false
 ui:
   frame_scale: 0.6
+  show_regions_live: false
 scanner:
   test_timeout_s: 10
 qr:

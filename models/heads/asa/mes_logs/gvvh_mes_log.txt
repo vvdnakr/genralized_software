@@ -1,0 +1,12 @@
+======================================================================
+Time     : 2026-10-30 18:06:49 UTC
+URL      : http://172.17.192.237/user/user_login/
+Payload  :
+{
+  "username": "pt2user",
+  "password": "vvdntech",
+  "stage_name": "pt2"
+}
+Response :
+HTTPConnectionPool(host='172.17.192.237', port=80): Max retries exceeded with url: /user/user_login/ (Caused by ConnectTimeoutError(<HTTPConnection(host='172.17.192.237', port=80) at 0x7c4d403e5dc0>, 'Connection to 172.17.192.237 timed out. (connect timeout=15)'))
+

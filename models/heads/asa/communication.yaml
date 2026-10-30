@@ -1,6 +1,5 @@
 head:
   SELECT: '1'
-  PLC: we
   OK: ok
   NG: ng
 qr:
@@ -8,6 +7,11 @@ qr:
   TRIGGER: ''
   OK: ''
   NG: ''
+events:
+  ASK_MODEL: md
+  BACK: ''
+  ERROR_PREFIX: ''
+  WARN_PREFIX: ''
 parents:
   s1:
     PLC: s1
