@@ -1,0 +1,19 @@
+2026-10-30 14:08:29 | EVT | data buffer: 12 file(s) older than 2 day(s) deleted
+2026-10-30 14:08:32 | EVT | model 'user' selected in UI (comm OFF — '2' not sent)
+2026-10-30 14:08:35 | EVT | barcode scanned: '123'
+2026-10-30 14:08:39 | EVT | MES prev-stage ERROR '123': 123: Please try again! The entered input does not contain any valid serial number.
+2026-10-30 14:08:45 | EVT | scanner config saved for model 'user' (enabled=True, source=scanner, auto_popup=True, require_operator=False)
+2026-10-30 14:08:47 | EVT | scanner config saved for model 'user' (enabled=True, source=scanner, auto_popup=True, require_operator=False)
+2026-10-30 14:09:07 | EVT | barcode scanned: 'qw'
+2026-10-30 14:09:11 | EVT | MES prev-stage ERROR 'qw': qw: Please try again! The entered input does not contain any valid serial number.
+2026-10-30 14:09:16 | EVT | scanner config saved for model 'user' (enabled=True, source=camera, auto_popup=True, require_operator=False)
+2026-10-30 14:18:12 | EVT | model 'user' selected in UI (comm OFF — '2' not sent)
+2026-10-30 14:19:29 | EVT | QR attempt 1/10 FAILED [MANUAL]: unstable read - frames disagree ('Apps Wind Studio' x1); need 2 matching frames and a clear lead
+2026-10-30 14:19:37 | EVT | QR attempt 2/10 FAILED [MANUAL]: unstable read - frames disagree ('http://en.m.wikipedia.org' x1); need 2 matching frames and a clear lead
+2026-10-30 14:19:39 | EVT | QR read OK 'http://en.m.wikipedia.org' [MANUAL] attempt 3
+2026-10-30 14:19:39 | EVT | barcode scanned: 'http://en.m.wikipedia.org'
+2026-10-30 14:19:41 | EVT | MES prev-stage ERROR 'http://en.m.wikipedia.org': http://en.m.wikipedia.org: HTTP 404
+2026-10-30 14:24:47 | EVT | model 'user' selected in UI (comm OFF — '2' not sent)
+2026-10-30 14:25:34 | EVT | QR read OK 'http://en.m.wikipedia.org' [MANUAL] attempt 1
+2026-10-30 14:25:34 | EVT | barcode scanned: 'http://en.m.wikipedia.org'
+2026-10-30 14:25:35 | EVT | MES prev-stage ERROR 'http://en.m.wikipedia.org': http://en.m.wikipedia.org: HTTP 404

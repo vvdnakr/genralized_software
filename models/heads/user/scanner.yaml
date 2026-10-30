@@ -3,4 +3,4 @@ prefix: qr
 send_to_client: true
 auto_popup: true
 require_operator: false
-source: scanner
+source: camera

@@ -4802,7 +4802,7 @@ class HeadScreen(BaseScreen):
             "pass":     ("Previous station passed", C_OK),
             "all_passed": ("Already passed by this station", C_OK),
             "fail":     ("Previous station NOT passed", C_NG),
-            "error":    ("Serial no is not valid", C_NG),
+            "error":    ("Serial No is Not Valid ", C_NG),
             "sending":  ("Sending the result to MES...", C_WARN),
             "sent":     ("Result sent to MES", C_OK),
             "senderr":  ("Result NOT sent to MES", C_NG),
@@ -6843,7 +6843,7 @@ class BuildParentScreen(BaseScreen):
         self.canvas.on_rect_drawn = lambda r: self._update_buttons()
 
         right = panel()
-        right.setFixedWidth(310)
+        right.setFixedWidth(360)
         rlay = QVBoxLayout(right)
         rlay.setContentsMargins(10, 10, 10, 10)
         rlay.setSpacing(8)
@@ -6935,7 +6935,6 @@ class BuildParentScreen(BaseScreen):
                                          color="#e03131")
             s5.addWidget(btn_row([self.btn_qr_add, self.btn_qr_test,
                                   self.btn_qr_del]))
-            r5b = QHBoxLayout()
             self.btn_qr_region = styled_btn(sec5, "Use this region",
                                             self.qr_confirm_region,
                                             color="#2f9e44")
@@ -6944,10 +6943,11 @@ class BuildParentScreen(BaseScreen):
                                           color="#44444e")
             self.btn_qr_cancel = styled_btn(sec5, "Cancel", self.qr_cancel,
                                             color="#44444e")
-            for b in (self.btn_qr_region, self.btn_qr_full,
-                      self.btn_qr_cancel):
-                r5b.addWidget(b)
-            s5.addLayout(r5b)
+            # "Use this region" / "Use whole picture" are long labels — give
+            # them their own row (2-wide) instead of squeezing 3 buttons
+            # into one row, which truncated the text.
+            s5.addWidget(btn_row([self.btn_qr_region, self.btn_qr_full]))
+            s5.addWidget(self.btn_qr_cancel)
             rlay.addWidget(sec5)
             self._qr_refresh_list()
         self._box_actions = sec4
@@ -7010,6 +7010,12 @@ class BuildParentScreen(BaseScreen):
             self._box_tmpl.setVisible(has_roi)
             self._box_tune.setVisible(has_tmpl)
             self._box_actions.setVisible(has_tmpl)
+        else:
+            # a MASTER QR scene has no area steps at all, so STEP 4 (which
+            # holds Finish Scene) must stay visible on its own — otherwise
+            # it stays hidden forever (it starts hidden, before any QR is
+            # added, and only the branch above ever shows it again).
+            self._box_actions.setVisible(True)
         if self.qr_camera:
             qr_mode = self.mode == self.MODE_QR and self.qr_pending is not None
             self.btn_qr_add.setEnabled(not qr_mode and not self.busy)
