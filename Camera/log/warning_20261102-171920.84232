@@ -1,0 +1,6 @@
+Log file created at: 2026/11/02 17:19:20
+Running on machine: 39746--TNA--MCP7
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+W1102 17:19:20.244520 87607 MVCameraBase.cpp:100] Device:(name:MV-SUA1201C#0 sn:046031520853)Lost
+W1102 17:28:21.420578 87614 MVCameraBase.cpp:100] Device:(name:MV-SUC2500GC#1 sn:046092420603)Lost
+W1102 17:28:44.850857 87607 MVCameraBase.cpp:120] Device:(name:MV-SUA1201C#0 sn:046031520853)ReConnected, TolCount:1

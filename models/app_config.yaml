@@ -1,6 +1,6 @@
 password: '1234'
 validation_password: '5678'
-locked: false
+locked: true
 ui:
   frame_scale: 0.6
   show_regions_live: false
@@ -28,3 +28,8 @@ health:
 cycle_popup:
   enabled: true
   auto_close_s: 5
+security:
+  kiosk_lock: true
+  grab_keyboard: true
+  gnome_shortcuts: true
+  master_password_sha256: 85d12a96eaa7ad0c85a5a4faa7be55c95d82a94cbbd04de55a8daa5213a30f5a

@@ -14,4 +14,5 @@ file_format: txt
 block_on_prev_fail: true
 upload_images: true
 defect_type: Pin Bend
-validation_serials: []
+validation_serials:
+- '123'

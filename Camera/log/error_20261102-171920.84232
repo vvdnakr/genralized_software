@@ -1,0 +1,46 @@
+Log file created at: 2026/11/02 17:19:20
+Running on machine: 39746--TNA--MCP7
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+E1102 17:19:20.244902 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.345029 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.445158 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.545279 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.646004 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.810648 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:20.910768 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.010881 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.111065 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.211167 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.311359 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.411553 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.511785 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.611944 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.712124 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.812243 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:21.912354 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.013828 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.113996 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.214113 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.314255 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.414408 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.514991 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.615131 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.715451 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.815594 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:22.915776 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:23.015923 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:23.116039 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:19:23.216146 87607 U3VControl.cpp:76] ReadAddr:268435728, BulkOut error:-4
+E1102 17:28:25.828465 84232 MVCameraBase.cpp:1848] Function:NewIspWBOnce, Code:DevIsp3WBOnce(), Error:-19
+E1102 17:28:25.828496 84232 CameraU3VBase.cpp:2168] Function:WhiteBalanceOnce, Code:NewIspWBOnce(), Error:-19
+E1102 17:28:25.828511 84232 CameraU3VBase.cpp:414] Function:GetExpTime, Code:get_exposure_time(exp_time), Error:-19
+E1102 17:28:25.828519 84232 CameraU3VBase.cpp:513] Function:GetAnalogGain, Code:get_analog_gain(fGain), Error:-19
+E1102 17:28:25.828528 84232 CameraU3VBase.cpp:2151] Function:GetRgbGain, Code:get_rgb_gain(Val), Error:-19
+E1102 17:28:26.820032 84232 CameraU3VBase.cpp:782] Function:PauseVideo, Code:set_acquisition_command(0), Error:-19
+E1102 17:28:27.664553 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:28.164855 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:28.665057 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:29.165243 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:29.665442 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:30.165673 84232 MVCAMAPI.cpp:382] CameraInit Failed, err:-19,Version:2.1.0.49,FriendlyName:MV-SUC2500GC#1,SN:046092420603
+E1102 17:28:33.057325 84232 CameraU3VBase.cpp:1646] Function:SetTriggerSel, Code:set_trigger_mode(0), Error:-19

@@ -1,0 +1,5 @@
+Log file created at: 2026/11/02 16:44:29
+Running on machine: 39746--TNA--MCP7
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+E1102 16:44:29.531323 84232 CameraU3VBase.cpp:1646] Function:SetTriggerSel, Code:set_trigger_mode(0), Error:-19
+E1102 16:44:41.490110 84232 CameraU3VBase.cpp:782] Function:PauseVideo, Code:set_acquisition_command(0), Error:-19

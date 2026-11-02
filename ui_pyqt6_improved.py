@@ -53,6 +53,7 @@ APP_CONFIG_PATH = os.path.join(MODELS_BASE, "app_config.yaml")
 # ============================================================================
 from camera_calibration import (CameraHub, ModelCameraWizard,
                                 image_stats, drift_check)
+from kiosk_lock import InputLock, hash_password, MASTER_DEFAULT_HASH
 
 
 class AppConfig:
@@ -87,6 +88,14 @@ class AppConfig:
                                                   # Comm ON (0 = never)
             "cycle_popup": {"enabled": True,
                             "auto_close_s": 5},   # 0 = stay until OK pressed
+            # while LOCKED: keyboard and mouse only work inside the program.
+            # The MASTER password frees them (and opens the hidden features)
+            # but does NOT unlock the program.  Only its hash is stored;
+            # change it with:  python ui_pyqt6_improved.py --set-master 1234
+            "security": {"kiosk_lock": True,
+                         "grab_keyboard": True,
+                         "gnome_shortcuts": True,
+                         "master_password_sha256": MASTER_DEFAULT_HASH},
         }
         self.load()
 
@@ -105,6 +114,7 @@ class AppConfig:
                 self.data["retention"].update(saved.get("retention") or {})
                 self.data["health"].update(saved.get("health") or {})
                 self.data["cycle_popup"].update(saved.get("cycle_popup") or {})
+                self.data["security"].update(saved.get("security") or {})
             except yaml.YAMLError:
                 pass
         self.save()   # make sure the file exists with all parameters
@@ -2776,6 +2786,22 @@ class App(QMainWindow):
         QTimer.singleShot(800, self._health_tick)
         QTimer.singleShot(1000, self.engine.start)  # start the comm engine after the UI is up
 
+        # keyboard / mouse lock while LOCKED, master password, hidden features
+        sec = self.app_config.data["security"]
+        self.master_mode = False
+        self.master_features = []        # [(label, fn)] - see add_master_feature
+        self.kiosk = InputLock(
+            self, os.path.join(MODELS_BASE, "kiosk_backup.json"),
+            grab_keyboard=sec.get("grab_keyboard", True),
+            gnome_shortcuts=sec.get("gnome_shortcuts", True),
+            on_master_key=lambda: self.ask_master(self),
+            log=lambda m: self.comm_log.add("EVT", m))
+        self.kiosk.recover(wait=True)      # shortcuts left off by a crash
+        QShortcut(QKeySequence("Ctrl+Shift+F12"), self,
+                  activated=lambda: self.ask_master(self))
+        if self.is_locked():
+            QTimer.singleShot(800, self._engage_kiosk)
+
         self.show_home()
 
     # -- window always matches the screen it opens on ------------------------
@@ -2889,8 +2915,65 @@ class App(QMainWindow):
             QTimer.singleShot(ms, fn)
 
     def closeEvent(self, e):
+        if getattr(self, "kiosk", None) is not None and self.kiosk.engaged:
+            e.ignore()                 # locked: the program cannot be closed
+            return
         self.engine.stop()
+        try:
+            self.kiosk.release(wait=True)
+            self.kiosk.recover(wait=True)
+        except Exception:
+            pass
         e.accept()
+
+    # -- keyboard / mouse lock + master mode ------------------------------------
+    def _kiosk_on(self):
+        return bool(self.app_config.data["security"].get("kiosk_lock", True))
+
+    def _engage_kiosk(self):
+        if self.is_locked() and self._kiosk_on() and not self.master_mode:
+            self.kiosk.engage()
+
+    def setup_open(self):
+        """Setup buttons visible: program unlocked, or MASTER mode."""
+        return (not self.is_locked()) or bool(getattr(self, "master_mode",
+                                                      False))
+
+    def is_master_password(self, pw):
+        want = str(self.app_config.data["security"].get(
+            "master_password_sha256", MASTER_DEFAULT_HASH))
+        return bool(pw) and hash_password(pw) == want
+
+    def ask_master(self, parent=None):
+        """Master password only: frees keyboard + mouse, opens MASTER mode."""
+        pw = ask_password(parent or self, "Master password",
+                          "Only the master password frees the keyboard and "
+                          "the mouse.")
+        if pw is None:
+            return
+        if self.is_master_password(pw):
+            self.master_mode = True
+            self.kiosk.release()
+            self.comm_log.add("EVT", "MASTER mode opened")
+            self.refresh_screen()
+            Message.ok(self, "MASTER MODE", "Keyboard and mouse are free.",
+                       auto_ms=3000)
+        else:
+            Message.error(parent or self, "Wrong password",
+                          "That is not the master password.")
+
+    def add_master_feature(self, label, fn):
+        """Hidden features: shown only in MASTER mode (future use)."""
+        self.master_features.append((label, fn))
+
+    def leave_master(self):
+        self.master_mode = False
+        self.comm_log.add("EVT", "MASTER mode closed")
+        self._engage_kiosk()
+        self.refresh_screen()
+
+    def open_master_panel(self, parent=None):
+        MasterPanel(parent or self, self).exec()
 
     # -- lock / controls -----------------------------------------------------
     def is_locked(self):
@@ -2899,10 +2982,14 @@ class App(QMainWindow):
     def lock(self):
         self.app_config.data["locked"] = True
         self.app_config.save()
+        self.master_mode = False
         self.comm_log.add("EVT", "UI LOCKED (operator mode)")
         Message.ok(self, "LOCKED",
-                  "Setup is now hidden. Operator mode.")
+                  "Setup is now hidden. Operator mode."
+                  + ("\nKeyboard and mouse work only in this program."
+                     if self._kiosk_on() else ""))
         self.refresh_screen()
+        QTimer.singleShot(300, self._engage_kiosk)
 
     def unlock_with_password(self, parent):
         pw = ask_password(parent, "Enter the password",
@@ -2911,21 +2998,58 @@ class App(QMainWindow):
         if pw is None:
             return
         if pw == str(self.app_config.data.get("password", "1234")):
+            # the program opens, but keyboard + mouse stay locked:
+            # ONLY the master password frees them
             self.app_config.data["locked"] = False
             self.app_config.save()
             self.comm_log.add("EVT", "UI UNLOCKED (controls open)")
             self.refresh_screen()
+        elif self.is_master_password(pw):
+            # MASTER: keyboard + mouse free, hidden features open,
+            # but the program itself stays locked
+            self.master_mode = True
+            self.kiosk.release()
+            self.comm_log.add("EVT", "MASTER mode opened")
+            self.refresh_screen()
+            Message.ok(self, "MASTER MODE",
+                       "Keyboard and mouse are free."
+                       + ("\nThe program is still locked - its own "
+                          "password is needed to open the setup."
+                          if self.is_locked() else ""), auto_ms=4000)
         else:
             Message.error(parent, "Wrong password",
                           "That password is not correct. Please try again.")
 
     def lock_button(self, master):
-        """Shared 'Controls'/'Lock' button for the top bars."""
+        """Shared 'Controls'/'Lock' button for the top bars (plus the
+        'Master' button while MASTER mode is open)."""
         if self.is_locked():
-            return styled_btn(master, "Unlock Setup",
-                              lambda: self.unlock_with_password(master),
-                              color="#f59f00")
-        return styled_btn(master, "Lock", self.lock, color="#44444e")
+            b = styled_btn(master, "Unlock Setup",
+                           lambda: self.unlock_with_password(master),
+                           color="#f59f00")
+        else:
+            b = styled_btn(master, "Lock", self.lock, color="#44444e")
+        extra = None
+        if getattr(self, "master_mode", False):
+            extra = styled_btn(master, "Master",
+                               lambda: self.open_master_panel(master),
+                               color="#845ef7")
+        elif not self.is_locked() and getattr(self, "kiosk", None) is not \
+                None and self.kiosk.engaged:
+            # setup is open, but keyboard + mouse are still locked
+            extra = styled_btn(master, "Free Keyboard",
+                               lambda: self.ask_master(master),
+                               color="#44444e")
+        if extra is None:
+            return b
+        box = QWidget()
+        box.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(box)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(8)
+        h.addWidget(extra)
+        h.addWidget(b)
+        return box
 
     # -- operator session ----------------------------------------------------
     # The Operator ID is tied to *selecting* a model, not to building the
@@ -3151,6 +3275,52 @@ class App(QMainWindow):
         self._alerts["client_notice"] = dlg
         dlg.show()
         dlg.raise_()
+
+
+class MasterPanel(QDialog):
+    """MASTER mode: hidden features (registered with
+    App.add_master_feature) and the keyboard / mouse lock."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.setWindowTitle("Master")
+        self.setModal(True)
+        self.setMinimumWidth(560)
+        _premium_dialog(self, "#845ef7")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band("MASTER", "#845ef7"))
+        inner = QVBoxLayout()
+        inner.setContentsMargins(26, 20, 26, 20)
+        inner.setSpacing(10)
+        st = QLabel("Program: " + ("LOCKED" if app.is_locked() else "open")
+                    + "     Keyboard and mouse: "
+                    + ("locked" if app.kiosk.engaged else "free"))
+        st.setStyleSheet(f"color: {C_MUTED}; font-size: 11pt;")
+        inner.addWidget(st)
+        if app.master_features:
+            for label, fn in app.master_features:
+                inner.addWidget(styled_btn(
+                    self, label, lambda f=fn: (self.accept(), f()),
+                    color="#44444e"))
+        else:
+            n = QLabel("No hidden features yet.")
+            n.setStyleSheet(f"color: {C_MUTED}; font-size: 11pt;")
+            inner.addWidget(n)
+        row = []
+        if app.is_locked() and app._kiosk_on():
+            row.append(styled_btn(self, "Lock keyboard and mouse again",
+                                  lambda: (self.accept(), app.leave_master()),
+                                  color="#44444e"))
+        else:
+            row.append(styled_btn(self, "Close master mode",
+                                  lambda: (self.accept(), app.leave_master()),
+                                  color="#44444e"))
+        row.append(styled_btn(self, "Close", self.accept, color=C_ACCENT))
+        inner.addWidget(btn_row(row))
+        lay.addLayout(inner)
 
 
 class ClientNotice(QDialog):
@@ -3992,13 +4162,13 @@ class HomeScreen(BaseScreen):
         head.addWidget(sub)
         top.addLayout(head)
         top.addStretch()
-        if not app.is_locked():
+        if app.setup_open():
             top.addWidget(styled_btn(self, "Camera Setup",
                                      app.show_camera_setup,
                                      color="#44444e"))
         top.addWidget(app.lock_button(self))
         lay.addLayout(top)
-        if not app.is_locked():
+        if app.setup_open():
             lay.addWidget(hint_label(
                 "A model holds everything needed to check one part: what the "
                 "camera looks at, the good/bad rule, the barcode scanner and "
@@ -4045,7 +4215,7 @@ class HomeScreen(BaseScreen):
                                " font-weight: 700;")
             rlay.addWidget(name)
             cnt = self.app.heads.get_counters(h)["cycle"]
-            if self.app.is_locked():
+            if not self.app.setup_open():
                 status = (f"   cycles  OK {cnt['ok']} / NG {cnt['ng']}")
             else:
                 cfg = CommConfig(self.app.heads, h)
@@ -4064,7 +4234,7 @@ class HomeScreen(BaseScreen):
             rlay.addWidget(st)
             rlay.addStretch()
             rowbtns = []
-            if not self.app.is_locked():
+            if self.app.setup_open():
                 rowbtns.append(styled_btn(
                     row, "Delete", lambda hh=h: self.delete_head(hh),
                     color="#c92a2a"))
@@ -4128,7 +4298,7 @@ class HeadScreen(BaseScreen):
         self.comm_cfg = CommConfig(app.heads, head_name)
         self.compare_targets = []
         self.compare_mode = "side"
-        locked = app.is_locked()
+        locked = not app.setup_open()          # MASTER mode = setup open
 
         # barcode scanner state (cycle gate — quick-input scan box)
         self.scanner_cfg = app.heads.get_scanner(head_name)
@@ -4289,6 +4459,9 @@ class HeadScreen(BaseScreen):
             mb = [styled_btn(self, "Add Scene", self.add_parent,
                              color="#2f9e44" if not self.n_scenes
                              else "#44444e")]
+            if self.n_scenes:
+                mb.append(styled_btn(self, "Edit Scene", self.edit_parent,
+                                     color="#44444e"))
             if self.n_scenes and not self.finished:
                 mb.append(styled_btn(self, "Finish Model", self.finish_head,
                                      color="#f59f00"))
@@ -4436,10 +4609,13 @@ class HeadScreen(BaseScreen):
                 rl.addWidget(vline())
                 tcap = QVBoxLayout()
                 tcap.setSpacing(2)
-                tcap.addWidget(caption("Pin limit (px)"))
+                tcap.addWidget(caption("Default pin limit (px)"))
                 _thr_edit.setFixedWidth(80)
                 _thr_edit.setToolTip("A pin shifted more than this from the "
-                                     "master (or missing) = NG")
+                                     "master (or missing) = NG.  Used by "
+                                     "areas that have no pin limit of "
+                                     "their own (set it per area with Edit "
+                                     "Scene).")
                 _thr_edit.returnPressed.connect(self._save_dist_thr)
                 _thr_edit.editingFinished.connect(self._save_dist_thr)
                 tcap.addWidget(_thr_edit)
@@ -6381,6 +6557,21 @@ class HeadScreen(BaseScreen):
             return
         self.app.show_build_parent(self.head, name)
 
+    def edit_parent(self):
+        """Open a saved scene: change its areas, templates, thresholds,
+        regions, pin limits, or add / delete areas."""
+        scenes = self.app.heads.list_parents(self.head)
+        if not scenes:
+            return
+        if len(scenes) == 1:
+            name = scenes[0]
+        else:
+            name, ok = QInputDialog.getItem(
+                self, "Edit scene", "Which scene?", scenes, 0, False)
+            if not ok or not name:
+                return
+        self.app.show_build_parent(self.head, name)
+
     def finish_head(self):
         structure = self.app.heads.structure(self.head)
         if not any(children for children in structure.values()):
@@ -6533,8 +6724,13 @@ class HeadScreen(BaseScreen):
                         max_matches=cfg["max_matches"],
                         visualize=True, t=time.time(),
                         config=cd, name=child_name))
+                # each area may have its own pin limit (else the model's)
+                try:
+                    area_thr = float(cfg.get("pin_limit") or dist_thr)
+                except (TypeError, ValueError):
+                    area_thr = dist_thr
                 ok, pins, summ = analyze_pins(cfg.get("matches", []),
-                                              matches, dist_thr)
+                                              matches, area_thr)
                 master_n = summ["total"] if summ["total"] else \
                     len(cfg.get("matches", []))
                 results[parent_name][child_name] = {
@@ -6544,6 +6740,7 @@ class HeadScreen(BaseScreen):
                     line = (f" {child_name:<12} "
                             f"{'OK ' if ok else 'NG '}"
                             f" {summ['in_range']}/{summ['total']} pins ok"
+                            f" (limit {area_thr:g}px)"
                             f"   shift {summ['mean_dx']:+.0f},"
                             f"{summ['mean_dy']:+.0f} px")
                     n_shift = sum(1 for p in pins
@@ -6581,7 +6778,7 @@ class HeadScreen(BaseScreen):
                     (x0, y0, x1 - x0, y1 - y0,
                      f"{child_name} {'OK' if ok else 'NG'} "
                      f"{count_txt}{shift_txt}", ok))
-                pin_overlays.append((pins, x0, y0))
+                pin_overlays.append((pins, x0, y0, area_thr))
                 any_output = True
 
             # camera QR scanners of this scene (full-scene / model runs)
@@ -6657,9 +6854,8 @@ class HeadScreen(BaseScreen):
                      for gp, gf in groups]
             for g in parts:
                 if g["any_output"]:
-                    for pins, ox, oy in g["pin_overlays"]:
-                        draw_pin_overlay(g["out_frame"], pins, ox, oy,
-                                         dist_thr)
+                    for pins, ox, oy, athr in g["pin_overlays"]:
+                        draw_pin_overlay(g["out_frame"], pins, ox, oy, athr)
                     for (bx, by, bw, bh, text, ok) in g["child_boxes"]:
                         label_box(g["out_frame"], bx, by, bw, bh, text, ok)
                         label_box(g["proc"], bx, by, bw, bh, text, ok)
@@ -7892,6 +8088,9 @@ class BuildParentScreen(BaseScreen):
         self.child_index = 1
         self.current_child_name = None
         self.current_child_saved = False
+        self._editing = None          # name of the saved area being changed
+        self._model_pin = float(app.heads.get_settings(head_name)
+                                .get("distance_threshold", 20))
         self.region_snapshot = None
         self.mode = self.MODE_LIVE
         self.result_img = None
@@ -7976,7 +8175,7 @@ class BuildParentScreen(BaseScreen):
                 cb.setStyleSheet(
                     f"QComboBox {{ color: {C_TEXT}; background: {C_FIELD};"
                     f" border: 1px solid {C_LINE}; border-radius: 6px;"
-                    " padding: 5px 8px; }}"
+                    " padding: 5px 8px; }"
                     f"QComboBox QAbstractItemView {{ color: {C_TEXT};"
                     f" background: {C_PANEL}; }}")
             for sl in self._cam_store.slots():
@@ -8008,6 +8207,30 @@ class BuildParentScreen(BaseScreen):
             self._show_ref()
             clay2.addWidget(sec0)
 
+        # saved areas of this scene: open one to change it, or delete it
+        self.sec_areas = QGroupBox(" AREAS IN THIS SCENE ")
+        sa = QVBoxLayout(self.sec_areas)
+        self.cmb_area = QComboBox()
+        self.cmb_area.setStyleSheet(
+            f"QComboBox {{ color: {C_TEXT}; background: {C_FIELD};"
+            f" border: 1px solid {C_LINE}; border-radius: 6px;"
+            " padding: 5px 8px; }"
+            f"QComboBox QAbstractItemView {{ color: {C_TEXT};"
+            f" background: {C_PANEL}; }}")
+        sa.addWidget(self.cmb_area)
+        self.btn_area_open = styled_btn(self.sec_areas, "Open Area",
+                                        self.open_area, color="#44444e")
+        self.btn_area_del = styled_btn(self.sec_areas, "Delete Area",
+                                       self.delete_area, color="#e03131")
+        sa.addWidget(btn_row([self.btn_area_open, self.btn_area_del]))
+        self.area_hint = QLabel("Open a saved area to change its region, "
+                                "templates, thresholds or pin limit.")
+        self.area_hint.setWordWrap(True)
+        self.area_hint.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
+        sa.addWidget(self.area_hint)
+        clay2.addWidget(self.sec_areas)
+        self._fill_areas()
+
         sec = QGroupBox(" STEP 1   AREA TO LOOK AT ")
         s1 = QVBoxLayout(sec)
         self.btn_sel_roi = styled_btn(sec, "Select ROI (drag on video)",
@@ -8032,6 +8255,10 @@ class BuildParentScreen(BaseScreen):
                                          self.reset_template,
                                          color="#e03131")
         s2.addWidget(btn_row([self.btn_confirm_tmpl, self.btn_reset_tmpl]))
+        self.btn_clear_tmpls = styled_btn(sec2, "Remove All Templates",
+                                          self.clear_templates,
+                                          color="#44444e")
+        s2.addWidget(self.btn_clear_tmpls)
         self.tmpl_count_lbl = QLabel("Templates: 0")
         self.tmpl_count_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         self.tmpl_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -8045,11 +8272,16 @@ class BuildParentScreen(BaseScreen):
         self.var_smax = FVar(QLineEdit("1.5"))
         self.var_steps = IVar(QLineEdit("20"))
         self.var_maxm = IVar(QLineEdit("20"))
+        self.var_pin = FVar(QLineEdit(f"{self._model_pin:g}"))
+        self.var_pin.e.setToolTip("A pin shifted more than this many pixels "
+                                  "from the master (or missing) = NG.  Each "
+                                  "area has its own limit.")
         for i, (label, var) in enumerate([("Threshold", self.var_thresh),
                                           ("Scale min", self.var_smin),
                                           ("Scale max", self.var_smax),
                                           ("Scale steps", self.var_steps),
-                                          ("Max matches", self.var_maxm)]):
+                                          ("Max matches", self.var_maxm),
+                                          ("Pin limit (px)", self.var_pin)]):
             l = QLabel(label)
             l.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
             s3.addWidget(l, i, 0)
@@ -8125,7 +8357,7 @@ class BuildParentScreen(BaseScreen):
         self._apply_camera_choice()
         self._update_buttons()
      
-        self._set_status(f"Area: area_{self.child_index} — select ROI first")
+        self._set_status(f"Area: {self._free_area_name()} — select ROI first")
         self._apply_master_lock()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
@@ -8158,6 +8390,8 @@ class BuildParentScreen(BaseScreen):
         self.btn_back_live.setEnabled(self.mode == self.MODE_RESULT)
         self.tmpl_count_lbl.setText(
             f"Templates: {len(self.template_list)}")
+        self.btn_clear_tmpls.setVisible(bool(self.template_list)
+                                        and not tmpl_mode)
         # a button that cannot be used yet is hidden, so the operator always
         # sees exactly one next step
         for b in (self.btn_confirm_roi, self.btn_reset_roi,
@@ -8369,16 +8603,34 @@ class BuildParentScreen(BaseScreen):
                                 "before saving.")
             return
         if self.current_child_name is None:
-            default = f"area_{self.child_index}"
+            default = self._free_area_name()
             name, ok = QInputDialog.getText(
                 self, "Area name", f"Area name (default '{default}'):")
             if not ok:
                 name = None
             self.current_child_name = (name.strip()
                                        if name and name.strip() else default)
+        try:
+            pin = float(self.var_pin.get())
+            if pin <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            Message.warn(self, "Pin limit", "Type a pin limit in pixels, "
+                         "for example 20.")
+            return
         frame = getattr(self, "_last_frame_for_save", None)
         if frame is None:
             frame = self.app.camera.get_frame()
+        # changing a saved area: drop its old templates first, otherwise a
+        # removed template would still be loaded from disk
+        adir = self.child_manager._paths(self.current_child_name)["dir"]
+        if os.path.isdir(adir):
+            for fn in os.listdir(adir):
+                if re.match(r"template_\d+\.png$", fn):
+                    try:
+                        os.remove(os.path.join(adir, fn))
+                    except OSError:
+                        pass
         self.child_manager.save(self.current_child_name, frame, self.reg,
                                 self.temp_reg_list, self.template_list,
                                 float(self.var_thresh.get()),
@@ -8395,24 +8647,34 @@ class BuildParentScreen(BaseScreen):
                 self._show_ref()
         except Exception:
             self.log("light reference not saved:\n" + traceback.format_exc())
+        self._write_pin_limit(self.current_child_name, pin)
         self.parent_store.add_child(self.parent_name,
                                     self.current_child_name)
         self.app.heads.add_parent(self.head, self.parent_name)
         self.current_child_saved = True
+        self._editing = self.current_child_name
+        self._fill_areas(self.current_child_name)
         self.log(f"Saved area '{self.current_child_name}' under "
                  f"'{self.head}/{self.parent_name}'")
         self._set_status(f"Area '{self.current_child_name}' saved OK — "
                          "Next Area or Finish Scene")
 
     def next_child(self):
-        if not self.current_child_saved:
+        if not self.current_child_saved and (self.reg is not None
+                                             or self.template_list):
             if not Message.confirm(
                     self, "This area is not saved",
                     "Start a new area and throw away what you just did?",
                     yes="Throw away", no="Go back"):
                 return
-        else:
-            self.child_index += 1
+        self._reset_area()
+        self.log(f"--- New area: {self._free_area_name()} ---")
+        self._set_status(f"Area: {self._free_area_name()} — select ROI first")
+        self._update_buttons()
+
+    def _reset_area(self):
+        """Empty working area (a new one)."""
+        self._editing = None
         self.current_child_name = None
         self.current_child_saved = False
         self.reg = None
@@ -8424,8 +8686,111 @@ class BuildParentScreen(BaseScreen):
         self.mode = self.MODE_LIVE
         self.canvas.select_enabled = False
         self.canvas.clear_rect()
-        self.log(f"--- New area: area_{self.child_index} ---")
-        self._set_status(f"Area: area_{self.child_index} — select ROI first")
+        self.var_pin.set(f"{self._model_pin:g}")
+        if hasattr(self, "cmb_area"):
+            self.cmb_area.setCurrentIndex(0)
+
+    # -- saved areas: open / change / delete ------------------------------------
+    def _free_area_name(self):
+        used = set(self.parent_store.list_children(self.parent_name))
+        i = max(1, len(used) + 1)
+        while f"area_{i}" in used:
+            i += 1
+        return f"area_{i}"
+
+    def _fill_areas(self, current=None):
+        names = self.parent_store.list_children(self.parent_name)
+        self.cmb_area.blockSignals(True)
+        self.cmb_area.clear()
+        self.cmb_area.addItem("New area", None)
+        for n in names:
+            self.cmb_area.addItem(n, n)
+        i = self.cmb_area.findData(current) if current else 0
+        self.cmb_area.setCurrentIndex(max(0, i))
+        self.cmb_area.blockSignals(False)
+        self.sec_areas.setVisible(bool(names))
+
+    def _write_pin_limit(self, name, pin):
+        path = self.child_manager._paths(name)["config"]
+        try:
+            with open(path) as f:
+                cfg = json.load(f)
+            cfg["pin_limit"] = float(pin)
+            with open(path, "w") as f:
+                json.dump(cfg, f, indent=2)
+        except (OSError, json.JSONDecodeError):
+            self.log(f"pin limit not saved for '{name}'")
+
+    def open_area(self):
+        name = self.cmb_area.currentData()
+        if name is None:
+            if self._editing or self.reg is not None:
+                self.next_child()
+            return
+        if self.reg is not None and not self.current_child_saved and \
+                self._editing != name:
+            if not Message.confirm(
+                    self, "This area is not saved",
+                    f"Open '{name}' and throw away what you just did?",
+                    yes="Throw away", no="Go back"):
+                return
+        data = self.child_manager.load(name)
+        if data is None:
+            Message.error(self, "Cannot open", f"Area '{name}' could not be "
+                          "loaded.")
+            return
+        cfg = data["config"]
+        self._reset_area()
+        self.cmb_area.setCurrentIndex(max(0, self.cmb_area.findData(name)))
+        self._editing = name
+        self.current_child_name = name
+        self.reg = tuple(int(v) for v in cfg["reg"])
+        self.template_list = [t for t in data["templates"] if t is not None]
+        self.temp_reg_list = [tuple(t) for t in cfg.get("temp_reg", [])]
+        self.var_thresh.set(cfg.get("threshold", 0.8))
+        sr = cfg.get("scale_range", [0.8, 1.5])
+        self.var_smin.set(sr[0])
+        self.var_smax.set(sr[1])
+        self.var_steps.set(cfg.get("scale_steps", 20))
+        self.var_maxm.set(cfg.get("max_matches", 20))
+        self.var_pin.set(f"{float(cfg.get('pin_limit', self._model_pin)):g}")
+        self.matches = None
+        self.mode = self.MODE_LIVE
+        self.canvas.fit()
+        self.log(f"--- Editing area '{name}' ---")
+        self._set_status(f"Editing '{name}': change the region, templates or "
+                         "values, press Test Detect, then Save Area")
+        self._update_buttons()
+
+    def delete_area(self):
+        name = self.cmb_area.currentData()
+        if name is None:
+            return
+        if not Message.confirm(
+                self, f"Delete area '{name}'?",
+                "Its region, templates and master picture are deleted for "
+                "good.", yes="Delete", no="Keep it"):
+            return
+        names = [n for n in self.parent_store.list_children(self.parent_name)
+                 if n != name]
+        self.parent_store.save_parent_config(self.parent_name, names)
+        shutil.rmtree(self.child_manager._paths(name)["dir"],
+                      ignore_errors=True)
+        self.log(f"Area '{name}' deleted")
+        if self._editing == name:
+            self._reset_area()
+            self._update_buttons()
+        if not names:
+            self.app.heads.drop_scene_if_empty(self.head, self.parent_name)
+        self._fill_areas()
+        self._set_status(f"Area '{name}' deleted")
+
+    def clear_templates(self):
+        self.template_list = []
+        self.temp_reg_list = []
+        self.matches = None
+        self.log("All templates removed - add new ones")
+        self._set_status("Templates removed — select new template(s)")
         self._update_buttons()
 
     def finish_parent(self):
@@ -8817,6 +9182,13 @@ def _prepare_scale():
 
 if __name__ == "__main__":
     import sys
+    if len(sys.argv) >= 3 and sys.argv[1] == "--set-master":
+        _cfg = AppConfig()
+        _cfg.data["security"]["master_password_sha256"] = \
+            hash_password(sys.argv[2])
+        _cfg.save()
+        print("Master password changed.")
+        sys.exit(0)
     _prepare_scale()
     qt_app = QApplication(sys.argv)
     qt_app.setStyleSheet(GLOBAL_QSS)

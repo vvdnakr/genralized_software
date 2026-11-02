@@ -1,0 +1,41 @@
+head:
+  SELECT: '9'
+  OK: jj
+  NG: kk
+qr:
+  REQ: ''
+  TRIGGER: ''
+  OK: ''
+  NG: ''
+events:
+  ASK_MODEL: ''
+  BACK: ''
+  ERROR_PREFIX: ''
+  WARN_PREFIX: ''
+parents:
+  asw:
+    PLC: y8
+    OK: h
+    NG: jk
+    area_wise: false
+    combine: true
+    children:
+      fg:
+        PLC: ''
+        OK: ''
+        NG: ''
+      jk:
+        PLC: ''
+        OK: ''
+        NG: ''
+  uij:
+    PLC: '0'
+    OK: jj
+    NG: ;
+    area_wise: false
+    combine: true
+    children:
+      jjj:
+        PLC: ''
+        OK: ''
+        NG: ''

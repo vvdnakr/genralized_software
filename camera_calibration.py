@@ -76,6 +76,15 @@ APPLY_ORDER = ["resolution_index", "roi", "frame_speed", "mono", "inverse",
                "ext_delay_us", "ext_jitter_us", "trigger_count",
                "trigger_delay_us", "trigger_mode"]
 
+def ordered_params(params):
+    """(name, value) pairs in the order a camera must receive them
+    (auto exposure off before the exposure, auto white balance off before
+    the colour gains, ...)."""
+    order = ["ae"] + APPLY_ORDER
+    rank = {k: i for i, k in enumerate(order)}
+    return sorted(params.items(), key=lambda kv: rank.get(kv[0], len(order)))
+
+
 ERR_TEXT = {-4: "not supported by this camera", -6: "value not valid",
             -7: "value out of range", -8: "not enabled", -12: "timeout",
             -14: "communication error", -28: "camera busy"}
@@ -479,6 +488,10 @@ class BaseCam:
     def autocal_defaults(self):
         return {}
 
+    def adv_caps(self):
+        """Ranges for the advanced auto calibration, or None."""
+        return None
+
 
 _MV_CLOSED_AT = {}          # camera id -> when it was last released
 
@@ -711,6 +724,13 @@ class MVCam(BaseCam):
         cands = [{"exposure_us": e, "analog_gain": g}
                  for g in gains for e in exps]
         return prep, cands, ("exposure_us", "analog_gain")
+
+    def adv_caps(self):
+        c = self.caps
+        return {"exposure": c["exposure"], "analog_gain": c["analog_gain"],
+                "gamma": c["gamma"], "contrast": c["contrast"],
+                "sharpness": c["sharpness"], "rgb": c["rgb"],
+                "mono": c["mono"]}
 
     def save_file(self, path):
         with self._sdk:
@@ -1029,17 +1049,30 @@ class UsbCam(BaseCam):
 # -- Demo (no hardware) -----------------------------------------------------------
 class DemoCam(BaseCam):
     """A pretend camera, only so the screen can be tried without hardware.
-    A timer on the screen thread makes its pictures (no thread)."""
+    A timer on the screen thread makes its pictures (no thread).  It reacts
+    like a colour industrial camera: exposure, gain (with noise), gamma,
+    contrast, sharpness, colour gains and white balance once."""
     kind = "demo"
+    DEFAULTS = {"ae": False, "exposure_us": 8000.0, "analog_gain": 4,
+                "gamma": 100, "contrast": 100, "sharpness": 0,
+                "saturation": 100, "wb_auto": False,
+                "rgb_gain": [100, 100, 100], "trigger_mode": 0}
+    CAST = (0.82, 1.0, 1.22)          # B, G, R: the light is warm
 
     def open(self):
         from PyQt6.QtCore import QTimer as _T
         self.opened = True
-        self.params = {"exposure_us": 8000.0, "analog_gain": 4,
-                       "trigger_mode": 0}
+        self.params = {k: (list(v) if isinstance(v, list) else v)
+                       for k, v in self.DEFAULTS.items()}
+        self.caps = {"exposure": (100.0, 40000.0, 1.0),
+                     "analog_gain": (1, 40, 1.0), "gamma": (0, 250),
+                     "contrast": (0, 200), "sharpness": (0, 100),
+                     "rgb": ((0, 400), (0, 400), (0, 400)),
+                     "mono": False}
         self._t = 0
         self._shot = False
-        self._noise = np.random.randint(0, 12, (540, 960, 3), np.uint8)
+        self._noise = np.zeros((540, 960, 3), np.float32)
+        self._base = None
         self._timer = _T()
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._make)
@@ -1050,30 +1083,58 @@ class DemoCam(BaseCam):
     def _stop_stream(self):
         self._timer.stop()
 
+    def _scene(self, W, H):
+        img = np.full((H, W, 3), (110, 118, 104), np.uint8)
+        for k in range(0, W, 48):                  # fine texture
+            cv2.line(img, (k, 0), (k, H), (96, 104, 92), 1)
+        cv2.rectangle(img, (380, 150), (580, 390), (150, 170, 190), -1)
+        cv2.circle(img, (480, 270), 52, (60, 90, 120), -1)
+        cv2.putText(img, f"DEMO {self.info.index + 1}", (40, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.6, (230, 225, 210), 3)
+        cv2.putText(img, "PART 123-ABC", (390, 440),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (40, 40, 40), 2)
+        return cv2.GaussianBlur(img, (5, 5), 1.4)  # a slightly soft lens
+
     def _make(self):
         if int(self.params.get("trigger_mode", 0)) and not self._shot:
             return
         self._shot = False
         self._t += 1
         W, H = 960, 540
-        img = np.full((H, W, 3), (92, 104, 88), np.uint8)
-        k = float(self.params.get("exposure_us", 8000)) / 8000.0 * \
-            (1 + 0.1 * int(self.params.get("analog_gain", 4)))
-        x = int(W / 2 + 270 * np.sin(self._t / 40.0 + self.info.index))
-        cv2.rectangle(img, (x - 90, 150), (x + 90, 390), (150, 170, 190), -1)
-        cv2.circle(img, (x, 270), 52, (60, 90, 120), -1)
-        cv2.putText(img, f"DEMO {self.info.index + 1}", (40, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.6, (230, 225, 210), 3)
-        img = cv2.add(img, self._noise)
-        self._push(np.clip(img.astype(np.float32) * min(2.5, max(0.2, k)),
-                           0, 255).astype(np.uint8))
+        if self._base is None:
+            self._base = self._scene(W, H).astype(np.float32)
+        p = self.params
+        dx = int(6 * np.sin(self._t / 25.0 + self.info.index))
+        img = np.roll(self._base, dx, axis=1)
+        gain = float(p.get("analog_gain", 4))
+        k = float(p.get("exposure_us", 8000)) / 8000.0 * (1 + 0.1 * gain)
+        rg = p.get("rgb_gain", [100, 100, 100])
+        mult = np.array([self.CAST[0] * rg[2] / 100.0,
+                         self.CAST[1] * rg[1] / 100.0,
+                         self.CAST[2] * rg[0] / 100.0], np.float32)
+        img = img * (k * mult)
+        cv2.randn(self._noise, 0, 1.5 + 0.45 * gain)
+        img = img + self._noise
+        img = np.clip(img, 0, 255)
+        g = max(1, int(p.get("gamma", 100))) / 100.0
+        img = 255.0 * (img / 255.0) ** (1.0 / g)
+        c = int(p.get("contrast", 100)) / 100.0
+        img = (img - 128.0) * c + 128.0
+        sh = int(p.get("sharpness", 0)) / 40.0
+        if sh > 0:
+            blur = cv2.GaussianBlur(img, (0, 0), 1.6)
+            img = img + sh * (img - blur)
+        self._push(np.clip(img, 0, 255).astype(np.uint8))
 
     def _apply(self, name, value):
         return True, "ok"
 
+    def read_params(self):
+        return dict(self.params)
+
     def factory_reset(self):
-        self.params = {"exposure_us": 8000.0, "analog_gain": 4,
-                       "trigger_mode": 0}
+        self.params = {k: (list(v) if isinstance(v, list) else v)
+                       for k, v in self.DEFAULTS.items()}
         return True, "camera is back to its factory settings"
 
     def autocal_plan(self):
@@ -1083,18 +1144,34 @@ class DemoCam(BaseCam):
                  for g in (1, 4, 10) for e in exps],
                 ("exposure_us", "analog_gain"))
 
+    def adv_caps(self):
+        return dict(self.caps)
+
     def action(self, name):
         if name == "soft_trigger":
             self._shot = True
+        elif name == "wb_once":
+            self.params["rgb_gain"] = [round(100 / self.CAST[2]), 100,
+                                       round(100 / self.CAST[0])]
         return True, "done"
 
     def specs(self):
+        sl = lambda n, l, lo, hi, **k: dict(kind="slider", name=n, label=l,
+                                            range=(lo, hi), step=1, **k)
         return {
             "Image": [
-                dict(kind="slider", name="exposure_us", label="Exposure time",
-                     range=(100, 40000), step=100, unit="us"),
-                dict(kind="slider", name="analog_gain", label="Analog gain",
-                     range=(1, 40), step=1),
+                sl("exposure_us", "Exposure time", 100, 40000, unit="us"),
+                sl("analog_gain", "Analog gain", 1, 40),
+                sl("gamma", "Gamma", 0, 250),
+                sl("contrast", "Contrast", 0, 200),
+                sl("sharpness", "Sharpness", 0, 100),
+            ],
+            "Colour": [
+                dict(kind="button", name="wb_once",
+                     label="White balance once"),
+                dict(kind="slider3", name="rgb_gain", label="Colour gain",
+                     range=((0, 400), (0, 400), (0, 400)),
+                     labels=("Red", "Green", "Blue")),
             ],
             "Trigger": [
                 dict(kind="combo", name="trigger_mode", label="Trigger mode",
@@ -2070,8 +2147,16 @@ class CalibrationPanel(QWidget):
             return
         dlg = AutoCalDialog(self, cam)
         if dlg.exec() and dlg.chosen:
-            for k, v in dlg.chosen["params"].items():
-                cam.set(k, v)
+            wb = False
+            for k, v in ordered_params(dlg.chosen["params"]):
+                if k == "wb_once":
+                    wb = bool(v)
+                else:
+                    cam.set(k, v)
+            if wb:
+                cam.set("wb_auto", False)
+                cam.action("wb_once")
+                QTimer.singleShot(1500, self._build_tabs)   # gains settle
             self._build_tabs()
             self._say("Auto calibration applied.  You can still change any "
                       "value, then save.", good=True)
@@ -2847,6 +2932,25 @@ class CameraHub:
 # keep the 5 best.  No thread: a timer steps through the candidates while the
 # camera keeps streaming.
 # ============================================================================
+def _p99(g):
+    """Brightness of the brightest 1 % of the pixels (0-255)."""
+    h = cv2.calcHist([g], [0], None, [256], [0, 256]).flatten()
+    c = np.cumsum(h)
+    return float(np.searchsorted(c, 0.99 * c[-1]))
+
+
+def _bright_ok(mean, target):
+    """1 = on target.  Too bright counts 1.6x more than too dark."""
+    d = mean - target
+    return 1.0 - min(1.0, abs(d) * (1.6 if d > 0 else 1.0)
+                     / max(target, 1.0))
+
+
+def _highlight_pen(m):
+    """0 .. 1: burnt white pixels and highlights pushed to the top."""
+    return min(1.0, m["clip"] / 2.0 + max(0.0, m.get("p99", 0) - 238) / 17.0)
+
+
 def score_picture(img, target, centre_only):
     g = img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     if centre_only:
@@ -2859,7 +2963,8 @@ def score_picture(img, target, centre_only):
     return {"mean": m, "contrast": float(g.std()),
             "sharp": float(cv2.Laplacian(g, cv2.CV_64F).var()) / max(m, 8.0) ** 2,
             "clip": 100.0 * float((g >= 250).sum()) / g.size,
-            "dark": 100.0 * float((g <= 5).sum()) / g.size}
+            "dark": 100.0 * float((g <= 5).sum()) / g.size,
+            "p99": _p99(g)}
 
 
 def rank_results(rows, target):
@@ -2870,11 +2975,11 @@ def rank_results(rows, target):
     smax = max(r["m"]["sharp"] for r in rows) or 1.0
     for r in rows:
         m = r["m"]
-        exp_s = 1.0 - min(1.0, abs(m["mean"] - target) / max(target, 1.0))
+        exp_s = _bright_ok(m["mean"], target)
         con_s = min(1.0, m["contrast"] / 60.0)
         sh_s = m["sharp"] / smax
-        sc = (40 * exp_s + 20 * con_s + 20 * sh_s + 20
-              - 30 * min(1.0, m["clip"] / 5.0)
+        sc = (35 * exp_s + 25 * con_s + 20 * sh_s + 20
+              - 45 * _highlight_pen(m)
               - 15 * min(1.0, m["dark"] / 20.0)
               - 8 * r["gain_n"] - 6 * r["exp_n"])
         r["score"] = max(0.0, min(100.0, sc))
@@ -2936,6 +3041,7 @@ class AutoCalibrator(QObject):
             self.failed.emit("This camera cannot be set automatically.")
             return
         self.cands, self.names = cands, names
+        self.prep = {k: v for k, v in prep.items() if k != "trigger_mode"}
         try:
             self._orig = dict(self.cam.read_params())
         except Exception:
@@ -3012,7 +3118,7 @@ class AutoCalibrator(QObject):
             th = self._thumb
             if th.shape[1] > 320:
                 th = cv2.resize(th, (320, int(th.shape[0] * 320 / th.shape[1])))
-            self.rows.append({"params": dict(c), "m": m,
+            self.rows.append({"params": dict(self.prep, **c), "m": m,
                               "gain_n": float(gn), "exp_n": float(en),
                               "thumb": th.copy()})
         self.i += 1
@@ -3036,6 +3142,395 @@ class AutoCalibrator(QObject):
         else:
             self.finished.emit(top)
 
+
+
+# ============================================================================
+# ADVANCED AUTO CALIBRATION
+#   1. exposure x analog gain grid           -> the 5 best, different starts
+#   then for each of the 5 starts:
+#   2. white balance once  (colour cameras)  -> base R/G/B gains
+#   3. gamma        4. contrast        5. sharpness
+#   6. one last picture with everything set  -> final score
+#   The R/G/B gains are never changed by hand: only white balance once.
+#   The 5 finished settings are ranked and shown; the user picks one.
+#   Each step only looks at what that setting changes:
+#     exposure/gain : brightness on target, nothing burnt or black, low gain
+#     gamma/contrast: brightness, full use of the grey levels (entropy)
+#     sharpness     : edge strength against noise (more edges, not more noise)
+# ============================================================================
+_IMMERKAER = np.array([[1, -2, 1], [-2, 4, -2], [1, -2, 1]], np.float32)
+
+
+def measure_picture(full, centre_only):
+    """Everything the advanced calibration scores, from ONE full picture."""
+    img = full
+    if centre_only:
+        h, w = img.shape[:2]
+        img = img[h // 4: h - h // 4, w // 4: w - w // 4]
+    colour = img.ndim == 3
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if colour else img
+    sw = 480
+    if g.shape[1] > sw:
+        sh_ = max(1, int(g.shape[0] * sw / g.shape[1]))
+        small = cv2.resize(img, (sw, sh_), interpolation=cv2.INTER_AREA)
+        gs = cv2.resize(g, (sw, sh_), interpolation=cv2.INTER_AREA)
+    else:
+        small, gs = img, g
+    m = float(gs.mean())
+    hist = cv2.calcHist([gs], [0], None, [256], [0, 256]).flatten()
+    pr = hist / max(hist.sum(), 1.0)
+    nz = pr[pr > 0]
+    entropy = float(-(nz * np.log2(nz)).sum())
+    # sharpness and noise on NATIVE pixels (a resize would hide both)
+    H, W = g.shape[:2]
+    cs = min(512, H, W)
+    y0, x0 = (H - cs) // 2, (W - cs) // 2
+    crop = g[y0:y0 + cs, x0:x0 + cs].astype(np.float32)
+    gx = cv2.Sobel(crop, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(crop, cv2.CV_32F, 0, 1, ksize=3)
+    ten = float((gx * gx + gy * gy).mean())
+    lap = cv2.filter2D(crop, cv2.CV_32F, _IMMERKAER)
+    noise = float(np.sqrt(np.pi / 2.0) * np.abs(lap[1:-1, 1:-1]).mean() / 6.0)
+    cast = 0.0
+    means = None
+    if colour:
+        ok = (gs > 20) & (gs < 235)
+        if ok.sum() > 100:
+            b, gg, r = [float(small[:, :, i][ok].mean()) for i in range(3)]
+            avg = (b + gg + r) / 3.0
+            cast = float(np.sqrt(((b - avg) ** 2 + (gg - avg) ** 2
+                                  + (r - avg) ** 2) / 3.0) / max(avg, 1.0))
+            means = (r, gg, b)
+    c = np.cumsum(hist)
+    p99 = float(np.searchsorted(c, 0.99 * c[-1]))
+    return {"mean": m, "contrast": float(gs.std()), "p99": p99,
+            "clip": 100.0 * float((gs >= 250).sum()) / gs.size,
+            "dark": 100.0 * float((gs <= 5).sum()) / gs.size,
+            "entropy": entropy, "ten": ten, "noise": noise,
+            "sharp": ten / max(m, 8.0) ** 2, "cast": cast, "rgb_means": means}
+
+
+def _tone_score(m, target, edge_n=0.5):
+    """Contrast and crisp edges first; brightness only has to be near the
+    target and is punished when too bright; burnt white is punished hard.
+    edge_n = edge strength of this picture compared with the others (0-1)."""
+    return (35 * min(1.0, m["contrast"] / 70.0) + 25 * edge_n
+            + 20 * _bright_ok(m["mean"], target)
+            + 10 * min(1.0, m["entropy"] / 7.5) + 10
+            - 60 * _highlight_pen(m) - 15 * min(1.0, m["dark"] / 20.0))
+
+
+def _edge_noise(m):
+    """Higher = more edge detail for the noise it costs."""
+    return float(np.log(m["ten"] + 1.0) - 1.5 * np.log(m["noise"] + 0.05))
+
+
+def _avg_measure(ms):
+    out = {}
+    for k in ms[0]:
+        vals = [x[k] for x in ms]
+        if isinstance(vals[0], (int, float)):
+            out[k] = float(sum(vals) / len(vals))
+        else:
+            out[k] = vals[-1]
+    return out
+
+
+class AdvancedCalibrator(QObject):
+    progress = pyqtSignal(int, int)
+    stage = pyqtSignal(str)
+    finished = pyqtSignal(list)
+    failed = pyqtSignal(str)
+
+    SKIP, TAKE, TIMEOUT = 3, 2, 3.0
+    WB_FRAMES, WB_TIMEOUT = 12, 3.0
+    TOUCHED = ("ae", "trigger_mode", "exposure_us", "analog_gain", "gamma",
+               "contrast", "sharpness", "wb_auto", "rgb_gain")
+
+    def __init__(self, cam, target=125, centre_only=True, seeds=5,
+                 parent=None):
+        super().__init__(parent)
+        self.cam, self.target, self.centre_only = cam, target, centre_only
+        self.n_seeds = seeds
+        self._timer = QTimer(self)
+        self._timer.setInterval(25)
+        self._timer.timeout.connect(self._step)
+        self.state = "idle"
+        self.gen = None
+        self._set = {}
+
+    # -- the candidate values ----------------------------------------------------
+    def _lists(self):
+        c = self.caps
+        o = self._orig
+
+        def around(name, factors, default):
+            lo, hi = c[name]
+            ctr = o.get(name)
+            if not isinstance(ctr, (int, float)) or not lo <= ctr <= hi:
+                ctr = default if lo <= default <= hi else (lo + hi) // 2
+            ctr = max(ctr, lo + 1, 1)
+            return sorted({int(min(hi, max(lo, round(ctr * f))))
+                           for f in factors})
+        gam = around("gamma", (0.7, 0.85, 1.0, 1.2, 1.45), 100)
+        con = around("contrast", (0.9, 1.0, 1.15, 1.3, 1.5, 1.7), 100)
+        slo, shi = c["sharpness"]
+        sha = sorted({int(round(v)) for v in
+                      np.linspace(slo, slo + 0.8 * (shi - slo), 5)})
+        return gam, con, sha
+
+    def _expo_cands(self):
+        _, cands, _ = self.cam.autocal_plan()
+        return [c for c in cands if "exposure_us" in c]
+
+    # -- start / stop -------------------------------------------------------------
+    def start(self):
+        self.caps = self.cam.adv_caps()
+        if not self.caps:
+            self.failed.emit("This camera has no advanced settings.  Use "
+                             "Quick instead.")
+            return
+        try:
+            self._orig = dict(self.cam.read_params())
+        except Exception:
+            self._orig = dict(self.cam.params)
+        self.colour = not self.caps.get("mono")
+        self.expo = self._expo_cands()
+        if not self.expo:
+            self.failed.emit("This camera cannot be set automatically.")
+            return
+        self.gam, self.con, self.sha = self._lists()
+        per_seed = len(self.gam) + len(self.con) + len(self.sha) + 1 + \
+            0
+        self.total = len(self.expo) + self.n_seeds * per_seed
+        self.done_n = 0
+        self._set = {}
+        for k, v in (("ae", False), ("trigger_mode", 0)):
+            self.cam.set(k, v)
+        if self.colour:
+            self.cam.set("wb_auto", False)
+        self.gen = self._program()
+        self.state = "busy"
+        self._timer.start()
+        self.progress.emit(0, self.total)
+        self._send(None)
+
+    def cancel(self):
+        if self.state != "idle":
+            self._timer.stop()
+            self.state = "idle"
+            self.gen = None
+            self._restore()
+
+    def _restore(self):
+        for k in self.TOUCHED:
+            if k in self._orig:
+                self.cam.set(k, self._orig[k])
+
+    # -- driver: the program asks, the timer waits for pictures ---------------------
+    def _apply(self, params):
+        for k, v in params.items():
+            if self._set.get(k) != v:
+                self.cam.set(k, v)
+                self._set[k] = v
+
+    def _send(self, value):
+        try:
+            req = self.gen.send(value)
+        except StopIteration:
+            return
+        except Exception as e:
+            self._timer.stop()
+            self.state = "idle"
+            self._restore()
+            self.failed.emit(f"Auto calibration stopped: {e}")
+            return
+        self._req = req
+        self._t0 = time.time()
+        self._seq0 = self.cam.seq
+        if req[0] == "measure":
+            self._apply(req[1])
+            self._got = []
+            self.state = "settle"
+        elif req[0] == "wb":
+            self._apply(req[1])
+            self.state = "wb_pre"           # let the new exposure arrive
+
+    def _step(self):
+        cam = self.cam
+        st = self.state
+        if st == "settle":
+            if cam.seq >= self._seq0 + self.SKIP:
+                self.state, self._last = "take", cam.seq
+            elif time.time() - self._t0 > self.TIMEOUT:
+                self._measured(None)
+        elif st == "take":
+            if cam.seq != self._last:
+                self._last = cam.seq
+                full = cam.latest_full()
+                if full is not None:
+                    m = measure_picture(full, self.centre_only)
+                    m["thumb"] = full
+                    self._got.append(m)
+                if len(self._got) >= self.TAKE:
+                    self._measured(_avg_measure(self._got))
+            elif time.time() - self._t0 > self.TIMEOUT * 2:
+                self._measured(_avg_measure(self._got) if self._got else None)
+        elif st == "wb_pre":
+            if cam.seq >= self._seq0 + self.SKIP or \
+                    time.time() - self._t0 > self.TIMEOUT:
+                cam.action("wb_once")
+                self._seq0, self._t0 = cam.seq, time.time()
+                self.state = "wb_wait"
+        elif st == "wb_wait":
+            if cam.seq >= self._seq0 + self.WB_FRAMES or \
+                    time.time() - self._t0 > self.WB_TIMEOUT:
+                try:
+                    rgb = list(cam.read_params().get("rgb_gain")
+                               or cam.params.get("rgb_gain"))
+                except Exception:
+                    rgb = None
+                self.state = "busy"
+                self._set.pop("rgb_gain", None)
+                self._send(rgb)
+
+    def _measured(self, m):
+        if m is not None and m.get("thumb") is not None:
+            th = m["thumb"]
+            if th.shape[1] > 320:
+                th = cv2.resize(th, (320, int(th.shape[0] * 320 / th.shape[1])),
+                                interpolation=cv2.INTER_AREA)
+            m["thumb"] = th
+        self.done_n += 1
+        self.progress.emit(min(self.done_n, self.total), self.total)
+        self.state = "busy"
+        self._send(m)
+
+    # -- the calibration itself ---------------------------------------------------------
+    def _sweep(self, base, name, values, score):
+        ms = []
+        for v in values:
+            m = yield ("measure", dict(base, **{name: v}))
+            if m is not None:
+                ms.append((v, m))
+        if not ms:
+            return base.get(name)
+        tmax = max(m["ten"] for _, m in ms) or 1.0
+        best = max(ms, key=lambda vm: score(vm[1], vm[0], vm[1]["ten"] / tmax))
+        return best[0]
+
+    NOISE_LIMIT = 1.35         # sharpening may add 35 % noise ...
+    NOISE_ABS = 1.0            # ... or 1 grey level, whichever is more
+    EDGE_GAIN = 1.05           # ... and must give at least 5 % more edges
+
+    @classmethod
+    def _pick_sharp(cls, ms, default):
+        """The sharpest setting that still keeps the noise low."""
+        if not ms:
+            return default
+        ms = sorted(ms, key=lambda vm: vm[0])
+        n0 = ms[0][1]["noise"]
+        limit = max(n0 * cls.NOISE_LIMIT, n0 + cls.NOISE_ABS)
+        best, t_prev = ms[0][0], ms[0][1]["ten"]
+        for v, m in ms[1:]:
+            if m["noise"] > limit:
+                break
+            if m["ten"] >= t_prev * cls.EDGE_GAIN:
+                best, t_prev = v, m["ten"]
+        return best
+
+    def _program(self):
+        cam, tgt = self.cam, self.target
+        # 1. exposure x gain
+        self.stage.emit("Step 1: exposure and gain")
+        rows = []
+        for c in self.expo:
+            m = yield ("measure", c)
+            if m is not None:
+                rows.append({"params": dict(c), "m": m,
+                             "gain_n": 0.0, "exp_n": 0.0,
+                             "thumb": m["thumb"]})
+        if not rows:
+            self._finish_fail("No picture came from the camera.")
+            return
+        means = [r["m"]["mean"] for r in rows]
+        if max(means) - min(means) < 4.0:
+            self._finish_fail("The picture did not change when the exposure "
+                              "changed.  Check that the camera is live.")
+            return
+        glo, ghi = self.caps["analog_gain"][0], self.caps["analog_gain"][1]
+        es = [r["params"]["exposure_us"] for r in rows]
+        elo, ehi = min(es), max(es)
+        for r in rows:
+            p = r["params"]
+            r["gain_n"] = (p["analog_gain"] - glo) / ((ghi - glo) or 1)
+            r["exp_n"] = ((np.log(p["exposure_us"]) - np.log(elo))
+                          / ((np.log(ehi) - np.log(elo)) or 1))
+        seeds = pick_top(rank_results(rows, tgt), self.n_seeds)
+        # re-plan the total now that the number of starts is known
+        per_seed = len(self.gam) + len(self.con) + len(self.sha) + 1 + \
+            0
+        self.total = len(self.expo) + len(seeds) * per_seed
+        results = []
+        for si, seed in enumerate(seeds):
+            tag = f"Setting {si + 1} of {len(seeds)}: "
+            p = {"ae": False}
+            p.update(seed["params"])
+            if self.colour:
+                # white balance once at THIS exposure; the camera keeps the
+                # gains it finds - they are not changed by the program
+                self.stage.emit(tag + "white balance once")
+                yield ("wb", dict(p))
+            self.stage.emit(tag + "gamma")
+            p["gamma"] = yield from self._sweep(
+                p, "gamma", self.gam,
+                lambda m, v, e: _tone_score(m, tgt, e))
+            self.stage.emit(tag + "contrast")
+            p["contrast"] = yield from self._sweep(
+                p, "contrast", self.con,
+                lambda m, v, e: _tone_score(m, tgt, e))
+            self.stage.emit(tag + "sharpness")
+            ms = []
+            for v in self.sha:
+                m = yield ("measure", dict(p, sharpness=v))
+                if m is not None:
+                    ms.append((v, m))
+            p["sharpness"] = self._pick_sharp(ms, p.get("sharpness",
+                                                         self.sha[0]))
+            self.stage.emit(tag + "final check")
+            m = yield ("measure", dict(p))
+            if m is not None:
+                res = dict(p)
+                if self.colour:
+                    res["wb_once"] = True        # done again when applied
+                results.append({"params": res, "m": m, "thumb": m["thumb"],
+                                "gain_n": seed["gain_n"]})
+        self._timer.stop()
+        self.state = "idle"
+        self._restore()
+        if not results:
+            self.failed.emit("No picture came from the camera.")
+            return
+        # final ranking: contrast 30, sharp edges for the noise 30,
+        # brightness 20, low gain 10, nothing burnt white 10
+        en = [_edge_noise(r["m"]) for r in results]
+        lo, hi = min(en), max(en)
+        for r, e in zip(results, en):
+            m = r["m"]
+            sharp_n = (e - lo) / ((hi - lo) or 1)
+            r["score"] = max(0.0, min(100.0,
+                30 * min(1.0, m["contrast"] / 70.0) + 30 * sharp_n
+                + 20 * _bright_ok(m["mean"], tgt)
+                + 10 * (1 - r["gain_n"]) + 10 * (1 - _highlight_pen(m))
+                - 15 * min(1.0, m["dark"] / 20.0)))
+        results.sort(key=lambda r: -r["score"])
+        self.finished.emit(results)
+
+    def _finish_fail(self, msg):
+        self._timer.stop()
+        self.state = "idle"
+        self._restore()
+        self.failed.emit(msg)
 
 
 class DriftDialog(QDialog):
@@ -3092,12 +3587,14 @@ class DriftDialog(QDialog):
 
 
 class AutoCalDialog(QDialog):
-    """Auto calibration: measure many exposure / gain values, show the 5
-    best pictures, the user picks one."""
+    """Auto calibration: Advanced (exposure, gain, gamma, contrast,
+    sharpness, white balance once) or Quick (exposure and
+    gain).  Shows the 5 best results; the user picks one."""
 
     def __init__(self, parent, cam):
         super().__init__(parent)
         self.cam, self.chosen, self.cal = cam, None, None
+        self.can_adv = bool(cam.adv_caps())
         self.setWindowTitle("Auto calibrate")
         self.setStyleSheet(QSS)
         self.setModal(True)
@@ -3128,17 +3625,33 @@ class AutoCalDialog(QDialog):
         t.setStyleSheet("font-size: 14pt; font-weight: 700;")
         self.lay.addWidget(t)
         info = QLabel("Put the part in front of the camera, as it will be "
-                      "during the test.  The program tries many exposure "
-                      "and gain values, then shows the 5 best pictures.  "
-                      "You pick one and can still change it by hand.")
+                      "during the test, and keep it still.  The program "
+                      "tries many settings, scores every picture and shows "
+                      "the 5 best.  You pick one and can still change it "
+                      "by hand.")
         info.setWordWrap(True)
-        info.setMinimumWidth(460)
+        info.setMinimumWidth(500)
         self.lay.addWidget(info)
+        from PyQt6.QtWidgets import QRadioButton
+        self.rb_adv = QRadioButton(
+            "Advanced  -  exposure, gain, gamma, contrast, sharpness and "
+            "white balance once  (1 - 3 minutes)")
+        self.rb_quick = QRadioButton(
+            "Quick  -  exposure and gain only  (about 10 seconds)")
+        for rb in (self.rb_adv, self.rb_quick):
+            rb.setStyleSheet("QRadioButton { spacing: 8px; }")
+            self.lay.addWidget(rb)
+        self.rb_adv.setEnabled(self.can_adv)
+        (self.rb_adv if self.can_adv else self.rb_quick).setChecked(True)
+        if not self.can_adv:
+            n = QLabel("Advanced needs an industrial (MindVision) camera.")
+            n.setStyleSheet(f"color: {P['muted']}; font-size: 9pt;")
+            self.lay.addWidget(n)
         row = QHBoxLayout()
         row.addWidget(QLabel("Wanted brightness (0 dark - 255 bright)"))
         self.target = QSpinBox()
         self.target.setRange(40, 220)
-        self.target.setValue(125)
+        self.target.setValue(110)
         row.addStretch()
         row.addWidget(self.target)
         self.lay.addLayout(row)
@@ -3159,15 +3672,24 @@ class AutoCalDialog(QDialog):
 
     def _start(self):
         tgt, ctr = self.target.value(), self.centre.isChecked()
+        adv = self.rb_adv.isChecked()
         self._clear()
         self.lbl = QLabel("Trying settings...  Keep the part still.")
         self.lay.addWidget(self.lbl)
+        self.step_lbl = QLabel("")
+        self.step_lbl.setStyleSheet(f"color: {P['muted']};")
+        self.lay.addWidget(self.step_lbl)
         self.bar = QProgressBar()
+        self.bar.setMinimumWidth(460)
         self.lay.addWidget(self.bar)
         b = QPushButton("Stop")
         b.clicked.connect(self._stop)
         self.lay.addWidget(b)
-        self.cal = AutoCalibrator(self.cam, tgt, ctr, self)
+        if adv:
+            self.cal = AdvancedCalibrator(self.cam, tgt, ctr, 5, self)
+            self.cal.stage.connect(self.step_lbl.setText)
+        else:
+            self.cal = AutoCalibrator(self.cam, tgt, ctr, self)
         self.cal.progress.connect(self._prog)
         self.cal.finished.connect(self._results)
         self.cal.failed.connect(self._failed)
@@ -3182,18 +3704,31 @@ class AutoCalDialog(QDialog):
             self.cal.cancel()
         self.reject()
 
+    def reject(self):
+        if self.cal is not None and getattr(self.cal, "state", "idle") \
+                != "idle":
+            self.cal.cancel()
+        super().reject()
+
     def _failed(self, msg):
         self._clear()
         l = QLabel(msg)
         l.setWordWrap(True)
+        l.setMinimumWidth(420)
         self.lay.addWidget(l)
+        row = QHBoxLayout()
+        row.addStretch()
+        b = QPushButton("Try again")
+        b.clicked.connect(self._intro)
+        row.addWidget(b)
         b = QPushButton("Close")
         b.clicked.connect(self.reject)
-        self.lay.addWidget(b)
+        row.addWidget(b)
+        self.lay.addLayout(row)
 
     def _results(self, top):
         self._clear()
-        t = QLabel("The 5 best results - pick one")
+        t = QLabel(f"The {len(top)} best results - pick one")
         t.setStyleSheet("font-size: 13pt; font-weight: 700;")
         self.lay.addWidget(t)
         grid = QGridLayout()
@@ -3202,6 +3737,7 @@ class AutoCalDialog(QDialog):
             card = QFrame()
             card.setObjectName("card")
             cl = QVBoxLayout(card)
+            cl.setSpacing(4)
             pic = QLabel()
             th = np.ascontiguousarray(r["thumb"])
             h, w = th.shape[:2]
@@ -3209,15 +3745,21 @@ class AutoCalDialog(QDialog):
                    else QImage.Format.Format_BGR888)
             qi = QImage(th.data, w, h, th.strides[0], fmt).copy()
             pic.setPixmap(QPixmap.fromImage(qi).scaledToWidth(
-                230, Qt.TransformationMode.SmoothTransformation))
+                250, Qt.TransformationMode.SmoothTransformation))
             cl.addWidget(pic)
             head = QLabel(f"#{k + 1}    score {r['score']:.0f} / 100")
             head.setStyleSheet("font-weight: 700;")
             cl.addWidget(head)
-            cl.addWidget(QLabel(self._describe(r["params"])))
+            d = QLabel(self._describe(r["params"]))
+            d.setWordWrap(True)
+            cl.addWidget(d)
             m = r["m"]
-            det = QLabel(f"brightness {m['mean']:.0f}   "
-                         f"too bright {m['clip']:.1f}%")
+            extra = (f"brightness {m['mean']:.0f}   too bright "
+                     f"{m['clip']:.1f}%")
+            if "noise" in m:
+                extra += (f"\ncontrast {m['contrast']:.0f}   "
+                          f"noise {m['noise']:.1f}")
+            det = QLabel(extra)
             det.setStyleSheet(f"color: {P['muted']}; font-size: 8pt;")
             cl.addWidget(det)
             b = QPushButton("Use this")
@@ -3240,9 +3782,9 @@ class AutoCalDialog(QDialog):
     @staticmethod
     def _describe(p):
         out = []
-        for k, v in p.items():
+        for k, v in ordered_params(p):
             if k == "exposure_us":
-                out.append(f"Exposure {v / 1000:.1f} ms")
+                out.append(f"Exposure {v / 1000:.2f} ms")
             elif k == "exposure_time":
                 out.append(f"Exposure {v:.1f} ms")
             elif k == "analog_gain":
@@ -3251,9 +3793,15 @@ class AutoCalDialog(QDialog):
                 out.append(f"ISO {v}")
             elif k == "exposure_comp":
                 out.append(f"Brightness correction {v:+.1f} EV")
-            else:
-                out.append(f"{k} {v}")
-        return "   ".join(out)
+            elif k == "gamma":
+                out.append(f"Gamma {v}")
+            elif k == "contrast":
+                out.append(f"Contrast {v}")
+            elif k == "sharpness":
+                out.append(f"Sharpness {v}")
+            elif k == "wb_once" and v:
+                out.append("White balance once")
+        return "\n".join(out)
 
     def _pick(self, r):
         self.chosen = r

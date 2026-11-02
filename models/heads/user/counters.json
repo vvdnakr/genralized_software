@@ -1,26 +1,26 @@
 {
   "cycle": {
     "ok": 0,
-    "ng": 4
+    "ng": 7
   },
   "scenes": {
     "see": {
       "ok": 0,
-      "ng": 4
+      "ng": 7
     },
     "you": {
       "ok": 0,
-      "ng": 4
+      "ng": 12
     }
   },
   "areas": {
     "see/area2": {
       "ok": 0,
-      "ng": 4
+      "ng": 7
     },
     "you/area1": {
       "ok": 0,
-      "ng": 4
+      "ng": 12
     }
   }
 }
