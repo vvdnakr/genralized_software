@@ -2935,9 +2935,23 @@ class App(QMainWindow):
             self.kiosk.engage()
 
     def setup_open(self):
-        """Setup buttons visible: program unlocked, or MASTER mode."""
-        return (not self.is_locked()) or bool(getattr(self, "master_mode",
-                                                      False))
+        """Setup buttons visible (Add/Edit Scene, Scanner, MES, Machine,
+        Cameras, Reset Camera...): MASTER mode only."""
+        return bool(getattr(self, "master_mode", False))
+
+    def controls_open(self):
+        """Run bar, counters reset, logs: normal password or MASTER."""
+        return (not self.is_locked()) or self.setup_open()
+
+    def _enter_master(self):
+        """Master password: everything opens - setup, keyboard + mouse."""
+        self.master_mode = True
+        self.app_config.data["locked"] = False
+        self.app_config.save()
+        self.kiosk.release()
+        self.comm_log.add("EVT", "MASTER mode opened")
+        self.refresh_screen()
+        Message.ok(self, "MASTER MODE", "Everything is open.", auto_ms=2500)
 
     def is_master_password(self, pw):
         want = str(self.app_config.data["security"].get(
@@ -2952,12 +2966,7 @@ class App(QMainWindow):
         if pw is None:
             return
         if self.is_master_password(pw):
-            self.master_mode = True
-            self.kiosk.release()
-            self.comm_log.add("EVT", "MASTER mode opened")
-            self.refresh_screen()
-            Message.ok(self, "MASTER MODE", "Keyboard and mouse are free.",
-                       auto_ms=3000)
+            self._enter_master()
         else:
             Message.error(parent or self, "Wrong password",
                           "That is not the master password.")
@@ -2967,10 +2976,13 @@ class App(QMainWindow):
         self.master_features.append((label, fn))
 
     def leave_master(self):
+        """Back to operator mode: program locked, keyboard + mouse locked."""
         self.master_mode = False
-        self.comm_log.add("EVT", "MASTER mode closed")
-        self._engage_kiosk()
+        self.app_config.data["locked"] = True
+        self.app_config.save()
+        self.comm_log.add("EVT", "MASTER mode closed - locked again")
         self.refresh_screen()
+        QTimer.singleShot(300, self._engage_kiosk)
 
     def open_master_panel(self, parent=None):
         MasterPanel(parent or self, self).exec()
@@ -2998,24 +3010,16 @@ class App(QMainWindow):
         if pw is None:
             return
         if pw == str(self.app_config.data.get("password", "1234")):
-            # the program opens, but keyboard + mouse stay locked:
-            # ONLY the master password frees them
+            # the program opens (run bar, logs), but no setup buttons and
+            # keyboard + mouse stay locked: ONLY the master password
+            # opens those
             self.app_config.data["locked"] = False
             self.app_config.save()
             self.comm_log.add("EVT", "UI UNLOCKED (controls open)")
             self.refresh_screen()
         elif self.is_master_password(pw):
-            # MASTER: keyboard + mouse free, hidden features open,
-            # but the program itself stays locked
-            self.master_mode = True
-            self.kiosk.release()
-            self.comm_log.add("EVT", "MASTER mode opened")
-            self.refresh_screen()
-            Message.ok(self, "MASTER MODE",
-                       "Keyboard and mouse are free."
-                       + ("\nThe program is still locked - its own "
-                          "password is needed to open the setup."
-                          if self.is_locked() else ""), auto_ms=4000)
+            # MASTER: everything opens - setup, hidden features, keyboard
+            self._enter_master()
         else:
             Message.error(parent, "Wrong password",
                           "That password is not correct. Please try again.")
@@ -3034,12 +3038,6 @@ class App(QMainWindow):
             extra = styled_btn(master, "Master",
                                lambda: self.open_master_panel(master),
                                color="#845ef7")
-        elif not self.is_locked() and getattr(self, "kiosk", None) is not \
-                None and self.kiosk.engaged:
-            # setup is open, but keyboard + mouse are still locked
-            extra = styled_btn(master, "Free Keyboard",
-                               lambda: self.ask_master(master),
-                               color="#44444e")
         if extra is None:
             return b
         box = QWidget()
@@ -3309,15 +3307,9 @@ class MasterPanel(QDialog):
             n = QLabel("No hidden features yet.")
             n.setStyleSheet(f"color: {C_MUTED}; font-size: 11pt;")
             inner.addWidget(n)
-        row = []
-        if app.is_locked() and app._kiosk_on():
-            row.append(styled_btn(self, "Lock keyboard and mouse again",
-                                  lambda: (self.accept(), app.leave_master()),
-                                  color="#44444e"))
-        else:
-            row.append(styled_btn(self, "Close master mode",
-                                  lambda: (self.accept(), app.leave_master()),
-                                  color="#44444e"))
+        row = [styled_btn(self, "Close master mode",
+                          lambda: (self.accept(), app.leave_master()),
+                          color="#44444e")]
         row.append(styled_btn(self, "Close", self.accept, color=C_ACCENT))
         inner.addWidget(btn_row(row))
         lay.addLayout(inner)
@@ -4290,6 +4282,7 @@ class HeadScreen(BaseScreen):
         self.head = head_name
         self.parent_store = app.heads.get_parent_store(head_name)
         self.busy = False
+        self._run_gen = 0            # bumped to throw away a running check
         self.view = self.VIEW_LIVE
         self.result_views = {}
         self.result_key = "result"
@@ -4438,7 +4431,8 @@ class HeadScreen(BaseScreen):
         # =========================================================== TOOLBAR
         # setup only.  A new model shows Add Scene; the rest appears when
         # the step before it is done.
-        if not locked:
+        ctl_open = app.controls_open()      # normal password or MASTER
+        if ctl_open:
             tb, _tl = card(None, "tb")
             _tl.setContentsMargins(12, 8, 12, 10)
             tl_host = QWidget()
@@ -4456,33 +4450,36 @@ class HeadScreen(BaseScreen):
                 Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             tl_scroll.setStyleSheet("QScrollArea { background: transparent; }")
             _tl.addWidget(tl_scroll)
-            mb = [styled_btn(self, "Add Scene", self.add_parent,
-                             color="#2f9e44" if not self.n_scenes
-                             else "#44444e")]
-            if self.n_scenes:
-                mb.append(styled_btn(self, "Edit Scene", self.edit_parent,
-                                     color="#44444e"))
-            if self.n_scenes and not self.finished:
-                mb.append(styled_btn(self, "Finish Model", self.finish_head,
-                                     color="#f59f00"))
-            tl.addWidget(tool_group("Model", mb))
-            if self.finished:
-                tl.addWidget(vline())
-                tl.addWidget(tool_group("Station", [
-                    styled_btn(self, "Scanner", self.open_scanner_cfg,
-                               color="#44444e"),
-                    styled_btn(self, "MES", self.open_mes_cfg,
-                               color="#44444e"),
-                    styled_btn(self, "Machine", self.open_comm,
-                               color="#44444e")]))
+            if not locked:          # MASTER only: scenes + station setup
+                mb = [styled_btn(self, "Add Scene", self.add_parent,
+                                 color="#2f9e44" if not self.n_scenes
+                                 else "#44444e")]
+                if self.n_scenes:
+                    mb.append(styled_btn(self, "Edit Scene",
+                                         self.edit_parent, color="#44444e"))
+                if self.n_scenes and not self.finished:
+                    mb.append(styled_btn(self, "Finish Model",
+                                         self.finish_head, color="#f59f00"))
+                tl.addWidget(tool_group("Model", mb))
+                if self.finished:
+                    tl.addWidget(vline())
+                    tl.addWidget(tool_group("Station", [
+                        styled_btn(self, "Scanner", self.open_scanner_cfg,
+                                   color="#44444e"),
+                        styled_btn(self, "MES", self.open_mes_cfg,
+                                   color="#44444e"),
+                        styled_btn(self, "Machine", self.open_comm,
+                                   color="#44444e")]))
             tl.addStretch()
             tools = []
-            tools.append(styled_btn(self, "Cameras",
-                                    lambda: app.show_cameras(self.head),
-                                    color="#44444e"))
-            if self.n_scenes:
-                tools.append(styled_btn(self, "Reset Camera",
-                                        self.reset_camera, color="#44444e"))
+            if not locked:
+                tools.append(styled_btn(self, "Cameras",
+                                        lambda: app.show_cameras(self.head),
+                                        color="#44444e"))
+                if self.n_scenes:
+                    tools.append(styled_btn(self, "Reset Camera",
+                                            self.reset_camera,
+                                            color="#44444e"))
             tools.append(styled_btn(self, "Detection Logs",
                                     self.open_log_dialog, color="#44444e"))
             tools.append(styled_btn(self, "Monitor",
@@ -4564,7 +4561,7 @@ class HeadScreen(BaseScreen):
         _thr_edit = QLineEdit(str(self.app.heads.get_settings(head_name)
                                   .get("distance_threshold", 20)))
         self.var_dist_thr = SVar(_thr_edit)
-        if not locked:
+        if ctl_open:
             runbar, _rl = card(None, "run")
             _rl.setContentsMargins(12, 8, 12, 8)
             rl_host = QWidget()
@@ -4621,7 +4618,10 @@ class HeadScreen(BaseScreen):
                 tcap.addWidget(_thr_edit)
                 rl.addLayout(tcap)
             else:
-                nl = QLabel("No scene yet.  Press  Add Scene  to start.")
+                nl = QLabel("No scene yet.  Press  Add Scene  to start."
+                            if not locked else
+                            "No scene yet.  Ask the supervisor to set up "
+                            "this model.")
                 nl.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
                 rl.addWidget(nl)
                 rl.addStretch()
@@ -4767,7 +4767,7 @@ class HeadScreen(BaseScreen):
                                      self.toggle_counters, color="#44444e")
         self.btn_dash = styled_btn(ccard, "Dashboard", self.open_dashboard,
                                    color="#3b6ef5")
-        if locked:
+        if not ctl_open:
             ccl.addWidget(btn_row([self.btn_expand, self.btn_dash]))
         else:
             ccl.addWidget(btn_row([self.btn_expand, self.btn_dash]))
@@ -5994,25 +5994,49 @@ class HeadScreen(BaseScreen):
                  "the client)")
         self._qr_begin("MANUAL")
 
+    def _stop_current_work(self):
+        """Throw away whatever is running: a detection run, a QR read, a
+        QR wait / retry, and the half-finished part."""
+        if self.busy:
+            self._run_gen += 1             # its result will be dropped
+            self.busy = False
+            self.log("[QR] current run stopped by the client")
+        self._qr_stop.set()                # end a running camera read
+        self._qr_gen += 1                  # drop wait / retry timers
+        self.qr_state = "idle"
+        self.cycle_scene_results = {}
+        self.cycle_areas, self.cycle_started = {}, None
+        self._set_validation(False)
+        self._set_cycle_result(None)
+        self._qr_reset_for_new_scan()
+
     def qr_client_trigger(self, source):
-        """The client's answer.  Accepted while we are waiting for it; with
-        no scan yet it can also start a read by itself."""
-        if not self._qr_precheck(interactive=False):
+        """The client's QR signal.  It always wins: whatever is running is
+        stopped and the QR is read now, with this model's QR settings.
+        (While we were only waiting for this signal it just starts the
+        read.)"""
+        if not self._alive or not self.qr_scan_active:
             return
-        if self.qr_state == "scanning":
-            self.log(f"[QR] signal from {source} ignored — already reading")
+        if not self.qr_master:
+            self.log("[QR] signal from the client, but this model has no "
+                     "master QR - add one in a scene (5. QR Scanner)")
             return
-        if self.qr_state == "retrying":
-            self.log(f"[QR] signal from {source} ignored — retry pending")
+        if self.qr_state == "waiting":
+            self.log(f"[QR] client signal received from {source}")
+            self._qr_begin(source)
             return
-        if self.qr_state == "idle":
-            if self.scan_value:
-                self.log(f"[QR] signal from {source} ignored — this cycle "
-                         f"already has a scan ('{self.scan_value}')")
-                return
-            self._qr_reset_for_new_scan()         # client-initiated
-            self.qr_attempt = 1
-        self.log(f"[QR] client signal received from {source}")
+        was = ("a run" if self.busy else "a QR read"
+               if self.qr_state == "scanning" else "a retry"
+               if self.qr_state == "retrying" else "the last part"
+               if self.scan_value else "")
+        if was:
+            self.app.comm_log.add("EVT", f"QR signal from {source}: "
+                                         f"stopped {was}")
+        self._stop_current_work()
+        self.qr_attempt = 1
+        self.log(f"[QR] client signal received from {source}"
+                 + (f" - stopped {was}" if was else ""))
+        self._update_scan_panel()
         self._qr_begin(source)
 
     def _qr_wait_expired(self, gen):
@@ -6646,7 +6670,7 @@ class HeadScreen(BaseScreen):
         name = "/".join(scope) if scope[0] != "head" else "MODEL (all scenes)"
         self.log(f"\n── RUN {name}  [{source}] · thr {dist_thr:g}px ──")
         threading.Thread(target=self._worker,
-                         args=(scope, plan, frame, dist_thr),
+                         args=(scope, plan, frame, dist_thr, self._run_gen),
                          daemon=True).start()
 
     def _blocked_popup(self, reason):
@@ -6842,7 +6866,7 @@ class HeadScreen(BaseScreen):
                                      + " ".join(bad))
         Message.warn(self, "THE LIGHT HAS CHANGED", text)
 
-    def _worker(self, scope, plan, frame, dist_thr):
+    def _worker(self, scope, plan, frame, dist_thr, gen=None):
         logs = []
         results = {}
         views = {}
@@ -6895,6 +6919,9 @@ class HeadScreen(BaseScreen):
 
         def apply():
             if not self._alive:
+                return
+            if gen is not None and gen != self._run_gen:
+                self.log("[run] result dropped - the run was stopped")
                 return
             for m in logs:
                 self.log(m)

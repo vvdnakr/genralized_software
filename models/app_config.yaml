@@ -1,6 +1,6 @@
 password: '1234'
 validation_password: '5678'
-locked: true
+locked: false
 ui:
   frame_scale: 0.6
   show_regions_live: false

@@ -1,1 +1,12 @@
-scanners: []
+scanners:
+- id: qr_1
+  scene: qr_scanner
+  name: QR_1
+  master: true
+  roi_norm:
+  - 0.195312
+  - 0.106481
+  - 0.690972
+  - 0.845679
+  length: 0
+  starts_with: ''

@@ -3,10 +3,10 @@ head:
   OK: jj
   NG: kk
 qr:
-  REQ: ''
-  TRIGGER: ''
-  OK: ''
-  NG: ''
+  REQ: qr
+  TRIGGER: QR
+  OK: ok
+  NG: ng
 events:
   ASK_MODEL: ''
   BACK: ''

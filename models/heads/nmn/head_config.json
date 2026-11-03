@@ -1,7 +1,8 @@
 {
   "parents": [
     "asw",
-    "uij"
+    "uij",
+    "qr_scanner"
   ],
   "finished": true
 }
