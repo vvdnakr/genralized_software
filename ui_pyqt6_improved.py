@@ -4808,7 +4808,9 @@ class HeadScreen(BaseScreen):
         self.refresh_counters()
         self._update_scan_panel()
         self.app.camera.start()
-        self.auto_balance()
+        # (no automatic white balance here: it changed the camera every time
+        #  the screen was rebuilt, e.g. when locking.  Use the Auto White
+        #  Balance button or Camera Setup.)
         if not locked:
             done, total, _ = self.comm_cfg.progress()
             self.log(f"Comm config: {done}/{total} "

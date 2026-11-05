@@ -1,0 +1,17 @@
+2026-11-05 13:42:45 | EVT | data buffer: 5 file(s) older than 2 day(s) deleted
+2026-11-05 13:42:46 | EVT | communication ENABLED
+2026-11-05 13:42:46 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-11-05 13:42:49 | EVT | UI LOCKED (operator mode)
+2026-11-05 13:42:49 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-11-05 13:42:50 | EVT | keyboard and mouse locked to the program
+2026-11-05 13:42:52 | OUT | '1'  [model 'asdfg' selected in UI]  (no client connected, logged only)
+2026-11-05 13:42:52 | ERR | Camera NOT connected: No camera found.
+Please check the camera cable and power.
+2026-11-05 13:42:52 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-11-05 13:42:52 | ERR | MES server not reachable
+2026-11-05 13:42:55 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-11-05 13:42:58 | EVT | keyboard and mouse free again
+2026-11-05 13:42:58 | EVT | MASTER mode opened
+2026-11-05 13:42:59 | ERR | cannot listen on 192.168.0.50:2000 ([Errno 99] Cannot assign requested address) — retrying in 3s
+2026-11-05 13:42:59 | ERR | MES server not reachable
+2026-11-05 13:43:00 | EVT | communication DISABLED

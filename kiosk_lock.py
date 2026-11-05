@@ -187,7 +187,7 @@ class InputLock(QObject):
         self.log = log or (lambda msg: None)
         self._shields = []
         self._timer = QTimer(self)
-        self._timer.setInterval(500)
+        self._timer.setInterval(250)
         self._timer.timeout.connect(self._keep)
         self._was_flags = None
         self.wayland = QGuiApplication.platformName().startswith("wayland")
@@ -210,11 +210,15 @@ class InputLock(QObject):
         self.engaged = True
         w = self.win
         self._was_flags = w.windowFlags()
-        w.setWindowFlags(self._was_flags | Qt.WindowType.WindowStaysOnTopHint)
+        # no title bar (cannot be minimised or moved), always on top
+        w.setWindowFlags(self._was_flags | Qt.WindowType.WindowStaysOnTopHint
+                         | Qt.WindowType.FramelessWindowHint)
         w.showFullScreen()
         w.raise_()
         w.activateWindow()
         self._cover_other_screens()
+        QGuiApplication.instance().focusWindowChanged.connect(
+            self._focus_changed)
         QApplication.instance().installEventFilter(self)
         if self.grab and not self.wayland:
             QTimer.singleShot(300, self._grab)
@@ -232,6 +236,11 @@ class InputLock(QObject):
             return
         self.engaged = False
         self._timer.stop()
+        try:
+            QGuiApplication.instance().focusWindowChanged.disconnect(
+                self._focus_changed)
+        except Exception:
+            pass
         QApplication.instance().removeEventFilter(self)
         try:
             self.win.releaseKeyboard()
@@ -267,6 +276,53 @@ class InputLock(QObject):
         if self.engaged and QApplication.activePopupWidget() is None:
             self.win.grabKeyboard()
 
+    def _focus_changed(self, _win):
+        # another program took the focus (file manager, a USB pop-up ...):
+        # take it back at once
+        if self.engaged:
+            QTimer.singleShot(0, self._front)
+
+    def _front(self):
+        """Bring the main window back to the front."""
+        if not self.engaged:
+            return
+        w = self.win
+        if QApplication.activeModalWidget() is not None or \
+                QApplication.activePopupWidget() is not None:
+            return
+        if w.isMinimized() or not w.isFullScreen():
+            w.showFullScreen()
+        if w.isActiveWindow():
+            return
+        w.raise_()
+        w.activateWindow()
+        h = w.windowHandle()
+        if h is not None:
+            h.requestActivate()
+        self._x11_front()
+
+    def _x11_front(self):
+        """Some window managers refuse to give the focus back to a program;
+        wmctrl / xdotool (if installed) can force it.  At most once a
+        second."""
+        import shutil, subprocess, time
+        now = time.time()
+        if self.wayland or now - getattr(self, "_x11_t", 0) < 1.0:
+            return
+        self._x11_t = now
+        wid = int(self.win.winId())
+        if shutil.which("wmctrl"):
+            cmd = ["wmctrl", "-i", "-a", hex(wid)]
+        elif shutil.which("xdotool"):
+            cmd = ["xdotool", "windowactivate", str(wid)]
+        else:
+            return
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
     def _keep(self):
         """Every half second: stay on top, keep the keyboard, cover screens
         that were plugged in later."""
@@ -275,11 +331,7 @@ class InputLock(QObject):
         w = self.win
         if not w.isFullScreen():
             w.showFullScreen()
-        if QApplication.activeModalWidget() is None and \
-                QApplication.activePopupWidget() is None and \
-                not w.isActiveWindow():
-            w.raise_()
-            w.activateWindow()
+        self._front()
         if self.grab and not self.wayland and \
                 QApplication.activePopupWidget() is None and \
                 QWidget.keyboardGrabber() is not w:

@@ -1,0 +1,26 @@
+head:
+  SELECT: '1'
+  OK: ok
+  NG: nh
+qr:
+  REQ: ''
+  TRIGGER: ''
+  OK: ''
+  NG: ''
+events:
+  ASK_MODEL: ''
+  BACK: ''
+  ERROR_PREFIX: ''
+  WARN_PREFIX: ''
+parents:
+  df:
+    PLC: sa1
+    OK: ok
+    NG: ng
+    area_wise: false
+    combine: true
+    children:
+      rt:
+        PLC: ''
+        OK: ''
+        NG: ''
