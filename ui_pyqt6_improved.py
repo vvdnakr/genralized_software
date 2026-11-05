@@ -556,6 +556,7 @@ class QuickScanInput(QDialog):
     UNLOCK_CODE = "##**1"     # scan/type this to close the box, like Esc —
                               # for stations with a scanner but no keyboard
     last_unlocked = False     # set by ask() after the box closes
+    kiosk_check = staticmethod(lambda: False)   # App sets: keyboard locked?
 
     def __init__(self, parent=None, prompt="SCAN BARCODE",
                  sub="", timeout_s=0, width=620, initial=""):
@@ -564,10 +565,17 @@ class QuickScanInput(QDialog):
         self.unlocked = False
         self._deadline = (time.time() + timeout_s) if timeout_s else 0.0
         self._timeout_s = timeout_s
-
-        self.setWindowFlags(Qt.WindowType.Popup
+        self.user_closed = False     # Enter / Esc / timeout / unlock code
+        # A Qt::Popup is dropped by many window managers the moment they
+        # move the focus (the box then vanished at once -> 'No ID scanned').
+        # So: always a normal modal, frameless, always-on-top dialog that
+        # pulls itself to the front (see _tick).  While the keyboard lock is
+        # on, the lock hands the keys to the box.
+        self._kiosk = bool(self.kiosk_check())
+        self.setWindowFlags(Qt.WindowType.Dialog
                             | Qt.WindowType.FramelessWindowHint
                             | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet("QDialog { background-color: #14141a;"
                            " border: 2px solid #3b6ef5; border-radius: 8px; }")
 
@@ -610,7 +618,7 @@ class QuickScanInput(QDialog):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(200)
+        self._timer.start(150)
 
     # -- geometry ------------------------------------------------------------
     def _place_top_center(self):
@@ -631,10 +639,11 @@ class QuickScanInput(QDialog):
         self.entry.setCursorPosition(len(self.entry.text()))
         # Qt::Popup already grabs globally on X11; this keeps the caret nailed
         # to the field even if the popup grab is refused (Wayland fallback).
-        try:
-            self.entry.grabKeyboard()
-        except Exception:
-            pass
+        if not self._kiosk:
+            try:
+                self.entry.grabKeyboard()
+            except Exception:
+                pass
 
     def _release(self):
         try:
@@ -652,10 +661,12 @@ class QuickScanInput(QDialog):
             self._cancel()
             return
         self.value = txt
+        self.user_closed = True
         self._release()
         self.accept()
 
     def _cancel(self):
+        self.user_closed = True
         self.value = None
         self._release()
         self.reject()
@@ -671,7 +682,21 @@ class QuickScanInput(QDialog):
         # box only ever leaves on Enter / Esc / timeout
         e.accept()
 
+    def _to_front(self):
+        """Stay visible and keep the caret in the field."""
+        if not self.isVisible():
+            return
+        if not self.isActiveWindow():
+            self.raise_()
+            self.activateWindow()
+            h = self.windowHandle()
+            if h is not None:
+                h.requestActivate()
+        if not self.entry.hasFocus():
+            self.entry.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _tick(self):
+        self._to_front()
         if not self._deadline:
             return
         left = self._deadline - time.time()
@@ -687,10 +712,20 @@ class QuickScanInput(QDialog):
     def ask(parent=None, prompt="SCAN BARCODE", sub="", timeout_s=0,
             initial=""):
         """Open the box modally and return the scanned/typed text, or None."""
-        dlg = QuickScanInput(parent, prompt=prompt, sub=sub,
-                             timeout_s=timeout_s, initial=initial)
-        dlg.exec()
-        QuickScanInput.last_unlocked = dlg.unlocked
+        for _try in range(6):
+            dlg = QuickScanInput(parent, prompt=prompt, sub=sub,
+                                 timeout_s=timeout_s, initial=initial)
+            t0 = time.time()
+            dlg.exec()
+            QuickScanInput.last_unlocked = dlg.unlocked
+            # closed by the system, not by the user (lost focus, refused
+            # grab): open it again instead of reporting 'nothing scanned'
+            if dlg.user_closed or time.time() - t0 > 1.5:
+                break
+            t1 = time.time()
+            while time.time() - t1 < 0.25:
+                QApplication.processEvents()
+                time.sleep(0.01)
         return dlg.value
 
 
@@ -2796,6 +2831,8 @@ class App(QMainWindow):
             gnome_shortcuts=sec.get("gnome_shortcuts", True),
             on_master_key=lambda: self.ask_master(self),
             log=lambda m: self.comm_log.add("EVT", m))
+        QuickScanInput.kiosk_check = staticmethod(
+            lambda: bool(self.kiosk.engaged))
         self.kiosk.recover(wait=True)      # shortcuts left off by a crash
         QShortcut(QKeySequence("Ctrl+Shift+F12"), self,
                   activated=lambda: self.ask_master(self))

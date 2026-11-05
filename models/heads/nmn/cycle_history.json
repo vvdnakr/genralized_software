@@ -1,1 +1,0 @@
-[{"serial": "", "operator": "", "time": "22:48:50", "date": "2026-11-02", "ok": true, "validation": false, "scenes": {"uij": {"jjj": true}, "asw": {"fg": true, "jk": true}}}, {"serial": "http://en.m.wikipedia.org", "operator": "1234", "time": "14:59:50", "date": "2026-11-03", "ok": false, "validation": false, "scenes": {"asw": {"fg": false, "jk": false}, "uij": {"jjj": false}}}]

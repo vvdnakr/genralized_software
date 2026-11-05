@@ -1,0 +1,42 @@
+{
+  "reg": [
+    575,
+    52,
+    258,
+    229
+  ],
+  "temp_reg": [
+    [
+      98,
+      39,
+      31,
+      34
+    ]
+  ],
+  "threshold": 0.8,
+  "scale_range": [
+    0.8,
+    1.5
+  ],
+  "scale_steps": 20,
+  "max_matches": 1,
+  "matches": [
+    {
+      "score": 0.9853759407997131,
+      "scale": 1.0210526315789474,
+      "top_left": [
+        98,
+        39
+      ],
+      "bottom_right": [
+        129,
+        73
+      ],
+      "center": [
+        113,
+        56
+      ]
+    }
+  ],
+  "pin_limit": 20.0
+}

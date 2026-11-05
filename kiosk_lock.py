@@ -210,12 +210,20 @@ class InputLock(QObject):
         self.engaged = True
         w = self.win
         self._was_flags = w.windowFlags()
-        # no title bar (cannot be minimised or moved), always on top
-        w.setWindowFlags(self._was_flags | Qt.WindowType.WindowStaysOnTopHint
-                         | Qt.WindowType.FramelessWindowHint)
+        # no title bar (cannot be minimised or moved), always on top.
+        # Changing the flags re-creates the window and some window managers
+        # then leave it minimised / behind: so only change them when needed,
+        # show it again at once, and push it to the front several times.
+        want = (self._was_flags | Qt.WindowType.WindowStaysOnTopHint
+                | Qt.WindowType.FramelessWindowHint)
+        if w.windowFlags() != want:
+            w.setWindowFlags(want)
+        w.show()
         w.showFullScreen()
         w.raise_()
         w.activateWindow()
+        for ms in (100, 400, 1000, 2500):
+            QTimer.singleShot(ms, self._front)
         self._cover_other_screens()
         QGuiApplication.instance().focusWindowChanged.connect(
             self._focus_changed)
@@ -290,7 +298,10 @@ class InputLock(QObject):
         if QApplication.activeModalWidget() is not None or \
                 QApplication.activePopupWidget() is not None:
             return
-        if w.isMinimized() or not w.isFullScreen():
+        if not w.isVisible() or w.isMinimized():
+            w.showNormal()
+            w.showFullScreen()
+        elif not w.isFullScreen():
             w.showFullScreen()
         if w.isActiveWindow():
             return
@@ -312,7 +323,9 @@ class InputLock(QObject):
         self._x11_t = now
         wid = int(self.win.winId())
         if shutil.which("wmctrl"):
-            cmd = ["wmctrl", "-i", "-a", hex(wid)]
+            # keep it above the other windows, then activate it
+            cmd = ["sh", "-c", f"wmctrl -i -r {hex(wid)} -b add,above,"
+                               f"fullscreen; wmctrl -i -a {hex(wid)}"]
         elif shutil.which("xdotool"):
             cmd = ["xdotool", "windowactivate", str(wid)]
         else:
@@ -369,6 +382,12 @@ class InputLock(QObject):
 
     def eventFilter(self, obj, e):
         t = e.type()
+        if self.engaged and obj is self.win:
+            # minimised / hidden / sent behind: bring it back at once
+            if t == QEvent.Type.WindowStateChange and self.win.isMinimized():
+                QTimer.singleShot(0, self._front)
+            elif t in (QEvent.Type.Hide, QEvent.Type.WindowDeactivate):
+                QTimer.singleShot(60, self._front)
         if not self.engaged or t not in (QEvent.Type.KeyPress,
                                          QEvent.Type.KeyRelease,
                                          QEvent.Type.ShortcutOverride):

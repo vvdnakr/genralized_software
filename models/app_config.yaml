@@ -10,7 +10,7 @@ qr:
   timeout_s: 6.0
   scene_timeout_s: 3.0
   min_agree: 2
-  trigger_wait_s: 60
+  trigger_wait_s: 20
   max_tries: 10
   retry_delay_s: 1.5
   save_failed: true
