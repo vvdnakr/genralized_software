@@ -3,6 +3,8 @@ validation_password: '5678'
 locked: false
 ui:
   frame_scale: 0.6
+  result_hold_s: 4
+  nest_min_px: 24
   show_regions_live: false
 scanner:
   test_timeout_s: 10

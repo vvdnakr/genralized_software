@@ -2862,6 +2862,28 @@ class CameraHub:
             time.sleep(0.01)
         return self._scaled(cam.latest_full())
 
+    def fresh(self, timeout=0.5):
+        """Worker-thread call: a picture taken AFTER this call, from the
+        camera in use.  A free-running camera gives its next frame; a
+        triggered camera (or one that sends nothing in time) gives the newest
+        picture it has."""
+        cam = self._by_id.get(self._active)
+        if cam is None:
+            return None
+        if int(cam.params.get("trigger_mode", 0)) == 0:
+            seq0 = cam.seq
+            t = time.time()
+            while time.time() - t < timeout and cam.seq <= seq0:
+                time.sleep(0.005)
+        return self._scaled(cam.latest_full())
+
+    def frame_age(self):
+        """Seconds since the camera in use sent its last picture (None when
+        unknown)."""
+        cam = self._by_id.get(self._active)
+        t = getattr(cam, "_t_last", None) if cam is not None else None
+        return None if not t else max(0.0, time.time() - t)
+
     # -- the old CameraFeed calls ---------------------------------------------------------
     def _to_bgr(self, f):
         return cv2.cvtColor(f, cv2.COLOR_GRAY2BGR) if f.ndim == 2 else f

@@ -33,6 +33,10 @@ from PyQt6.QtWidgets import (
     QGridLayout, QGroupBox, QMessageBox, QInputDialog, QTreeWidget,
     QTreeWidgetItem, QScrollArea, QSizePolicy, QListWidget)
 
+from vision_detect import (
+    METHOD_NORMAL, METHOD_AI, SCALES, AI_SPEEDS, ai_available,
+    get_scene_scale, set_scene_scale, scale_frame, detect_area, run_areas,
+    inside_of, order_areas, descendants, object_center)
 from two_point import (
     ParentModelManager,
     detect_multi_scale_templates,
@@ -65,6 +69,8 @@ class AppConfig:
             "validation_password": "5678",
             "locked": False,
             "ui": {"frame_scale": 0.6,
+                   "result_hold_s": 4,     # result picture, then live again
+                   "nest_min_px": 24,      # smaller objects cannot be nested
                    "show_regions_live": False},  # same 0.6 resize as two_point.py
             "scanner": {"test_timeout_s": 10},
             # camera QR reading (only used when the part-scan source = camera)
@@ -3440,6 +3446,12 @@ class BaseScreen(QWidget):
         self.app.after(ms, fn)
 
     def destroy_screen(self):
+        if getattr(self, "_lock_dlg", None) is not None:
+            try:
+                self._lock_dlg.force_close()
+            except Exception:
+                pass
+            self._lock_dlg = None
         self._alive = False
         self.setParent(None)
         self.deleteLater()
@@ -4100,14 +4112,88 @@ class MesDialog(QDialog):
 # ============================================================================
 # OPERATOR ID SCAN DIALOG (runs once when opening model if required)
 # ============================================================================
+class StationLockDialog(QDialog):
+    """The part already passed this station: the station stays locked until
+    the MASTER password is typed.  It cannot be closed any other way."""
+
+    def __init__(self, master, app, serial, on_unlock):
+        super().__init__(master)
+        self.app, self.on_unlock, self._open = app, on_unlock, True
+        self.setWindowTitle("Station locked")
+        self.setModal(True)
+        self.setMinimumWidth(560)
+        _premium_dialog(self, C_NG)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band("ALREADY PASSED - STATION LOCKED", C_NG))
+        inner = QVBoxLayout()
+        inner.setContentsMargins(26, 22, 26, 22)
+        inner.setSpacing(14)
+        t = QLabel(f"Serial: {serial}\nThis part already passed this "
+                   "station.\nCall the supervisor: type the master password "
+                   "to test it again.")
+        t.setWordWrap(True)
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;")
+        inner.addWidget(t)
+        self.edit = QLineEdit()
+        self.edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.edit.setMinimumHeight(54)
+        self.edit.setStyleSheet(
+            f"background: {C_FIELD}; color: white; border: 1px solid "
+            f"{C_LINE}; border-radius: 8px; font-size: 20pt;"
+            " letter-spacing: 6px;")
+        self.edit.returnPressed.connect(self._try)
+        inner.addWidget(self.edit)
+        self.msg = QLabel("")
+        self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg.setStyleSheet(f"color: {C_NG}; font-size: 11pt;")
+        inner.addWidget(self.msg)
+        bo = QPushButton("Unlock")
+        bo.setMinimumHeight(50)
+        apply_btn_color(bo, C_ACCENT)
+        bo.clicked.connect(self._try)
+        inner.addWidget(bo)
+        lay.addLayout(inner)
+        QTimer.singleShot(0, self.edit.setFocus)
+
+    def _try(self):
+        if self.app.is_master_password(self.edit.text()):
+            self._open = False
+            self.accept()
+            if self.on_unlock:
+                self.on_unlock()
+        else:
+            self.edit.clear()
+            self.msg.setText("Wrong password. Only the master password "
+                             "unlocks the station.")
+
+    def reject(self):                       # Esc / window close: stay locked
+        if not self._open:
+            super().reject()
+
+    def closeEvent(self, e):
+        if self._open:
+            e.ignore()
+        else:
+            e.accept()
+
+    def force_close(self):
+        self._open = False
+        self.close()
+
+
 class OperatorScanDialog(QDialog):
-    def __init__(self, master, app, head_name):
+    def __init__(self, master, app, head_name, mes=False):
         super().__init__(master)
         self.app = app
         self.head_name = head_name
         self.operator_id = None
         self._alive = True
-        self.setWindowTitle(f"Operator Login — {head_name}")
+        self.setWindowTitle(("MES Login" if mes else "Operator Login")
+                            + f" — {head_name}")
         self.setFixedSize(480, 250)
         self.setStyleSheet("QDialog { background-color: #1c1c22; }")
 
@@ -4115,14 +4201,18 @@ class OperatorScanDialog(QDialog):
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(12)
 
-        t = QLabel("SCAN YOUR ID BADGE")
+        t = QLabel("MES LOGIN - SCAN YOUR USER ID" if mes
+                   else "SCAN YOUR ID BADGE")
         t.setStyleSheet("color: #ffd43b; font-size: 15pt; font-weight: bold;")
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(t)
 
-        sub = QLabel(f"Model '{head_name}' requires Operator ID "
-                     "authentication.\nPress Scan (or F2) — the scan box "
-                     "takes the keyboard until you press Enter.")
+        sub = QLabel((f"Model '{head_name}' sends its results to MES.\n"
+                      "Scan or type your User ID, then press Enter."
+                      if mes else
+                      f"Model '{head_name}' requires Operator ID "
+                      "authentication.\nPress Scan (or F2) — the scan box "
+                      "takes the keyboard until you press Enter."))
         sub.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(sub)
@@ -4369,6 +4459,11 @@ class HeadScreen(BaseScreen):
         self.mes_prev_state = "idle"   # idle | checking | pass | fail | error
         self.mes_prev_msg = ""
         self.mes_busy = False          # a cycle submission is in flight
+        # the part already passed this station: locked until the master
+        # password is typed (kept on the app, so rebuilding the screen
+        # does not unlock it)
+        self._lock_dlg = None
+        self._passed_override = None   # serial the master allowed again
         # VALIDATION part: serial typed/scanned via the password-protected
         # button; run normally but NEVER sent to MES (no check, no report)
         self.validation_mode = False
@@ -4388,10 +4483,12 @@ class HeadScreen(BaseScreen):
         self.operator_id = app.get_operator(head_name)
 
         # prompt for Operator ID scan ONLY when there is no live session
-        if (self.scan_active
-                and self.scanner_cfg.get("require_operator")
+        # MES in use: the MES login (User ID) is the first step of the model
+        if (((self.scan_active and self.scanner_cfg.get("require_operator"))
+             or self.mes_active)
                 and not self.operator_id):
-            dlg = OperatorScanDialog(self, app, head_name)
+            dlg = OperatorScanDialog(self, app, head_name,
+                                     mes=self.mes_active)
             if dlg.exec() == QDialog.DialogCode.Accepted and dlg.operator_id:
                 self.operator_id = dlg.operator_id
                 app.set_operator(head_name, self.operator_id)
@@ -4405,6 +4502,10 @@ class HeadScreen(BaseScreen):
             self.mes.set_operator(self.operator_id)
 
         self._mes_online = None        # None = not checked yet
+        lk = getattr(app, "station_lock", None)
+        if lk and lk.get("head") == head_name and self.mes_active:
+            QTimer.singleShot(300, lambda: self._alive and
+                              self._lock_already_passed(lk["serial"]))
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 10, 12, 10)
         root.setSpacing(10)
@@ -4542,6 +4643,8 @@ class HeadScreen(BaseScreen):
         vrow.addStretch()
         vbtns = [styled_btn(cam, "Live", self.back_to_live, color="#44444e")]
         if self.n_scenes:
+            vbtns.append(styled_btn(cam, "Last Result",
+                                    self.show_last_result, color="#44444e"))
             vbtns.append(styled_btn(cam, "Compare with Master",
                                     self.enter_compare, color="#44444e"))
         vrow.addWidget(btn_group(vbtns, spacing=4, pad=(4, 4, 4, 4)))
@@ -4983,6 +5086,13 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     def destroy_screen(self):
         self._qr_stop.set()
+        self._run_gen += 1                 # a running check is thrown away
+        if getattr(self, "_lock_dlg", None) is not None:
+            try:
+                self._lock_dlg.force_close()
+            except Exception:
+                pass
+            self._lock_dlg = None
         for pp in list(getattr(self, "_popups", {}).values()):
             try:
                 pp.close()
@@ -5488,8 +5598,8 @@ class HeadScreen(BaseScreen):
             "idle":     ("Waiting for the barcode", C_MUTED),
             "checking": ("Checking this part...", C_WARN),
             "pass":     ("Previous station passed", C_OK),
-            "all_passed": ("Already passed by this station", C_OK),
-            "fail":     ("Previous station NOT passed", C_NG),
+            "all_passed": ("Already passed by this station", C_NG),
+            "fail":     ("Previous station failed", C_NG),
             "error":    ("MES not connected", C_NG),
             "sending":  ("Sending the result to MES...", C_WARN),
             "sent":     ("Result sent to MES", C_OK),
@@ -5534,21 +5644,30 @@ class HeadScreen(BaseScreen):
             state, msg = res
             msg = str(msg)
 
-            if state in ("pass", "all_passed"):
+            if state == "all_passed":
+                # already passed HERE: no second test without the master
                 self._set_mes_status(state, msg)
-                if state == "pass":
-                    self.log(f"[MES] OK previous stage passed - {msg}")
-                    self.app.comm_log.add("EVT", f"MES prev-stage PASS "
-                                                 f"'{serial}': {msg}")
-                    Message.ok(self, "PART OK TO TEST",
-                               f"Serial: {serial}")
-                else:
-                    self.log(f"[MES] OK all stations already passed - {msg}")
-                    self.app.comm_log.add("EVT", f"MES prev-stage ALL-PASSED "
-                                                 f"'{serial}': {msg}")
-                    Message.ok(self, "ALREADY PASSED",
-                               f"Serial: {serial}\n"
-                               "Already passed by this station.")
+                self.log(f"[MES] already passed by this station - {msg}")
+                self.app.comm_log.add("EVT", f"MES ALREADY-PASSED "
+                                             f"'{serial}': {msg} - station "
+                                             "locked")
+                self._update_scan_panel()
+                if self._passed_override == serial:
+                    # the master already allowed this part again
+                    self.log("[MES] master unlock is active - test allowed")
+                    if self.scanner_cfg.get("send_to_client", True):
+                        self._try_send_barcode()
+                        self._update_scan_panel()
+                    return
+                self._lock_already_passed(serial)
+                return
+            if state == "pass":
+                self._set_mes_status(state, msg)
+                self.log(f"[MES] OK previous stage passed - {msg}")
+                self.app.comm_log.add("EVT", f"MES prev-stage PASS "
+                                             f"'{serial}': {msg}")
+                Message.ok(self, "PART OK TO TEST",
+                           f"Serial: {serial}")
                 if self.scanner_cfg.get("send_to_client", True):
                     self._try_send_barcode()
                 self._update_scan_panel()
@@ -5573,11 +5692,11 @@ class HeadScreen(BaseScreen):
             blocked = (self.app.is_locked()
                        and self.mes_cfg.get("block_on_prev_fail", True))
             if bad_serial:
-                Message.error(self, "WRONG SERIAL NUMBER",
+                Message.error(self, "INVALID SERIAL NUMBER",
                               f"Serial: {serial}\n"
                               "This serial number is not in MES.")
             elif state == "fail":
-                Message.error(self, "PREVIOUS STATION NOT PASSED",
+                Message.error(self, "PREVIOUS STATION FAILED",
                               f"Serial: {serial}\n"
                               "Take this part off the station.")
             elif no_link:
@@ -5596,6 +5715,39 @@ class HeadScreen(BaseScreen):
                 self.log("[MES] controls open - run allowed, but this part "
                          "did NOT pass the previous station")
         self.mes.check_previous_async(serial, done)
+
+    # -- already passed: station lock ---------------------------------------------
+    def _lock_already_passed(self, serial):
+        """No second test of a passed part.  Only the MASTER password opens
+        the station again, and then the full test of this part may run."""
+        self.app.station_lock = {"head": self.head, "serial": serial}
+        if self._lock_dlg is not None:
+            return
+
+        def unlocked():
+            self._lock_dlg = None
+            self.app.station_lock = None
+            if not self._alive:
+                return
+            self._passed_override = serial
+            self.log(f"[MES] MASTER unlocked the station - '{serial}' may "
+                     "be tested again")
+            self.app.comm_log.add("EVT", f"MASTER unlock: '{serial}' "
+                                         "(already passed) will be tested "
+                                         "again")
+            if self.scan_value == serial and \
+                    self.scanner_cfg.get("send_to_client", True):
+                self._try_send_barcode()
+            self._update_scan_panel()
+            Message.ok(self, "STATION UNLOCKED", f"Serial: {serial}\n"
+                       "You can test this part again.", auto_ms=3000)
+
+        self._lock_dlg = StationLockDialog(self, self.app, serial, unlocked)
+        self._lock_dlg.show()
+
+    def _station_locked(self):
+        lk = getattr(self.app, "station_lock", None)
+        return bool(lk and lk.get("head") == self.head)
 
     def mes_recheck(self):
         if self.validation_mode:
@@ -5616,6 +5768,14 @@ class HeadScreen(BaseScreen):
             return False, "MES is still submitting the previous cycle — wait"
         if self.validation_mode and self.scan_value:
             return True, ""          # validation part: MES not involved
+        if self._station_locked():
+            return False, ("this part already passed this station — the "
+                           "station is locked (master password)")
+        if self.mes_prev_state == "all_passed":
+            # allowed again only for the serial the master unlocked
+            if self.scan_value and self._passed_override == self.scan_value:
+                return True, ""
+            return False, "this part already passed this station"
         if self.mes_prev_state == "checking":
             return False, "previous-stage check still running — wait a moment"
         if not self.scan_active:
@@ -5624,7 +5784,7 @@ class HeadScreen(BaseScreen):
         if not self.app.is_locked() or not self.mes_cfg.get(
                 "block_on_prev_fail", True):
             return True, ""          # engineering mode: warn only
-        if self.mes_prev_state in ("pass", "all_passed"):
+        if self.mes_prev_state == "pass":
             return True, ""
         if self.mes_prev_state == "fail":
             return False, ("unit did NOT pass the previous station — "
@@ -5731,94 +5891,116 @@ class HeadScreen(BaseScreen):
         max_w = max(200, int(up.get("max_width", 1024)))
         jpg_q = max(30, min(95, int(up.get("jpeg_quality", 75))))
 
-        # 1. write the images to disk — reduced to a small resolution
-        image_paths = []
-        for i, (label, img) in enumerate(self.cycle_images):
-            safe = "".join(ch if ch.isalnum() or ch in "-_" else "_"
-                           for ch in label)[:40]
-            p = os.path.join(out_dir, f"{serial}_{stamp}_{i:02d}_{safe}.jpg")
-            try:
-                if img.shape[1] > max_w:
-                    k = max_w / float(img.shape[1])
-                    img = cv2.resize(img, None, fx=k, fy=k,
-                                     interpolation=cv2.INTER_AREA)
-                if not cv2.imwrite(p, img, [cv2.IMWRITE_JPEG_QUALITY, jpg_q]):
-                    raise OSError("imwrite failed")
-                image_paths.append((label, p))
-            except Exception as e:
-                self.log(f"[MES] could not save image {label}: {e}")
-
-        # 2. build the detection report header + body
-        head_lines = [
-            "=" * 66,
-            "DETECTION REPORT",
-            "=" * 66,
-            f"model            : {self.head}",
-            f"serial number    : {serial}",
-            f"operator        : "
-            f"{self.operator_id or self.mes_cfg.get('operator_id', '') or '—'}"
-            + ("  (scanned)" if self.operator_id else "  (from mes.yaml)"),
-            f"machine          : {self.mes_cfg.get('machine_no', '')}",
-            f"stage            : {self.mes_cfg.get('stage_id', '')} "
-            f"{self.mes_cfg.get('stage_name', '')}",
-            f"product          : {self.mes_cfg.get('product_id', '')} "
-            f"{self.mes_cfg.get('product_name', '')}",
-            f"time             : "
-            f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S}",
-            f"previous stage   : {self.mes_prev_state.upper()} — "
-            f"{self.mes_prev_msg}",
-            f"CYCLE RESULT     : {'PASS' if cycle_ok else 'FAIL'}",
-            "",
-            "-" * 66,
-            "DETECTION LOG",
-            "-" * 66,
-        ]
-        report_path = os.path.join(out_dir,
-                                   f"{serial}_report_{stamp}.txt")
-        bundle = {
-            "serial": serial,
-            "ok": bool(cycle_ok),
-            "images": image_paths,
-            "report_lines": head_lines + self.cycle_report_lines,
-            "defects": [] if cycle_ok else self.cycle_defects,
-            "report_path": report_path,
-        }
-
+        # The pictures are resized and written to disk in a helper thread,
+        # so the screen and the next trigger never wait for the disk.
+        images = list(self.cycle_images)
+        report_lines = list(self.cycle_report_lines)
+        defects = list(self.cycle_defects)
         self.mes_busy = True
-        if self.operator_id:
-            self.mes.set_operator(self.operator_id)
-        self._set_mes_status("sending",
-                             f"{len(image_paths)} image(s) + report for "
-                             f"'{serial}'…")
-        self.log(f"[MES] uploading {len(image_paths)} image(s) and the "
-                 f"detection report for '{serial}'…")
+        prev_state, prev_msg = self.mes_prev_state, self.mes_prev_msg
+        self._set_mes_status("sending", f"report for '{serial}'…")
+        mes = self.mes
 
-        def done(res):
-            ok, msg, path = res
-            self.mes_busy = False
-            if not self._alive:
+        def write():
+            problems = []
+            image_paths = []
+            for i, (label, img) in enumerate(images):
+                safe = "".join(ch if ch.isalnum() or ch in "-_" else "_"
+                               for ch in label)[:40]
+                p = os.path.join(out_dir,
+                                 f"{serial}_{stamp}_{i:02d}_{safe}.jpg")
+                try:
+                    if img.shape[1] > max_w:
+                        k = max_w / float(img.shape[1])
+                        img = cv2.resize(img, None, fx=k, fy=k,
+                                         interpolation=cv2.INTER_AREA)
+                    if not cv2.imwrite(p, img,
+                                       [cv2.IMWRITE_JPEG_QUALITY, jpg_q]):
+                        raise OSError("imwrite failed")
+                    image_paths.append((label, p))
+                except Exception as e:
+                    problems.append(f"[MES] could not save image {label}: "
+                                    f"{e}")
+            self.after(0, lambda: send(image_paths, problems))
+
+        def send(image_paths, problems):
+            if not self._alive or mes is None:
+                self.mes_busy = False
                 return
-            if ok:
-                self._set_mes_status("sent", str(msg))
-                self.log(f"[MES] OK stage report accepted - {msg}")
-                self.app.comm_log.add("EVT", f"MES stage report '{serial}' "
-                                             f"OK: {msg}")
-                Message.ok(self, "SENT TO MES",
-                           f"Serial: {serial}")
-            else:
-                self._set_mes_status("senderr", str(msg))
-                self.log(f"[MES] FAILED stage report - {msg}")
-                self.app.comm_log.add("ERR", f"MES stage report '{serial}' "
-                                             f"FAILED: {msg}")
-                Message.error(self, "NOT SENT TO MES",
-                              f"Serial: {serial}\n"
-                              "Reason: MES did not answer. Saved on this PC.")
-            if path:
-                self.log(f"[MES] report: {path}")
-            # only now is the unit finished -> ready for the next one
-            self._start_next_cycle()
+            for m in problems:
+                self.log(m)
+            # 2. build the detection report header + body
+            head_lines = [
+                "=" * 66,
+                "DETECTION REPORT",
+                "=" * 66,
+                f"model            : {self.head}",
+                f"serial number    : {serial}",
+                f"operator        : "
+                f"{self.operator_id or self.mes_cfg.get('operator_id', '') or '—'}"
+                + ("  (scanned)" if self.operator_id else "  (from mes.yaml)"),
+                f"machine          : {self.mes_cfg.get('machine_no', '')}",
+                f"stage            : {self.mes_cfg.get('stage_id', '')} "
+                f"{self.mes_cfg.get('stage_name', '')}",
+                f"product          : {self.mes_cfg.get('product_id', '')} "
+                f"{self.mes_cfg.get('product_name', '')}",
+                f"time             : "
+                f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S}",
+                f"previous stage   : {prev_state.upper()} — "
+                f"{prev_msg}",
+                f"CYCLE RESULT     : {'PASS' if cycle_ok else 'FAIL'}",
+                "",
+                "-" * 66,
+                "DETECTION LOG",
+                "-" * 66,
+            ]
+            report_path = os.path.join(out_dir,
+                                       f"{serial}_report_{stamp}.txt")
+            bundle = {
+                "serial": serial,
+                "ok": bool(cycle_ok),
+                "images": image_paths,
+                "report_lines": head_lines + report_lines,
+                "defects": [] if cycle_ok else defects,
+                "report_path": report_path,
+            }
 
-        self.mes.submit_cycle_async(bundle, done)
+            if self.operator_id:
+                mes.set_operator(self.operator_id)
+            self._set_mes_status("sending",
+                                 f"{len(image_paths)} image(s) + report for "
+                                 f"'{serial}'…")
+            self.log(f"[MES] uploading {len(image_paths)} image(s) and the "
+                     f"detection report for '{serial}'…")
+
+            def done(res):
+                ok, msg, path = res
+                self.mes_busy = False
+                if not self._alive:
+                    return
+                if ok:
+                    self._set_mes_status("sent", str(msg))
+                    self.log(f"[MES] OK stage report accepted - {msg}")
+                    self.app.comm_log.add("EVT", f"MES stage report '{serial}' "
+                                                 f"OK: {msg}")
+                    Message.ok(self, "SENT TO MES",
+                               f"Serial: {serial}")
+                else:
+                    self._set_mes_status("senderr", str(msg))
+                    self.log(f"[MES] FAILED stage report - {msg}")
+                    self.app.comm_log.add("ERR", f"MES stage report '{serial}' "
+                                                 f"FAILED: {msg}")
+                    Message.error(self, "NOT SENT TO MES",
+                                  f"Serial: {serial}\n"
+                                  "Reason: MES did not answer. Saved on this PC.")
+                if path:
+                    self.log(f"[MES] report: {path}")
+                # only now is the unit finished -> ready for the next one
+                self._start_next_cycle()
+
+            mes.submit_cycle_async(bundle, done)
+
+        threading.Thread(target=write, daemon=True).start()
         return True
 
     # ------------------------------------------------------------------
@@ -6042,6 +6224,9 @@ class HeadScreen(BaseScreen):
             self.log("[QR] current run stopped by the client")
         self._qr_stop.set()                # end a running camera read
         self._qr_gen += 1                  # drop wait / retry timers
+        self.result_views = {}             # no old result picture
+        if self.view != self.VIEW_LIVE:
+            self.back_to_live()
         self.qr_state = "idle"
         self.cycle_scene_results = {}
         self.cycle_areas, self.cycle_started = {}, None
@@ -6055,6 +6240,10 @@ class HeadScreen(BaseScreen):
         (While we were only waiting for this signal it just starts the
         read.)"""
         if not self._alive or not self.qr_scan_active:
+            return
+        if self._station_locked():
+            self.log(f"[QR] signal from {source} ignored - station locked "
+                     "(part already passed)")
             return
         if not self.qr_master:
             self.log("[QR] signal from the client, but this model has no "
@@ -6262,6 +6451,7 @@ class HeadScreen(BaseScreen):
             return
         self.scan_value = None
         self.scan_sent = False
+        self._passed_override = None
         self.qr_state = "idle"
         self.qr_msg = ""
         self.qr_attempt = 0
@@ -6286,11 +6476,17 @@ class HeadScreen(BaseScreen):
         code = str(code or "").strip()
         if len(code) < 2:
             self.log(f"[scanner] barcode '{code}' is not valid - ignored")
-            Message.error(self, "BARCODE NOT VALID",
+            Message.error(self, "INVALID SERIAL NUMBER",
                           "That barcode could not be read properly.\n\n"
                           "Please scan it again.")
             return
+        if self._station_locked():
+            self.log("[scanner] station locked - scan ignored")
+            self._lock_already_passed(self.app.station_lock["serial"])
+            return
         # a new serial = a new unit: nothing of the previous one may reach MES
+        if self._passed_override != code:
+            self._passed_override = None
         self._mes_reset_cycle_data()
         self.cycle_scene_results = {}
         self.cycle_areas, self.cycle_started = {}, None
@@ -6467,10 +6663,13 @@ class HeadScreen(BaseScreen):
             try:
                 cm = self.parent_store.get_child_manager(p)
                 regs, loaded = [], []
+                # regions are stored in scene-picture pixels; the live view
+                # is the camera picture, so map them back (scene scale)
+                k = 1.0 / get_scene_scale(self.parent_store, p)
                 for cname in self.parent_store.list_children(p):
                     d = cm.load(cname)
                     if d:
-                        regs.append((cname, d["reg"]))
+                        regs.append((cname, tuple(v * k for v in d["reg"])))
                         loaded.append((cname, d))
                         self.compare_targets.append(
                             (f"{p}  /  {cname}", p, cname))
@@ -6487,7 +6686,8 @@ class HeadScreen(BaseScreen):
         for p, loaded in self._children_cache.items():
             for cname, d in loaded:
                 if d.get("frame") is not None:
-                    img = d["frame"].copy()
+                    img = scale_frame(d["frame"], 1.0 / get_scene_scale(
+                        self.parent_store, p)).copy()
                     for pp, regs in self._roi_cache.items():
                         for cn, reg in regs:
                             x, y, w, h = [int(v) for v in reg]
@@ -6504,7 +6704,9 @@ class HeadScreen(BaseScreen):
     def _tick(self):
         if not self._alive:
             return
-        if not self.busy:
+        # the live picture keeps running during a check (only the compare
+        # view waits), so the screen never looks frozen
+        if not self.busy or self.view == self.VIEW_LIVE:
             if self.view == self.VIEW_LIVE:
                 frame = self.app.camera.get_frame()
                 if frame is not None:
@@ -6572,6 +6774,7 @@ class HeadScreen(BaseScreen):
                 return
             master = d["region"]
             x, y, w, h = [int(v) for v in d["reg"]]
+            frame = scale_frame(frame, get_scene_scale(self.parent_store, p))
             fh, fw = frame.shape[:2]
             x0, y0 = max(0, x), max(0, y)
             x1, y1 = min(fw, x + w), min(fh, y + h)
@@ -6587,13 +6790,50 @@ class HeadScreen(BaseScreen):
             img = overlay_blend(master, current)
         self.canvas.show(img)
 
+    def _hold_result(self):
+        """Show the result picture for a short time, then go back to the
+        live camera by itself (ui: result_hold_s in app_config.yaml,
+        0 = stay on the result until Live is pressed)."""
+        self._view_gen = getattr(self, "_view_gen", 0) + 1
+        gen = self._view_gen
+        try:
+            hold = float(self.app.app_config.data["ui"].get(
+                "result_hold_s", 4))
+        except (TypeError, ValueError):
+            hold = 4.0
+        if hold <= 0:
+            return
+
+        def back():
+            if self._alive and gen == getattr(self, "_view_gen", 0) and \
+                    self.view == self.VIEW_RESULT:
+                self.back_to_live()
+        QTimer.singleShot(int(hold * 1000), back)
+
     def back_to_live(self):
+        self._view_gen = getattr(self, "_view_gen", 0) + 1
         self.view = self.VIEW_LIVE
         self.result_ctl.setVisible(False)
         self.compare_ctl.setVisible(False)
         self.canvas.fit()
 
+    def show_last_result(self):
+        """The picture of the last check again (stays until Live)."""
+        img = self.result_views.get("result")
+        if img is None:
+            self.log("No result picture yet - test a part first")
+            return
+        self._view_gen = getattr(self, "_view_gen", 0) + 1
+        self.result_key = "result"
+        self.btn_pinmap.setText("Map")
+        self.view = self.VIEW_RESULT
+        self.compare_ctl.setVisible(False)
+        self.result_ctl.setVisible(True)
+        self.canvas.fit()
+        self.canvas.show(img)
+
     def toggle_pinmap(self):
+        self._view_gen = getattr(self, "_view_gen", 0) + 1   # stay here
         self.result_key = "pins" if self.result_key == "result" else "result"
         self.btn_pinmap.setText(
             "Result" if self.result_key == "pins" else "Map")
@@ -6732,8 +6972,13 @@ class HeadScreen(BaseScreen):
             Message.info(self, "PLEASE WAIT",
                          "This part is still being checked.", auto_ms=3000)
             return
+        if self._station_locked() or self.mes_prev_state == "all_passed":
+            Message.error(self, "ALREADY PASSED",
+                          "This part already passed this station.\n"
+                          "Only the master password can test it again.")
+            return
         if self.mes_prev_state == "fail":
-            Message.error(self, "PREVIOUS STATION NOT PASSED",
+            Message.error(self, "PREVIOUS STATION FAILED",
                           "Take this part off the station.")
             return
         if self.mes_prev_state == "error":
@@ -6743,69 +6988,88 @@ class HeadScreen(BaseScreen):
             return
         Message.warn(self, "CANNOT TEST THIS PART", str(reason))
 
-    def _run_group(self, plan, frame, dist_thr, logs, results):
-        """Run the scenes of `plan` on one camera picture."""
+    def _run_group(self, plan, frame, dist_thr, logs, results, gen=None):
+        """Run the scenes of `plan` on one camera picture.
+
+        Each scene works on its own resized copy of the picture (scene
+        scale); every position is mapped back to the camera picture for the
+        result view.  Areas may sit inside an object of another area."""
         frame_h, frame_w = frame.shape[:2]
         out_frame = frame.copy()
         proc = np.ones_like(frame)
         child_boxes = []
         pin_overlays = []
         any_output = False
+        stop = (lambda: gen is not None and gen != self._run_gen)
         for parent_name, child_filter in plan:
+            if stop():
+                break
             children_data = self.parent_store.load_all_children(
                 parent_name)
-            if child_filter is not None:
-                children_data = [(n, d) for n, d in children_data
-                                 if n in child_filter]
-            if not children_data:
+            if not children_data or (child_filter is not None and not any(
+                    n in child_filter for n, _ in children_data)):
                 logs.append(f"[{parent_name}] no loadable areas.")
                 continue
             results[parent_name] = {}
-            for child_name, cd in children_data:
-                reg = cd["reg"]
-                cfg = cd["config"]
-                x, y, w, h = [int(v) for v in reg]
-                x0 = max(0, min(x, frame_w))
-                y0 = max(0, min(y, frame_h))
-                x1 = max(0, min(x + w, frame_w))
-                y1 = max(0, min(y + h, frame_h))
-                if x1 <= x0 or y1 <= y0:
-                    logs.append(f"[{parent_name}/{child_name}] SKIPPED: "
-                                "ROI outside frame.")
+            sc = get_scene_scale(self.parent_store, parent_name)
+            k = 1.0 / sc                      # scene px -> camera picture px
+            sframe = scale_frame(frame, sc)
+            if sc != 1.0:
+                logs.append(f"[{parent_name}] picture size {sc:g}x")
+            found = run_areas(sframe, children_data, dist_thr, analyze_pins,
+                              only=child_filter,
+                              key_prefix=f"{self.head}/{parent_name}",
+                              stop=stop)
+            for child_name, r in found.items():
+                if child_filter is not None and child_name not in child_filter:
+                    continue                 # a parent run only to locate
+                cfg = dict(children_data)[child_name]["config"]
+                tag = " [AI]" if r.get("method") == METHOD_AI else ""
+                if r.get("skipped"):
+                    logs.append(f" {child_name:<12} NG  SKIPPED: "
+                                f"{r['skipped']}")
                     results[parent_name][child_name] = {
-                        "detected": 0,
-                        "master": len(cfg.get("matches", [])),
-                        "ok": False}
+                        "detected": 0, "master": r.get("master_n", 0),
+                        "ok": False, "reason": r["skipped"]}
+                    if r.get("roi"):
+                        x0, y0, x1, y1 = [int(round(v * k))
+                                          for v in r["roi"]]
+                        child_boxes.append((x0, y0, x1 - x0, y1 - y0,
+                                            f"{child_name} NG", False))
+                        any_output = True
                     continue
-                region = frame[y0:y1, x0:x1]
-                matches, output, mask = run_detection(
-                    detect_multi_scale_templates(
-                        image=region, template=cd["templates"],
-                        scale_range=tuple(cfg["scale_range"]),
-                        scale_steps=cfg["scale_steps"],
-                        threshold=cfg["threshold"],
-                        max_matches=cfg["max_matches"],
-                        visualize=True, t=time.time(),
-                        config=cd, name=child_name))
-                # each area may have its own pin limit (else the model's)
-                try:
-                    area_thr = float(cfg.get("pin_limit") or dist_thr)
-                except (TypeError, ValueError):
-                    area_thr = dist_thr
-                ok, pins, summ = analyze_pins(cfg.get("matches", []),
-                                              matches, area_thr)
+                matches, output, mask = r["matches"], r["output"], r["mask"]
+                ok, pins, summ = r["ok"], r["pins"], r["summ"]
+                area_thr = r["area_thr"]
+                x0, y0, x1, y1 = r["roi"]
+                ox, oy = r["origin"]
                 master_n = summ["total"] if summ["total"] else \
                     len(cfg.get("matches", []))
+                # where each object is, in camera-picture pixels
+                objects = []
+                for m in matches:
+                    (ax, ay), (bx, by) = m["top_left"], m["bottom_right"]
+                    objects.append({
+                        "center": [round((ox + (ax + bx) / 2.0) * k, 1),
+                                   round((oy + (ay + by) / 2.0) * k, 1)],
+                        "score": round(float(m["score"]), 3),
+                        "angle": round(float(m.get("angle", 0.0)), 1)})
                 results[parent_name][child_name] = {
                     "detected": len(matches), "master": master_n,
-                    "ok": ok, "pins": summ}
+                    "ok": ok, "pins": summ, "objects": objects,
+                    "image_scale": sc, "method": r.get("method", "normal")}
+                where = ""
+                if r.get("inside"):
+                    where = (f"   in {r['inside'][0]}#{r['inside'][1]} "
+                             f"(moved {r['shift'][0]:+.0f},"
+                             f"{r['shift'][1]:+.0f})")
                 if summ["total"]:
                     line = (f" {child_name:<12} "
                             f"{'OK ' if ok else 'NG '}"
                             f" {summ['in_range']}/{summ['total']} pins ok"
-                            f" (limit {area_thr:g}px)"
+                            f" (limit {area_thr:g}px){tag}"
                             f"   shift {summ['mean_dx']:+.0f},"
-                            f"{summ['mean_dy']:+.0f} px")
+                            f"{summ['mean_dy']:+.0f} px{where}")
                     n_shift = sum(1 for p in pins
                                   if p["paired"] and not p["in_range"])
                     n_miss = sum(1 for p in pins if not p["paired"])
@@ -6822,14 +7086,27 @@ class HeadScreen(BaseScreen):
                     logs.append(f" {child_name:<12} "
                                 f"{'OK ' if ok else 'NG '}"
                                 f" {len(matches)} found "
-                                "(no master pins)")
-                oh, ow = output.shape[:2]
-                out_frame[y0:y0 + oh, x0:x0 + ow] = output
-                if mask is not None:
-                    mh, mw = mask.shape[:2]
-                    mh = min(mh, y1 - y0)
-                    mw = min(mw, x1 - x0)
-                    proc[y0:y0 + mh, x0:x0 + mw] = mask[:mh, :mw]
+                                f"(no master pins){tag}{where}")
+                # paste the drawn region back at camera-picture size
+                X0, Y0 = int(round(x0 * k)), int(round(y0 * k))
+                X1 = min(frame_w, int(round(x1 * k)))
+                Y1 = min(frame_h, int(round(y1 * k)))
+                if X1 > X0 and Y1 > Y0:
+                    if sc != 1.0:
+                        output = cv2.resize(output, (X1 - X0, Y1 - Y0))
+                    oh = min(output.shape[0], Y1 - Y0)
+                    ow = min(output.shape[1], X1 - X0)
+                    out_frame[Y0:Y0 + oh, X0:X0 + ow] = output[:oh, :ow]
+                    if mask is not None:
+                        mh = min(mask.shape[0], y1 - y0)
+                        mw = min(mask.shape[1], x1 - x0)
+                        mk = mask[:mh, :mw]
+                        if sc != 1.0 and mh > 0 and mw > 0:
+                            mk = cv2.resize(mk, (max(1, int(round(mw * k))),
+                                                 max(1, int(round(mh * k)))))
+                        mh = min(mk.shape[0], frame_h - Y0)
+                        mw = min(mk.shape[1], frame_w - X0)
+                        proc[Y0:Y0 + mh, X0:X0 + mw] = mk[:mh, :mw]
                 if summ["total"]:
                     shift_txt = (f"  d({summ['mean_dx']:+.0f},"
                                  f"{summ['mean_dy']:+.0f})px")
@@ -6838,10 +7115,17 @@ class HeadScreen(BaseScreen):
                     shift_txt = ""
                     count_txt = f"{len(matches)}/{master_n}"
                 child_boxes.append(
-                    (x0, y0, x1 - x0, y1 - y0,
+                    (X0, Y0, X1 - X0, Y1 - Y0,
                      f"{child_name} {'OK' if ok else 'NG'} "
                      f"{count_txt}{shift_txt}", ok))
-                pin_overlays.append((pins, x0, y0, area_thr))
+                if sc != 1.0:               # pin positions -> camera picture
+                    pins = [dict(p, master=(p["master"][0] * k,
+                                            p["master"][1] * k),
+                                 current=(None if p["current"] is None else
+                                          (p["current"][0] * k,
+                                           p["current"][1] * k)))
+                            for p in pins]
+                pin_overlays.append((pins, ox * k, oy * k, area_thr))
                 any_output = True
 
             # camera QR scanners of this scene (full-scene / model runs)
@@ -6874,7 +7158,10 @@ class HeadScreen(BaseScreen):
         out = []
         for key in order:
             if key[0] is None or key == hub.active_key():
-                f = frame
+                # a picture taken AFTER the trigger, never an older one
+                f = hub.fresh() if hasattr(hub, "fresh") else None
+                if f is None:
+                    f = frame
             else:
                 f = hub.capture(key[0], key[1])
                 if f is None:
@@ -6913,7 +7200,7 @@ class HeadScreen(BaseScreen):
         drift_msgs = []
         try:
             groups = self._camera_groups(plan, frame, logs, drift_msgs)
-            parts = [self._run_group(gp, gf, dist_thr, logs, results)
+            parts = [self._run_group(gp, gf, dist_thr, logs, results, gen)
                      for gp, gf in groups]
             for g in parts:
                 if g["any_output"]:
@@ -6962,10 +7249,20 @@ class HeadScreen(BaseScreen):
             if gen is not None and gen != self._run_gen:
                 self.log("[run] result dropped - the run was stopped")
                 return
+            # free the station first: nothing below may leave it "busy"
+            self.busy = False
+            try:
+                finish()
+            except Exception:
+                self.log("ERROR after the run:\n" + traceback.format_exc())
+                self.back_to_live()
+
+        def finish():
             for m in logs:
                 self.log(m)
             if drift_msgs:
-                self._show_drift(drift_msgs)
+                QTimer.singleShot(0, lambda: self._alive
+                                  and self._show_drift(drift_msgs))
             if run_summary is not None:
                 self.set_big_status(run_summary[0], run_summary[1])
             if views:
@@ -6977,7 +7274,7 @@ class HeadScreen(BaseScreen):
                 self.result_ctl.setVisible(True)
                 self.canvas.fit()
                 self.canvas.show(views["result"])
-            self.busy = False
+                self._hold_result()
             if results:
                 self._mes_collect(scope, logs, views, results)
                 self.app.heads.add_result_counts(self.head, scope, results)
@@ -8155,6 +8452,13 @@ class BuildParentScreen(BaseScreen):
         self.current_child_name = None
         self.current_child_saved = False
         self._editing = None          # name of the saved area being changed
+        # picture size of this scene (regions, templates and detection all
+        # work on the resized picture)
+        self.scene_scale = get_scene_scale(self.parent_store, parent_name)
+        # area inside an object of another area:
+        #   {"area": name, "object": n, "anchor": [x, y]}  or None
+        self.inside = None
+        self._teach_frame = None      # picture the region was drawn on
         self._model_pin = float(app.heads.get_settings(head_name)
                                 .get("distance_threshold", 20))
         self.region_snapshot = None
@@ -8273,6 +8577,33 @@ class BuildParentScreen(BaseScreen):
             self._show_ref()
             clay2.addWidget(sec0)
 
+        combo_qss = (
+            f"QComboBox {{ color: {C_TEXT}; background: {C_FIELD};"
+            f" border: 1px solid {C_LINE}; border-radius: 6px;"
+            " padding: 5px 8px; }"
+            f"QComboBox QAbstractItemView {{ color: {C_TEXT};"
+            f" background: {C_PANEL}; }}")
+        self._combo_qss = combo_qss
+        sec_sz = QGroupBox(" PICTURE SIZE FOR THIS SCENE ")
+        ssz = QVBoxLayout(sec_sz)
+        self.cmb_scale = QComboBox()
+        self.cmb_scale.setStyleSheet(combo_qss)
+        for v in SCALES:
+            self.cmb_scale.addItem(f"{v:g}x" + ("  (normal)" if v == 1 else ""),
+                                   v)
+        i = self.cmb_scale.findData(self.scene_scale)
+        if i < 0:
+            self.cmb_scale.addItem(f"{self.scene_scale:g}x", self.scene_scale)
+            i = self.cmb_scale.count() - 1
+        self.cmb_scale.setCurrentIndex(i)
+        self.cmb_scale.currentIndexChanged.connect(self._scale_changed)
+        ssz.addWidget(self.cmb_scale)
+        self.scale_hint = QLabel("")
+        self.scale_hint.setWordWrap(True)
+        self.scale_hint.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
+        ssz.addWidget(self.scale_hint)
+        clay2.addWidget(sec_sz)
+
         # saved areas of this scene: open one to change it, or delete it
         self.sec_areas = QGroupBox(" AREAS IN THIS SCENE ")
         sa = QVBoxLayout(self.sec_areas)
@@ -8295,10 +8626,24 @@ class BuildParentScreen(BaseScreen):
         self.area_hint.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
         sa.addWidget(self.area_hint)
         clay2.addWidget(self.sec_areas)
-        self._fill_areas()
 
         sec = QGroupBox(" STEP 1   AREA TO LOOK AT ")
         s1 = QVBoxLayout(sec)
+        # optional: this area sits inside an object found by another area
+        self.lbl_inside = QLabel("")
+        self.lbl_inside.setWordWrap(True)
+        self.lbl_inside.setStyleSheet(f"color: {C_OK}; font-size: 9pt;"
+                                      " font-weight: 600;")
+        self.cmb_inside = QComboBox()
+        self.cmb_inside.setStyleSheet(combo_qss)
+        self.cmb_inside.setToolTip(
+            "Choose an object here and this area moves together with that "
+            "object.  The inner object is then measured from the outer "
+            "object, not from the picture.")
+        self.cmb_inside.currentIndexChanged.connect(self._inside_changed)
+        s1.addWidget(self.lbl_inside)
+        s1.addWidget(self.cmb_inside)
+        self._fill_areas()
         self.btn_sel_roi = styled_btn(sec, "Select ROI (drag on video)",
                                       self.start_roi)
         s1.addWidget(self.btn_sel_roi)
@@ -8329,6 +8674,19 @@ class BuildParentScreen(BaseScreen):
         self.tmpl_count_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         self.tmpl_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s2.addWidget(self.tmpl_count_lbl)
+        lm = QLabel("How to find it")
+        lm.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
+        s2.addWidget(lm)
+        self.cmb_method = QComboBox()
+        self.cmb_method.setStyleSheet(combo_qss)
+        self.cmb_method.addItem("Normal detection", METHOD_NORMAL)
+        self.cmb_method.addItem("AI detection", METHOD_AI)
+        self.cmb_method.setToolTip(
+            "Normal: fast, the object must look like the template and not "
+            "be turned.\nAI: also finds the object when it is turned, "
+            "bigger or smaller, or partly covered.")
+        self.cmb_method.currentIndexChanged.connect(self._method_changed)
+        s2.addWidget(self.cmb_method)
         clay2.addWidget(sec2)
 
         sec3 = QGroupBox(" STEP 3   FINE TUNING ")
@@ -8342,17 +8700,37 @@ class BuildParentScreen(BaseScreen):
         self.var_pin.e.setToolTip("A pin shifted more than this many pixels "
                                   "from the master (or missing) = NG.  Each "
                                   "area has its own limit.")
-        for i, (label, var) in enumerate([("Threshold", self.var_thresh),
-                                          ("Scale min", self.var_smin),
-                                          ("Scale max", self.var_smax),
-                                          ("Scale steps", self.var_steps),
-                                          ("Max matches", self.var_maxm),
-                                          ("Pin limit (px)", self.var_pin)]):
+        self.var_ai_score = FVar(QLineEdit("0.3"))
+        self.var_ai_angle = FVar(QLineEdit("180"))
+        self.var_ai_score.e.setToolTip("How sure the AI must be, from 0 to "
+                                       "1.  Higher = fewer, surer finds.")
+        self.var_ai_angle.e.setToolTip("The most the object may be turned, "
+                                       "in degrees.  180 = any direction.")
+        self.cmb_ai_speed = QComboBox()
+        self.cmb_ai_speed.setStyleSheet(self._combo_qss)
+        for sp, txt in (("accurate", "Accurate"), ("balanced", "Balanced"),
+                        ("fast", "Fast")):
+            self.cmb_ai_speed.addItem(txt, sp)
+        self.cmb_ai_speed.setCurrentIndex(1)
+        # (label, widget, shown for: "normal" | "ai" | "both")
+        rows = [("Threshold", self.var_thresh.e, "normal"),
+                ("AI score (0-1)", self.var_ai_score.e, "ai"),
+                ("Scale min", self.var_smin.e, "both"),
+                ("Scale max", self.var_smax.e, "both"),
+                ("Scale steps", self.var_steps.e, "normal"),
+                ("Max turn (deg)", self.var_ai_angle.e, "ai"),
+                ("AI speed", self.cmb_ai_speed, "ai"),
+                ("Max matches", self.var_maxm.e, "both"),
+                ("Pin limit (px)", self.var_pin.e, "both")]
+        self._tune_rows = []
+        for i, (label, wdg, kind) in enumerate(rows):
             l = QLabel(label)
             l.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
             s3.addWidget(l, i, 0)
-            var.e.setFixedWidth(72)
-            s3.addWidget(var.e, i, 1)
+            if isinstance(wdg, QLineEdit):
+                wdg.setFixedWidth(72)
+            s3.addWidget(wdg, i, 1)
+            self._tune_rows.append((l, wdg, kind))
         clay2.addWidget(sec3)
         self._area_boxes = [sec, sec2, sec3]
         self._box_roi, self._box_tmpl, self._box_tune = sec, sec2, sec3
@@ -8375,6 +8753,13 @@ class BuildParentScreen(BaseScreen):
         s4.addWidget(btn_row([self.btn_test, self.btn_back_live]))
         s4.addWidget(btn_row([self.btn_save, self.btn_next]))
         s4.addWidget(btn_row([self.btn_finish, self.btn_balance]))
+        # the object just found becomes the region of a new, inner template
+        self.btn_nested = styled_btn(sec4, "Add Nested Detection",
+                                     self.add_nested, color="#44444e")
+        self.btn_nested.setToolTip(
+            "Look for a smaller object INSIDE the object you just found.  "
+            "The found object becomes the new region.")
+        s4.addWidget(self.btn_nested)
         clay2.addWidget(sec4)
 
         if self.qr_camera:
@@ -8425,6 +8810,8 @@ class BuildParentScreen(BaseScreen):
      
         self._set_status(f"Area: {self._free_area_name()} — select ROI first")
         self._apply_master_lock()
+        self._method_changed()
+        self._scale_lock()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(30)
@@ -8439,6 +8826,228 @@ class BuildParentScreen(BaseScreen):
     def _set_status(self, txt):
         self.status_lbl.setText(txt)
 
+    # -- picture size / method / inside ------------------------------------------
+    def _frame(self):
+        """The camera picture at this scene's size."""
+        return scale_frame(self.app.camera.get_frame(), self.scene_scale)
+
+    def _scale_lock(self):
+        has = bool(self.parent_store.list_children(self.parent_name))
+        self.cmb_scale.setEnabled(not has)
+        self.scale_hint.setText(
+            "Saved areas use this size. Delete the areas to change it."
+            if has else
+            "Smaller = faster. Bigger = small details are easier to find. "
+            "Choose it before the first area.")
+
+    def _scale_changed(self):
+        v = self.cmb_scale.currentData()
+        if v is None or self.parent_store.list_children(self.parent_name):
+            return
+        self.scene_scale = float(v)
+        try:
+            set_scene_scale(self.parent_store, self.parent_name, v)
+        except OSError:
+            self.log("picture size not saved")
+        # everything drawn so far was on the old size
+        if self.reg is not None or self.template_list:
+            self._reset_area()
+            self.log("Picture size changed - draw the area again")
+        self.canvas.fit()
+        self._set_status(f"Picture size {float(v):g}x — select ROI")
+        self._update_buttons()
+
+    def _method(self):
+        return self.cmb_method.currentData() or METHOD_NORMAL
+
+    def _method_changed(self):
+        m = self._method()
+        if m == METHOD_AI:
+            ok, why = ai_available()
+            if not ok:
+                self.cmb_method.blockSignals(True)
+                self.cmb_method.setCurrentIndex(0)
+                self.cmb_method.blockSignals(False)
+                m = METHOD_NORMAL
+                Message.warn(self, "AI DETECTION NOT INSTALLED", why)
+        for l, w, kind in self._tune_rows:
+            show = kind == "both" or kind == m
+            l.setVisible(show)
+            w.setVisible(show)
+        self.matches = None            # test again with the new method
+        if hasattr(self, "btn_save"):
+            self._update_buttons()
+
+    def _form_cfg(self):
+        """The settings typed in the form, as an area config."""
+        return {"method": self._method(),
+                "threshold": float(self.var_thresh.get()),
+                "scale_range": [float(self.var_smin.get()),
+                                float(self.var_smax.get())],
+                "scale_steps": int(self.var_steps.get()),
+                "max_matches": int(self.var_maxm.get()),
+                "ai_score": float(self.var_ai_score.get()),
+                "ai_max_angle": float(self.var_ai_angle.get()),
+                "ai_speed": self.cmb_ai_speed.currentData() or "balanced"}
+
+    def _fill_inside(self, keep=None):
+        """Objects of the saved areas this area may sit in."""
+        self.cmb_inside.blockSignals(True)
+        self.cmb_inside.clear()
+        self.cmb_inside.addItem("No - look at a fixed place")
+        self._inside_items = [None]          # same order as the list
+        try:
+            loaded = self.parent_store.load_all_children(self.parent_name)
+        except Exception:
+            loaded = []
+        skip = set()
+        if self._editing:
+            skip = descendants(loaded, self._editing) | {self._editing}
+        for n, d in loaded:
+            if n in skip:
+                continue
+            for i in range(1, len(d["config"].get("matches", [])) + 1):
+                self.cmb_inside.addItem(f"{n}  -  object {i}")
+                self._inside_items.append((n, i))
+        if keep and (keep["area"], keep["object"]) in self._inside_items:
+            self.cmb_inside.setCurrentIndex(self._inside_items.index(
+                (keep["area"], keep["object"])))
+        self.cmb_inside.blockSignals(False)
+        # nesting is started with the "Add Nested Detection" button; the
+        # list stays hidden and only the line below tells where the area is
+        self.cmb_inside.setVisible(False)
+        ins = keep or None
+        if ins:
+            self.lbl_inside.setText(
+                f"Nested: inside object {ins['object']} of '{ins['area']}'"
+                f"  (level {self._nest_level(ins['area'], loaded) + 1})")
+        self.lbl_inside.setVisible(bool(ins))
+
+    @staticmethod
+    def _nest_level(area, loaded):
+        """1 = a normal area, 2 = inside an object, 3 = inside that ..."""
+        cfgs = {n: d["config"] for n, d in loaded}
+        lvl, seen = 1, set()
+        while area in cfgs and area not in seen:
+            seen.add(area)
+            ins = inside_of(cfgs[area])
+            if not ins:
+                break
+            lvl += 1
+            area = ins[0]
+        return lvl
+
+    def _nest_min_px(self):
+        """An object smaller than this (pixels) cannot hold a nested
+        detection (ui: nest_min_px in app_config.yaml)."""
+        try:
+            return max(8, int(self.app.app_config.data["ui"].get(
+                "nest_min_px", 24)))
+        except (TypeError, ValueError):
+            return 24
+
+    def add_nested(self):
+        """The object of this area becomes the region of a new inner area:
+        the user then drags the inner template inside it."""
+        if self.busy or self.master_scene:
+            return
+        if self.mode == self.MODE_TEMPLATE:
+            Message.info(self, "Finish this step first",
+                         "Confirm or clear the template first.")
+            return
+        # the outer area must be tested and saved: its found object is the
+        # new region
+        if self.matches is not None:
+            if not self.matches:
+                Message.warn(self, "NOTHING FOUND",
+                             "Test Detect found no object. Nothing to look "
+                             "inside.")
+                return
+            self.current_child_saved = False
+            self.save_child()
+            if not self.current_child_saved:
+                return
+        elif not (self.current_child_saved or self._editing):
+            Message.info(self, "TEST FIRST",
+                         "Press Test Detect first. The object it finds "
+                         "becomes the new region.")
+            return
+        outer = self.current_child_name
+        data = self.child_manager.load(outer)
+        mm = (data or {}).get("config", {}).get("matches", [])
+        if not mm:
+            Message.warn(self, "NOTHING FOUND",
+                         f"Area '{outer}' has no found object to look "
+                         "inside.")
+            return
+        obj = 1
+        if len(mm) > 1:
+            items = [f"object {i}" for i in range(1, len(mm) + 1)]
+            pick, ok = QInputDialog.getItem(
+                self, "Add nested detection",
+                f"'{outer}' found {len(mm)} objects. Look inside which one?",
+                items, 0, False)
+            if not ok:
+                return
+            obj = items.index(pick) + 1
+        m = mm[obj - 1]
+        rx, ry = [int(v) for v in data["reg"][:2]]
+        (ax, ay), (bx, by) = m["top_left"], m["bottom_right"]
+        w, h = int(bx - ax), int(by - ay)
+        lim = self._nest_min_px()
+        if min(w, h) < lim:
+            Message.warn(self, "OBJECT TOO SMALL",
+                         f"This object is {w} x {h} pixels. It must be at "
+                         f"least {lim} pixels wide and high to look inside "
+                         "it.")
+            return
+        frame = data.get("frame")
+        if frame is None:
+            Message.error(self, "Cannot open", f"The master picture of "
+                          f"'{outer}' is missing.")
+            return
+        # a small margin, so the inner object is not cut at the edge
+        mg = max(4, int(0.05 * min(w, h)))
+        fh, fw = frame.shape[:2]
+        x0, y0 = max(0, rx + ax - mg), max(0, ry + ay - mg)
+        x1, y1 = min(fw, rx + bx + mg), min(fh, ry + by + mg)
+        self._reset_area()
+        self.inside = {"area": outer, "object": obj,
+                       "anchor": [rx + (ax + bx) / 2.0, ry + (ay + by) / 2.0]}
+        self._teach_frame = frame
+        self.reg = (int(x0), int(y0), int(x1 - x0), int(y1 - y0))
+        self._fill_inside(self.inside)
+        self.log(f"--- Nested area inside '{outer}' object {obj} ---")
+        self.start_template()
+        self._set_status(f"Nested: drag over the smaller object inside "
+                         f"'{outer}' object {obj}, then press Confirm")
+
+    def _inside_changed(self):
+        j = self.cmb_inside.currentIndex()
+        sel = (self._inside_items[j]
+               if 0 <= j < len(self._inside_items) else None)
+        self.inside = ({"area": sel[0], "object": sel[1], "anchor": None}
+                       if sel else None)
+        self._teach_frame = None
+        if self.reg is not None:
+            # the region belongs to the old choice - it must be drawn again
+            self.reg = None
+            self.matches = None
+            self.log("Draw the area again for this choice")
+        if sel:
+            self._set_status(f"This area will move with object {sel[1]} of "
+                             f"'{sel[0]}' — now select the ROI inside it")
+        self._update_buttons()
+
+    def _locate_inside(self, frame):
+        """Worker-thread: centre of the chosen outer object in `frame`."""
+        loaded = self.parent_store.load_all_children(self.parent_name)
+        found = run_areas(frame, loaded, self._model_pin, analyze_pins,
+                          only={self.inside["area"]},
+                          key_prefix=f"{self.head}/{self.parent_name}")
+        return object_center(found.get(self.inside["area"]),
+                             self.inside["object"])
+
     def _update_buttons(self):
         pend = self.canvas.pending_rect is not None
         roi_mode = self.mode == self.MODE_ROI
@@ -8452,6 +9061,12 @@ class BuildParentScreen(BaseScreen):
         self.btn_reset_tmpl.setEnabled(tmpl_mode)
         can_test = self.reg is not None and len(self.template_list) > 0
         self.btn_test.setEnabled(can_test and not self.busy)
+        if hasattr(self, "btn_nested"):
+            self.btn_nested.setVisible(
+                not self.master_scene and not tmpl_mode and bool(
+                    self.template_list) and (self.matches is not None
+                                             or self.current_child_saved
+                                             or bool(self._editing)))
         self.btn_save.setEnabled(can_test and self.matches is not None)
         self.btn_back_live.setEnabled(self.mode == self.MODE_RESULT)
         self.tmpl_count_lbl.setText(
@@ -8500,7 +9115,7 @@ class BuildParentScreen(BaseScreen):
         if not self._alive:
             return
         if self.mode in (self.MODE_LIVE, self.MODE_ROI, self.MODE_QR):
-            frame = self.app.camera.get_frame()
+            frame = self._frame()
             if frame is not None:
                 disp = frame.copy()
                 self._live_wh = (disp.shape[1], disp.shape[0])
@@ -8545,11 +9160,52 @@ class BuildParentScreen(BaseScreen):
     def confirm_roi(self):
         if self.canvas.pending_rect is None:
             return
-        self.reg = tuple(self.canvas.pending_rect)
+        rect = tuple(self.canvas.pending_rect)
+        if self.inside:
+            # the region is tied to an object: find that object now, in the
+            # same picture the region was drawn on
+            frame = self._frame()
+            if frame is None or self.busy:
+                return
+            self.busy = True
+            self._set_status("Looking for the outer object…")
+
+            def work():
+                try:
+                    c, err = self._locate_inside(frame), None
+                except Exception:
+                    c, err = None, traceback.format_exc()
+
+                def done():
+                    if not self._alive:
+                        return
+                    self.busy = False
+                    if err:
+                        self.log("ERROR:\n" + err)
+                    if c is None or not self.inside:
+                        Message.warn(
+                            self, "OUTER OBJECT NOT FOUND",
+                            "Put the part in place so the outer object is "
+                            "found, then confirm the area again.")
+                        self._update_buttons()
+                        return
+                    self.inside["anchor"] = [float(c[0]), float(c[1])]
+                    self._teach_frame = frame
+                    self._roi_confirmed(rect)
+                self.after(0, done)
+            threading.Thread(target=work, daemon=True).start()
+            return
+        self._roi_confirmed(rect)
+
+    def _roi_confirmed(self, rect):
+        self.reg = tuple(rect)
+        self.matches = None
         self.canvas.select_enabled = False
         self.canvas.clear_rect()
         self.mode = self.MODE_LIVE
-        self.log(f"ROI confirmed: {self.reg}")
+        self.log(f"ROI confirmed: {self.reg}"
+                 + (f"  (inside {self.inside['area']} object "
+                    f"{self.inside['object']})" if self.inside else ""))
         self._set_status("ROI confirmed OK — now add template(s)")
         self._update_buttons()
 
@@ -8567,13 +9223,16 @@ class BuildParentScreen(BaseScreen):
         if self.reg is None:
             return
         self._qr_cancel_quiet()
-        frame = self.app.camera.get_frame()
+        # an area inside an object: use the picture the region was drawn
+        # on, so the template and the object position belong together
+        frame = (self._teach_frame if self.inside
+                 and self._teach_frame is not None else self._frame())
         if frame is None:
             Message.error(self, "No camera",
                                  "No camera frame available yet.")
             return
         x, y, w, h = [int(v) for v in self.reg]
-        self.region_snapshot = frame[y:y + h, x:x + w].copy()
+        self.region_snapshot = frame[max(0, y):y + h, max(0, x):x + w].copy()
         self.mode = self.MODE_TEMPLATE
         self.canvas.select_enabled = True
         self.canvas.clear_rect()
@@ -8590,6 +9249,11 @@ class BuildParentScreen(BaseScreen):
         if template.size == 0:
             Message.error(self, "Bad template",
                                  "Template area is empty, redraw it.")
+            return
+        if self.inside and min(template.shape[:2]) < 8:
+            Message.warn(self, "TEMPLATE TOO SMALL",
+                         "The inner template must be at least 8 pixels wide "
+                         "and high. Draw it again.")
             return
         self.template_list.append(template)
         self.temp_reg_list.append((tx, ty, tw, th))
@@ -8611,32 +9275,64 @@ class BuildParentScreen(BaseScreen):
     def test_detect(self):
         if self.busy or self.reg is None or not self.template_list:
             return
-        frame = self.app.camera.get_frame()
+        frame = self._frame()
         if frame is None:
+            return
+        try:
+            cfg = self._form_cfg()
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the values",
+                         "One of the fine-tuning values is not a number.")
             return
         self.busy = True
         self._set_status("Detecting…")
         self._update_buttons()
-        threading.Thread(target=self._test_worker, args=(frame,),
+        threading.Thread(target=self._test_worker, args=(frame, cfg),
                          daemon=True).start()
 
-    def _test_worker(self, frame):
+    def _test_worker(self, frame, cfg):
         try:
             x, y, w, h = [int(v) for v in self.reg]
-            region = frame[y:y + h, x:x + w]
-            matches, output, mask = run_detection(
-                detect_multi_scale_templates(
-                    image=region, template=self.template_list,
-                    scale_range=(self.var_smin.get(), self.var_smax.get()),
-                    scale_steps=int(self.var_steps.get()),
-                    threshold=float(self.var_thresh.get()),
-                    max_matches=int(self.var_maxm.get()),
-                    visualize=True, t=time.time(), config=None))
+            note = ""
+            if self.inside and self.inside.get("anchor"):
+                c = self._locate_inside(frame)
+                if c is None:
+                    raise RuntimeError(
+                        f"object {self.inside['object']} of "
+                        f"'{self.inside['area']}' was not found in the "
+                        "picture")
+                dx = int(round(c[0] - self.inside["anchor"][0]))
+                dy = int(round(c[1] - self.inside["anchor"][1]))
+                x, y = x + dx, y + dy
+                note = f"  (area moved {dx:+d},{dy:+d} with the object)"
+                # what Save will store: region + object position of THIS
+                # picture (it becomes the master picture)
+                self._test_teach = ((x, y, w, h), [float(c[0]), float(c[1])])
+            else:
+                self._test_teach = None
+            fh, fw = frame.shape[:2]
+            x0, y0 = max(0, x), max(0, y)
+            region = frame[y0:min(fh, y + h), x0:min(fw, x + w)]
+            if region.size == 0:
+                raise RuntimeError("the area is outside the picture")
+            t0 = time.time()
+            matches, output, mask = detect_area(
+                region, self.template_list, cfg, config=None,
+                key=f"test/{self.head}/{self.parent_name}")
+            for m in matches:                  # region cut by the edge
+                m["top_left"] = (m["top_left"][0] + x0 - x,
+                                 m["top_left"][1] + y0 - y)
+                m["bottom_right"] = (m["bottom_right"][0] + x0 - x,
+                                     m["bottom_right"][1] + y0 - y)
+            note += (f"  [{'AI' if cfg['method'] == METHOD_AI else 'Normal'}"
+                     f" {1000 * (time.time() - t0):.0f} ms]")
             self._last_frame_for_save = frame
-            msg = f"Detected: {len(matches)}"
+            msg = f"Detected: {len(matches)}{note}"
             res = np.vstack([banner(output.shape[1],
                                     f"TEST — {len(matches)} match(es)",
                                     None, height=40), output])
+        except RuntimeError as e:
+            matches, res, msg = None, None, f"Not tested: {e}"
         except Exception:
             matches, res, msg = None, None, \
                 "ERROR:\n" + traceback.format_exc()
@@ -8645,6 +9341,8 @@ class BuildParentScreen(BaseScreen):
             if not self._alive:
                 return
             self.matches = matches
+            if res is None:
+                self._set_status(msg.splitlines()[0])
             self.log(msg)
             if res is not None:
                 self.result_img = res
@@ -8686,7 +9384,24 @@ class BuildParentScreen(BaseScreen):
             return
         frame = getattr(self, "_last_frame_for_save", None)
         if frame is None:
-            frame = self.app.camera.get_frame()
+            frame = self._frame()
+        try:
+            extra = self._form_cfg()
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the values",
+                         "One of the fine-tuning values is not a number.")
+            return
+        extra = {k: extra[k] for k in ("method", "ai_score", "ai_max_angle",
+                                       "ai_speed")}
+        if self.inside and self.inside.get("anchor"):
+            tt = getattr(self, "_test_teach", None)
+            if tt:                       # the tested picture is the master
+                self.reg = tuple(tt[0])
+                self.inside["anchor"] = list(tt[1])
+                self._teach_frame = frame
+            extra["inside"] = dict(self.inside)
+        else:
+            extra["inside"] = None
         # changing a saved area: drop its old templates first, otherwise a
         # removed template would still be loaded from disk
         adir = self.child_manager._paths(self.current_child_name)["dir"]
@@ -8709,17 +9424,21 @@ class BuildParentScreen(BaseScreen):
             if cid:
                 self._cam_store.set_scene(self.parent_name, cid, prof)
             if not self._cam_store.get_ref(self.parent_name):
-                self._cam_store.set_ref(self.parent_name, image_stats(frame))
+                ref_img = self.app.camera.get_frame()   # camera-size picture
+                self._cam_store.set_ref(self.parent_name, image_stats(
+                    ref_img if ref_img is not None else frame))
                 self._show_ref()
         except Exception:
             self.log("light reference not saved:\n" + traceback.format_exc())
-        self._write_pin_limit(self.current_child_name, pin)
+        extra["pin_limit"] = float(pin)
+        self._write_extra(self.current_child_name, extra)
         self.parent_store.add_child(self.parent_name,
                                     self.current_child_name)
         self.app.heads.add_parent(self.head, self.parent_name)
         self.current_child_saved = True
         self._editing = self.current_child_name
         self._fill_areas(self.current_child_name)
+        self._scale_lock()
         self.log(f"Saved area '{self.current_child_name}' under "
                  f"'{self.head}/{self.parent_name}'")
         self._set_status(f"Area '{self.current_child_name}' saved OK — "
@@ -8753,8 +9472,13 @@ class BuildParentScreen(BaseScreen):
         self.canvas.select_enabled = False
         self.canvas.clear_rect()
         self.var_pin.set(f"{self._model_pin:g}")
+        self.inside = None
+        self._teach_frame = None
+        self._test_teach = None
         if hasattr(self, "cmb_area"):
             self.cmb_area.setCurrentIndex(0)
+        if hasattr(self, "cmb_inside"):
+            self._fill_inside()
 
     # -- saved areas: open / change / delete ------------------------------------
     def _free_area_name(self):
@@ -8775,17 +9499,22 @@ class BuildParentScreen(BaseScreen):
         self.cmb_area.setCurrentIndex(max(0, i))
         self.cmb_area.blockSignals(False)
         self.sec_areas.setVisible(bool(names))
+        if hasattr(self, "cmb_inside"):
+            self._fill_inside(self.inside)
 
-    def _write_pin_limit(self, name, pin):
+    def _write_extra(self, name, extra):
+        """Add the keys ModelManager.save does not know to the area file."""
         path = self.child_manager._paths(name)["config"]
         try:
             with open(path) as f:
                 cfg = json.load(f)
-            cfg["pin_limit"] = float(pin)
+            cfg.update(extra)
+            if not cfg.get("inside"):
+                cfg.pop("inside", None)
             with open(path, "w") as f:
                 json.dump(cfg, f, indent=2)
         except (OSError, json.JSONDecodeError):
-            self.log(f"pin limit not saved for '{name}'")
+            self.log(f"extra settings not saved for '{name}'")
 
     def open_area(self):
         name = self.cmb_area.currentData()
@@ -8820,6 +9549,18 @@ class BuildParentScreen(BaseScreen):
         self.var_steps.set(cfg.get("scale_steps", 20))
         self.var_maxm.set(cfg.get("max_matches", 20))
         self.var_pin.set(f"{float(cfg.get('pin_limit', self._model_pin)):g}")
+        self.var_ai_score.set(cfg.get("ai_score", 0.3))
+        self.var_ai_angle.set(cfg.get("ai_max_angle", 180))
+        self.cmb_ai_speed.setCurrentIndex(max(0, self.cmb_ai_speed.findData(
+            cfg.get("ai_speed", "balanced"))))
+        self.cmb_method.setCurrentIndex(max(0, self.cmb_method.findData(
+            cfg.get("method", METHOD_NORMAL))))
+        ins = inside_of(cfg)
+        self.inside = ({"area": ins[0], "object": ins[1],
+                        "anchor": list(ins[2]) if ins[2] else None}
+                       if ins else None)
+        self._teach_frame = data.get("frame") if ins else None
+        self._fill_inside(self.inside)
         self.matches = None
         self.mode = self.MODE_LIVE
         self.canvas.fit()
@@ -8837,6 +9578,16 @@ class BuildParentScreen(BaseScreen):
                 "Its region, templates and master picture are deleted for "
                 "good.", yes="Delete", no="Keep it"):
             return
+        try:
+            inner = sorted(descendants(
+                self.parent_store.load_all_children(self.parent_name), name))
+        except Exception:
+            inner = []
+        if inner:
+            Message.warn(self, "DELETE THE INNER AREAS FIRST",
+                         f"These areas sit inside '{name}': "
+                         + ", ".join(inner))
+            return
         names = [n for n in self.parent_store.list_children(self.parent_name)
                  if n != name]
         self.parent_store.save_parent_config(self.parent_name, names)
@@ -8849,6 +9600,7 @@ class BuildParentScreen(BaseScreen):
         if not names:
             self.app.heads.drop_scene_if_empty(self.head, self.parent_name)
         self._fill_areas()
+        self._scale_lock()
         self._set_status(f"Area '{name}' deleted")
 
     def clear_templates(self):
