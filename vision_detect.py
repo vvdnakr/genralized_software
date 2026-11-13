@@ -12,9 +12,12 @@ Old models have none of the new keys and run exactly as before.
 
 Area config.json (new, optional keys):
     "method"      : "normal" | "ai"
-    "ai_score"    : 0.30        lowest confidence that counts (0-1)
+    "ai_mode"     : "auto"      auto | features | shape | both | template
+    "ai_score"    : 0.50        lowest confidence that counts (0-1)
     "ai_speed"    : "balanced"  accurate | balanced | fast
     "ai_max_angle": 180         largest allowed rotation in degrees (180 = any)
+    "ai_params"   : {...}       any other detector setting (All AI Settings)
+  <area>/ai_calib/shot_N.png + rois.json : 2-5 calibration shots
     "inside"      : {"area": "a1", "object": 1, "anchor": [x, y]}
                     anchor = centre of that object (picture pixels) at the
                     moment this area's region was drawn
@@ -45,10 +48,15 @@ except Exception as _e:                              # scipy / file missing
 
 def ai_available():
     """(ok, reason).  AI detection needs fewshot_detector.py and scipy."""
+    if FewShotDetector is not None and not hasattr(cv2, "HOGDescriptor"):
+        return False, ("AI detection needs OpenCV 4 (this PC has OpenCV "
+                       f"{cv2.__version__}, which has no HOGDescriptor).  "
+                       "Install it with  pip install \"opencv-python<5\"")
     if FewShotDetector is None:
         return False, ("AI detection is not installed on this PC "
-                       f"({_AI_ERR}).  Needed: fewshot_detector.py next to "
-                       "the program and  pip install scipy")
+                       f"({_AI_ERR}).  Needed: fewshot_detector.py and "
+                       "advanced_template.py next to the program, and  "
+                       "pip install scipy")
     return True, ""
 
 
@@ -93,41 +101,180 @@ def scale_frame(frame, s):
 
 
 # ----------------------------------------------------------------------------
-# AI detection
+# AI detection (fewshot_detector.py)
 # ----------------------------------------------------------------------------
+AI_MODES = [("auto", "Automatic"), ("features", "Keypoints (textured parts)"),
+            ("shape", "Outline + colour (plain parts)"),
+            ("both", "Keypoints and outline"),
+            ("template", "Advanced template (fixed background)")]
+AI_CHOICES = {"mode": [m for m, _ in AI_MODES],
+              "features": ["sift_fast", "sift"]}
+# set from the area form, so not offered again in "All AI Settings"
+AI_FORM_KEYS = {"mode", "min_score", "max_instances", "shape_scale_range",
+                "template_scale_range", "shape_angle_range",
+                "template_angle_range", "min_scale", "max_scale"}
+MAX_SHOTS = 5
+
 _ai_cache = {}
 _ai_lock = threading.Lock()          # the detector is not re-entrant
+
+
+def ai_fields():
+    """Every detector setting: [(name, default, comment)] in file order."""
+    if _AiConfig is None:
+        return []
+    import dataclasses
+    import inspect
+    import re
+    notes = {}
+    try:
+        for line in inspect.getsource(_AiConfig).splitlines():
+            m = re.match(r"\s+(\w+)\s*:\s*[^=]+=\s*[^#]*#\s*(.+)$", line)
+            if m:
+                notes[m.group(1)] = m.group(2).strip()
+    except (OSError, TypeError):
+        pass
+    return [(f.name, f.default, notes.get(f.name, ""))
+            for f in dataclasses.fields(_AiConfig)]
+
+
+def ai_parse(name, text, default):
+    """Text typed by the user -> value of the same kind as `default`.
+    Raises ValueError when it does not fit."""
+    if isinstance(default, bool):
+        return bool(text) if isinstance(text, bool) else \
+            str(text).strip().lower() in ("1", "true", "yes", "on")
+    if isinstance(default, int):
+        return int(float(text))
+    if isinstance(default, float):
+        return float(text)
+    if isinstance(default, tuple):
+        parts = [p for p in str(text).replace("(", "").replace(")", "")
+                 .replace(";", ",").split(",") if p.strip()]
+        kind = int if all(isinstance(v, int) for v in default) else float
+        vals = tuple(kind(float(p)) for p in parts)
+        if not vals:
+            raise ValueError("empty")
+        return vals
+    text = str(text).strip()
+    if name in AI_CHOICES and text not in AI_CHOICES[name]:
+        raise ValueError(text)
+    return text
+
+
+def ai_overrides(cfg):
+    """Area settings -> keyword arguments for the detector Config."""
+    lo, hi = [float(v) for v in cfg.get("scale_range", (0.5, 2.0))]
+    over = dict(mode=str(cfg.get("ai_mode", "auto")),
+                min_score=float(cfg.get("ai_score", 0.5)),
+                max_instances=max(1, int(cfg.get("max_matches", 20))))
+    if 0 < lo < hi:
+        over["shape_scale_range"] = (lo, hi)
+        over["template_scale_range"] = (lo, hi)
+    ang = float(cfg.get("ai_max_angle", 180))
+    if ang < 179.5:
+        over["shape_angle_range"] = (-ang, ang)
+        over["template_angle_range"] = (-ang, ang)
+    defaults = {n: d for n, d, _ in ai_fields()}
+    for k, v in (cfg.get("ai_params") or {}).items():
+        if k in defaults and k not in AI_FORM_KEYS:
+            try:
+                over[k] = ai_parse(k, v if not isinstance(v, (list, tuple))
+                                   else ",".join(str(x) for x in v),
+                                   defaults[k])
+            except (TypeError, ValueError):
+                pass
+    return over
 
 
 def _tmpl_sig(templates):
     return tuple((t.shape, int(t[::4, ::4].sum())) for t in templates)
 
 
-def _ai_detectors(key, templates, speed, score, max_n, max_angle,
-                  scale_range):
-    """One detector per 3 templates (the detector takes up to 3 views)."""
-    sig = (_tmpl_sig(templates), speed, round(score, 3), int(max_n),
-           round(max_angle, 1), tuple(round(float(v), 3)
-                                      for v in scale_range))
+# -- calibration shots (2-5 pictures of the same object, each with its box) --
+def calib_dir(area_dir):
+    return os.path.join(area_dir, "ai_calib")
+
+
+def save_calib(area_dir, shots):
+    """shots = [(picture, (x, y, w, h))].  Replaces what was saved."""
+    d = calib_dir(area_dir)
+    if os.path.isdir(d):
+        for f in os.listdir(d):
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+    if not shots:
+        return
+    os.makedirs(d, exist_ok=True)
+    rois = []
+    for i, (img, roi) in enumerate(shots[:MAX_SHOTS]):
+        cv2.imwrite(os.path.join(d, f"shot_{i}.png"), img)
+        rois.append([int(v) for v in roi])
+    with open(os.path.join(d, "rois.json"), "w") as f:
+        json.dump(rois, f)
+
+
+def load_calib(area_dir):
+    """[(picture, (x, y, w, h))] or []."""
+    d = calib_dir(area_dir)
+    try:
+        with open(os.path.join(d, "rois.json")) as f:
+            rois = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    out = []
+    for i, roi in enumerate(rois):
+        img = cv2.imread(os.path.join(d, f"shot_{i}.png"))
+        if img is not None and len(roi) == 4:
+            out.append((img, tuple(int(v) for v in roi)))
+    return out
+
+
+def _ai_detectors(key, templates, speed, over, shots):
+    """Build (or reuse) the detectors of one area.  Returns (detectors,
+    calibration text).  With 2+ calibration shots ONE calibrated detector is
+    built; otherwise one detector per 3 templates."""
+    sig = (_tmpl_sig(templates), speed,
+           json.dumps(over, sort_keys=True, default=str),
+           tuple((im.shape, int(im[::8, ::8].sum()), tuple(r))
+                 for im, r in shots))
     hit = _ai_cache.get(key)
     if hit and hit[0] == sig:
-        return hit[1]
-    over = dict(min_score=float(score), max_instances=int(max(1, max_n)))
-    if max_angle < 179.5:
-        over["shape_angle_range"] = (-float(max_angle), float(max_angle))
-    lo, hi = float(scale_range[0]), float(scale_range[1])
-    if 0 < lo < hi:
-        over["shape_scale_range"] = (max(0.2, lo * 0.9), min(4.0, hi * 1.1))
-    dets = []
-    for i in range(0, len(templates), 3):
+        return hit[1], hit[2]
+    dets, note = [], ""
+    if len(shots) >= 2:
         d = FewShotDetector(_AiConfig.preset(speed, **over))
-        for t in templates[i:i + 3]:
-            d.add_reference(t)
+        d.calibrate([im for im, _ in shots], [r for _, r in shots],
+                    verbose=False)
+        # calibration learns its own accept limits; the user's score and
+        # count still apply
+        d.cfg.max_instances = over["max_instances"]
+        try:
+            note = d.calibration_summary()
+        except Exception:               # template mode has its own report
+            r = getattr(d, "calibration", None) or {}
+            note = "calibrated from %d images" % len(shots) + "".join(
+                f"\n  {k}: {v}" for k, v in r.items()
+                if isinstance(v, (int, float, str, tuple, list)))
         dets.append(d)
+    else:
+        for i in range(0, len(templates), 3):
+            d = FewShotDetector(_AiConfig.preset(speed, **over))
+            for t in templates[i:i + 3]:
+                d.add_reference(t)
+            dets.append(d)
     if len(_ai_cache) > 200:
         _ai_cache.clear()
-    _ai_cache[key] = (sig, dets)
-    return dets
+    _ai_cache[key] = (sig, dets, note)
+    return dets, note
+
+
+def ai_note(key):
+    """Calibration text of the detector last built for `key` ('' if none)."""
+    hit = _ai_cache.get(key)
+    return hit[2] if hit else ""
 
 
 def _iou(a, b):
@@ -142,29 +289,35 @@ def _iou(a, b):
                          + (bx2 - bx1) * (by2 - by1) - inter)
 
 
-def detect_ai(image, templates, score=0.30, speed="balanced", max_matches=20,
-              max_angle=180.0, scale_range=(0.5, 2.0), key=None, config=None,
-              name=None):
+def detect_ai(image, templates, cfg, key=None, config=None, name=None,
+              shots=None):
     """Same return shape as detect_multi_scale_templates:
-    (matches, output, mask).  Each match also has 'angle' and 'poly'."""
+    (matches, output, mask).  Each match also has 'angle' and 'poly'.
+    cfg = the area settings; shots = calibration shots or None."""
     ok, why = ai_available()
     if not ok:
         raise RuntimeError(why)
     templates = [t for t in (templates if isinstance(templates, list)
                              else [templates]) if t is not None]
+    speed = str(cfg.get("ai_speed", "balanced"))
     speed = speed if speed in AI_SPEEDS else "balanced"
-    lo, hi = float(scale_range[0]), float(scale_range[1])
+    over = ai_overrides(cfg)
+    max_matches = over["max_instances"]
+    max_angle = float(cfg.get("ai_max_angle", 180))
+    lo, hi = [float(v) for v in cfg.get("scale_range", (0.5, 2.0))]
     with _ai_lock:
-        dets = _ai_detectors(key or id(templates), templates, speed,
-                             float(score), int(max_matches),
-                             float(max_angle), (lo, hi))
+        try:
+            dets, _ = _ai_detectors(key or id(templates), templates, speed,
+                                    over, list(shots or []))
+        except (ValueError, TypeError) as e:
+            raise RuntimeError(f"AI settings are not valid: {e}")
         found = []
         for d in dets:
             found += d.detect(image)
     matches = []
     for d in found:
         ang = ((float(d.angle) + 180.0) % 360.0) - 180.0
-        if abs(ang) > float(max_angle) + 0.5:
+        if abs(ang) > max_angle + 0.5:
             continue
         if 0 < lo < hi and not (lo * 0.9 <= float(d.scale) <= hi * 1.1):
             continue
@@ -202,17 +355,12 @@ def detect_ai(image, templates, score=0.30, speed="balanced", max_matches=20,
     return matches, output, mask
 
 
-def detect_area(image, templates, cfg, config=None, name=None, key=None):
+def detect_area(image, templates, cfg, config=None, name=None, key=None,
+                shots=None):
     """Run the method chosen for this area.  cfg = the area's settings."""
     if str(cfg.get("method", METHOD_NORMAL)) == METHOD_AI:
-        return detect_ai(image, templates,
-                         score=float(cfg.get("ai_score", 0.30)),
-                         speed=str(cfg.get("ai_speed", "balanced")),
-                         max_matches=int(cfg.get("max_matches", 20)),
-                         max_angle=float(cfg.get("ai_max_angle", 180)),
-                         scale_range=tuple(cfg.get("scale_range",
-                                                   (0.5, 2.0))),
-                         key=key, config=config, name=name)
+        return detect_ai(image, templates, cfg, key=key, config=config,
+                         name=name, shots=shots)
     res = detect_multi_scale_templates(
         image=image, template=templates,
         scale_range=tuple(cfg["scale_range"]),
@@ -305,8 +453,28 @@ def object_center(res, obj):
     return ox + (x1 + x2) / 2.0, oy + (y1 + y2) / 2.0
 
 
+_shots_cache = {}
+
+
+def _shots_for(area_dir):
+    """Calibration shots of an area, re-read only when the file changes."""
+    if not area_dir:
+        return []
+    f = os.path.join(calib_dir(area_dir), "rois.json")
+    try:
+        mt = os.path.getmtime(f)
+    except OSError:
+        return []
+    hit = _shots_cache.get(area_dir)
+    if hit and hit[0] == mt:
+        return hit[1]
+    shots = load_calib(area_dir)
+    _shots_cache[area_dir] = (mt, shots)
+    return shots
+
+
 def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
-              key_prefix="", stop=None):
+              key_prefix="", stop=None, area_dir=None):
     """Detect every area of one scene on `frame` (already scene-scaled).
 
     children_data : [(name, loaded area)]  as ParentModelManager gives it
@@ -372,9 +540,13 @@ def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
             continue
         region = frame[y0:y1, x0:x1]
         try:
+            shots = None
+            if area_dir is not None and \
+                    cfg.get("method", METHOD_NORMAL) == METHOD_AI:
+                shots = _shots_for(area_dir(n))
             matches, output, mask = detect_area(
                 region, cd["templates"], cfg, config=cd, name=n,
-                key=f"{key_prefix}/{n}")
+                key=f"{key_prefix}/{n}", shots=shots)
         except RuntimeError as e:        # e.g. AI detection not installed
             res["skipped"] = str(e)
             continue
@@ -393,3 +565,17 @@ def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
         res.update(matches=matches, output=output, mask=mask, ok=ok,
                    pins=pins, summ=summ, area_thr=area_thr)
     return out
+
+
+def warm_area(cd, key, area_dir):
+    """Build the AI detector of one loaded area ahead of the first run (a
+    calibrated one needs a few seconds).  Returns True when one was built."""
+    cfg = cd["config"]
+    if cfg.get("method", METHOD_NORMAL) != METHOD_AI or not ai_available()[0]:
+        return False
+    speed = str(cfg.get("ai_speed", "balanced"))
+    with _ai_lock:
+        _ai_detectors(key, [t for t in cd["templates"] if t is not None],
+                      speed if speed in AI_SPEEDS else "balanced",
+                      ai_overrides(cfg), _shots_for(area_dir))
+    return True
