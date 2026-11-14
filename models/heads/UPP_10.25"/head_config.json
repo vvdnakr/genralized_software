@@ -1,0 +1,15 @@
+{
+  "parents": [
+    "QR_SCANNER",
+    "40_PIN_P1",
+    "40_PIN_P2",
+    "USB",
+    "SCREW_2",
+    "SCREW_1",
+    "SCREW_3",
+    "SCREW_4",
+    "FAKRA_4PIN",
+    "FAKRA_2PIN"
+  ],
+  "finished": true
+}

@@ -8,11 +8,13 @@ ui:
   show_regions_live: false
 scanner:
   test_timeout_s: 10
+  max_key_gap_ms: 60
+  min_scan_length: 3
 qr:
   timeout_s: 6.0
   scene_timeout_s: 3.0
   min_agree: 2
-  trigger_wait_s: 20
+  trigger_wait_s: 60
   max_tries: 10
   retry_delay_s: 1.5
   save_failed: true
@@ -31,7 +33,7 @@ cycle_popup:
   enabled: true
   auto_close_s: 5
 security:
-  kiosk_lock: true
+  kiosk_lock: false
   grab_keyboard: true
   gnome_shortcuts: true
   master_password_sha256: 85d12a96eaa7ad0c85a5a4faa7be55c95d82a94cbbd04de55a8daa5213a30f5a

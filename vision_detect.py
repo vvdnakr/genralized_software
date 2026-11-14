@@ -18,6 +18,12 @@ Area config.json (new, optional keys):
     "ai_max_angle": 180         largest allowed rotation in degrees (180 = any)
     "ai_params"   : {...}       any other detector setting (All AI Settings)
   <area>/ai_calib/shot_N.png + rois.json : 2-5 calibration shots
+  method "aip" (AI image processing, trained from master + template):
+    "aip_score", "aip_expect", "aip_max_templates", "aip_augment",
+    "aip_variation", "aip_seed", "aip_harvest"      (see AIP_PARAMS)
+    <area>/aip/master_N.png + setup.json : the master picture(s) = the region
+    <area>/aip/trained.pkl               : the trained matcher (made again
+                                           by itself when anything changes)
     "inside"      : {"area": "a1", "object": 1, "anchor": [x, y]}
                     anchor = centre of that object (picture pixels) at the
                     moment this area's region was drawn
@@ -35,6 +41,7 @@ from two_point import detect_multi_scale_templates, check_pin
 
 METHOD_NORMAL = "normal"
 METHOD_AI = "ai"
+METHOD_AIP = "aip"            # AI image processing (ai_processing.py)
 SCALES = [0.1, 0.2, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
 AI_SPEEDS = ["accurate", "balanced", "fast"]
 
@@ -44,6 +51,23 @@ try:
 except Exception as _e:                              # scipy / file missing
     _AiConfig = FewShotDetector = None
     _AI_ERR = f"{type(_e).__name__}: {_e}"
+
+
+_AIP_ERR = None
+try:
+    from ai_processing import AIPatternMatcher
+except Exception as _e:
+    AIPatternMatcher = None
+    _AIP_ERR = f"{type(_e).__name__}: {_e}"
+
+
+def aip_available():
+    """(ok, reason).  AI image processing needs ai_processing.py."""
+    if AIPatternMatcher is None:
+        return False, ("AI image processing is not installed on this PC "
+                       f"({_AIP_ERR}).  Needed: ai_processing.py next to "
+                       "the program.")
+    return True, ""
 
 
 def ai_available():
@@ -355,9 +379,290 @@ def detect_ai(image, templates, cfg, key=None, config=None, name=None,
     return matches, output, mask
 
 
+# ----------------------------------------------------------------------------
+# AI image processing (ai_processing.py): MASTER picture(s) + TEMPLATE(s),
+# trained.  master = the area's region, template = the object inside it.
+# ----------------------------------------------------------------------------
+MAX_MASTERS = 6
+# (key in the area config, default, label, help)
+AIP_PARAMS = [
+    ("aip_score", 0.40, "Score (0-1)",
+     "Lowest score that counts.  0 = the strongest background place seen "
+     "in training, 1 = a typical object.  Raise it if something else is "
+     "found; lower it if good parts are missed.  No new training needed."),
+    ("aip_expect", 0, "Objects expected",
+     "How many objects are in the area.  0 = not fixed.  With a number, "
+     "exactly that many (the best ones) are reported."),
+    ("aip_max_templates", 4, "Templates used",
+     "Your templates plus objects found in the masters that are used as "
+     "extra templates.  More = finds more looks, but slower."),
+    ("aip_augment", 16, "Training copies",
+     "Copies of each master made with other light, tone and small moves.  "
+     "More = more careful training, but slower."),
+    ("aip_variation", 1.0, "Variation",
+     "How different the made-up 'other parts' are in training.  Raise it "
+     "when real parts differ a lot from the master."),
+    ("aip_seed", 0, "Seed",
+     "Start number of the random copies.  The same number gives the same "
+     "training again."),
+    ("aip_harvest", True, "Use found objects",
+     "Use the objects found in the masters as extra templates (one box "
+     "on one pin then learns all pins)."),
+]
+_AIP_TRAIN_KEYS = [k for k, *_ in AIP_PARAMS if k != "aip_score"]
+
+_aip_cache = {}                    # key -> (signature, matcher, report)
+_aip_lock = threading.Lock()
+
+
+def aip_params(cfg):
+    """Area settings -> the values of AIP_PARAMS (with defaults)."""
+    out = {}
+    for k, default, *_ in AIP_PARAMS:
+        v = cfg.get(k, default)
+        try:
+            out[k] = (bool(v) if isinstance(default, bool) else
+                      int(float(v)) if isinstance(default, int) else float(v))
+        except (TypeError, ValueError):
+            out[k] = default
+    return out
+
+
+def _img_sig(imgs):
+    return tuple((im.shape, int(im[::4, ::4].sum(dtype=np.int64)))
+                 for im in imgs)
+
+
+def aip_signature(masters, templates, cfg):
+    """Changes whenever a new training is needed."""
+    p = aip_params(cfg)
+    return repr((_img_sig(masters), _img_sig(templates),
+                 [p[k] for k in _AIP_TRAIN_KEYS]))
+
+
+def aip_dir(area_dir):
+    return os.path.join(area_dir, "aip")
+
+
+def save_masters(area_dir, masters):
+    """Replace the stored master pictures (and drop the old trained file)."""
+    d = aip_dir(area_dir)
+    if os.path.isdir(d):
+        for f in os.listdir(d):
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+    if not masters:
+        return
+    os.makedirs(d, exist_ok=True)
+    for i, m in enumerate(masters[:MAX_MASTERS]):
+        cv2.imwrite(os.path.join(d, f"master_{i}.png"), m)
+    with open(os.path.join(d, "setup.json"), "w") as f:
+        json.dump({"masters": [f"master_{i}.png"
+                               for i in range(min(len(masters),
+                                                  MAX_MASTERS))]}, f)
+
+
+def load_masters(area_dir):
+    d = aip_dir(area_dir)
+    try:
+        with open(os.path.join(d, "setup.json")) as f:
+            names = json.load(f).get("masters", [])
+    except (OSError, json.JSONDecodeError):
+        return []
+    out = []
+    for n in names:
+        im = cv2.imread(os.path.join(d, n))
+        if im is not None:
+            out.append(im)
+    return out
+
+
+def _aip_model_file(area_dir):
+    return os.path.join(aip_dir(area_dir), "trained.pkl")
+
+
+def aip_store_model(area_dir, key):
+    """Write the trained matcher of `key` next to the masters, so the next
+    program start does not have to train again."""
+    import pickle
+    hit = _aip_cache.get(key)
+    if not hit:
+        return False
+    try:
+        os.makedirs(aip_dir(area_dir), exist_ok=True)
+        with open(_aip_model_file(area_dir), "wb") as f:
+            pickle.dump({"sig": hit[0], "matcher": hit[1],
+                         "report": hit[2]}, f)
+        return True
+    except Exception:
+        return False
+
+
+def aip_load(key, area_dir, masters, templates, cfg):
+    """Put the area's stored training into memory under `key` when it still
+    fits these masters + templates + settings.  Returns the report or None.
+    (Never trains.)"""
+    import pickle
+    if not aip_available()[0] or not masters or not templates:
+        return None
+    sig = aip_signature(masters, templates, cfg)
+    try:
+        with open(_aip_model_file(area_dir), "rb") as f:
+            d = pickle.load(f)
+    except Exception:
+        return None
+    if d.get("sig") != sig:
+        return None
+    with _aip_lock:
+        _aip_cache[key] = (sig, d["matcher"], d.get("report") or {})
+    return d.get("report") or {}
+
+
+def aip_get(key, masters, templates, cfg, area_dir=None, on_train=None):
+    """The trained matcher for these masters + templates + settings.
+    Order: memory -> trained file of the area -> train now (3-20 s).
+    Returns (matcher, report).  Raises RuntimeError with a plain reason."""
+    ok, why = aip_available()
+    if not ok:
+        raise RuntimeError(why)
+    masters = [m for m in masters if m is not None]
+    templates = [t for t in templates if t is not None]
+    if not masters:
+        raise RuntimeError("AI image processing has no master picture - "
+                           "open the area and add the template again")
+    if not templates:
+        raise RuntimeError("AI image processing has no template")
+    for t in templates:
+        if not any(t.shape[0] <= m.shape[0] and t.shape[1] <= m.shape[1]
+                   for m in masters):
+            raise RuntimeError("a template is bigger than the master area")
+    sig = aip_signature(masters, templates, cfg)
+    p = aip_params(cfg)
+    with _aip_lock:
+        hit = _aip_cache.get(key)
+        if not (hit and hit[0] == sig) and area_dir:
+            import pickle
+            try:
+                with open(_aip_model_file(area_dir), "rb") as f:
+                    d = pickle.load(f)
+                if d.get("sig") == sig:
+                    hit = (sig, d["matcher"], d.get("report") or {})
+                    _aip_cache[key] = hit
+            except Exception:
+                pass
+        if not (hit and hit[0] == sig):
+            if on_train:
+                on_train()
+            t0 = time.time()
+            m = AIPatternMatcher(
+                min_score=p["aip_score"], augment=max(4, p["aip_augment"]),
+                seed=p["aip_seed"], expect=p["aip_expect"] or None,
+                verbose=False, variation=max(0.0, p["aip_variation"]),
+                max_templates=max(1, p["aip_max_templates"]),
+                harvest=p["aip_harvest"])
+            try:
+                rep = dict(m.train(masters, templates))
+            except Exception as e:
+                # most often: the area is hardly bigger than the template,
+                # so there is no background to learn from
+                raise RuntimeError(
+                    "AI training failed. Make the area clearly bigger than "
+                    "the object (it needs some background around it) and "
+                    "draw the template on the object. "
+                    f"({type(e).__name__}: {e})")
+            rep["seconds"] = round(time.time() - t0, 1)
+            rep["masters"] = len(masters)
+            rep["dropped"] = list(getattr(m, "dropped", []))
+            rep["score_weakest"] = round(float(m.score_weakest), 2)
+            rep["joint_separable"] = bool(m.joint_separable)
+            if len(_aip_cache) > 100:
+                _aip_cache.clear()
+            hit = (sig, m, rep)
+            _aip_cache[key] = hit
+            if area_dir and os.path.isdir(aip_dir(area_dir)):
+                aip_store_model(area_dir, key)
+        hit[1].min_score = p["aip_score"]        # no training needed
+        return hit[1], hit[2]
+
+
+def aip_report_text(rep):
+    """What training learned, in plain words (several lines)."""
+    if not rep:
+        return ""
+    lines = [f"trained in {rep.get('seconds', '?')} s from "
+             f"{rep.get('masters', '?')} master(s) and "
+             f"{rep.get('templates_from_user', '?')} template(s)"
+             + (f" (+{rep['templates'] - rep['templates_from_user']} taken "
+                "from the masters)"
+                if rep.get("templates", 0) > rep.get("templates_from_user", 0)
+                else ""),
+             f"objects found in the master(s): "
+             f"{rep.get('instances_per_master')}",
+             f"picture channels used: {rep.get('channel_weights')}",
+             f"weakest training object scored "
+             f"{rep.get('score_weakest', '?')} (1 = typical object, "
+             "0 = background)"]
+    if rep.get("dropped"):
+        lines.append("WARNING: template(s) "
+                     + ", ".join(str(i + 1) for i in rep["dropped"])
+                     + " do not look like the other objects (drawn off the "
+                     "object?) - left out")
+    if not rep.get("separable", True) or not rep.get("joint_separable", True):
+        lines.append("WARNING: an object looks like the background here - "
+                     "add another template or master")
+    return "\n".join(lines)
+
+
+def detect_aip(image, templates, cfg, key=None, config=None, name=None,
+               masters=None, area_dir=None):
+    """Same return shape as the other methods: (matches, output, mask)."""
+    m, _rep = aip_get(key or "aip", list(masters or []), templates, cfg,
+                      area_dir=area_dir)
+    with _aip_lock:
+        try:
+            found = m.detect(image)
+        except Exception as e:
+            raise RuntimeError(f"AI image processing failed: "
+                               f"{type(e).__name__}: {e}")
+    found = found[:max(1, int(cfg.get("max_matches", 20)))]
+    matches = []
+    for d in found:
+        matches.append({
+            "score": float(d.score), "scale": 1.0, "angle": 0.0,
+            "top_left": (int(d.x), int(d.y)),
+            "bottom_right": (int(d.x + d.w), int(d.y + d.h)),
+            "poly": [[d.x, d.y], [d.x + d.w, d.y], [d.x + d.w, d.y + d.h],
+                     [d.x, d.y + d.h]],
+            "match": float(d.match), "patch": float(d.patch)})
+    t_h = max(8, int(np.median([t.shape[0] for t in templates])))
+    row = max(1, t_h // 2)
+    matches.sort(key=lambda q: (round((q["top_left"][1]
+                                       + q["bottom_right"][1]) / 2 / row),
+                                q["top_left"][0]))
+    output = image.copy()
+    for i, q in enumerate(matches):
+        cv2.rectangle(output, q["top_left"], q["bottom_right"],
+                      (0, 255, 0), 2)
+        cv2.putText(output, str(i + 1),
+                    (q["top_left"][0], max(12, q["top_left"][1] - 5)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+    mask = None
+    if matches and config is not None:
+        try:
+            mask = check_pin(matches, config, name=name)
+        except Exception:
+            mask = None
+    return matches, output, mask
+
+
 def detect_area(image, templates, cfg, config=None, name=None, key=None,
-                shots=None):
+                shots=None, masters=None, area_dir=None):
     """Run the method chosen for this area.  cfg = the area's settings."""
+    if str(cfg.get("method", METHOD_NORMAL)) == METHOD_AIP:
+        return detect_aip(image, templates, cfg, key=key, config=config,
+                          name=name, masters=masters, area_dir=area_dir)
     if str(cfg.get("method", METHOD_NORMAL)) == METHOD_AI:
         return detect_ai(image, templates, cfg, key=key, config=config,
                          name=name, shots=shots)
@@ -473,6 +778,26 @@ def _shots_for(area_dir):
     return shots
 
 
+_masters_cache = {}
+
+
+def _masters_for(area_dir):
+    """Master pictures of an area, re-read only when the file changes."""
+    if not area_dir:
+        return []
+    f = os.path.join(aip_dir(area_dir), "setup.json")
+    try:
+        mt = os.path.getmtime(f)
+    except OSError:
+        return []
+    hit = _masters_cache.get(area_dir)
+    if hit and hit[0] == mt:
+        return hit[1]
+    ms = load_masters(area_dir)
+    _masters_cache[area_dir] = (mt, ms)
+    return ms
+
+
 def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
               key_prefix="", stop=None, area_dir=None):
     """Detect every area of one scene on `frame` (already scene-scaled).
@@ -540,13 +865,17 @@ def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
             continue
         region = frame[y0:y1, x0:x1]
         try:
-            shots = None
-            if area_dir is not None and \
-                    cfg.get("method", METHOD_NORMAL) == METHOD_AI:
+            shots = masters = adir = None
+            meth = cfg.get("method", METHOD_NORMAL)
+            if area_dir is not None and meth == METHOD_AI:
                 shots = _shots_for(area_dir(n))
+            if area_dir is not None and meth == METHOD_AIP:
+                adir = area_dir(n)
+                masters = _masters_for(adir)
             matches, output, mask = detect_area(
                 region, cd["templates"], cfg, config=cd, name=n,
-                key=f"{key_prefix}/{n}", shots=shots)
+                key=f"{key_prefix}/{n}", shots=shots, masters=masters,
+                area_dir=adir)
         except RuntimeError as e:        # e.g. AI detection not installed
             res["skipped"] = str(e)
             continue
@@ -568,14 +897,21 @@ def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
 
 
 def warm_area(cd, key, area_dir):
-    """Build the AI detector of one loaded area ahead of the first run (a
-    calibrated one needs a few seconds).  Returns True when one was built."""
+    """Get the AI part of one loaded area ready ahead of the first run (a
+    calibrated detector or a training needs seconds).  True when done."""
     cfg = cd["config"]
-    if cfg.get("method", METHOD_NORMAL) != METHOD_AI or not ai_available()[0]:
+    meth = cfg.get("method", METHOD_NORMAL)
+    tmpl = [t for t in cd["templates"] if t is not None]
+    if meth == METHOD_AIP:
+        if not aip_available()[0]:
+            return False
+        aip_get(key, _masters_for(area_dir), tmpl, cfg, area_dir=area_dir)
+        return True
+    if meth != METHOD_AI or not ai_available()[0]:
         return False
     speed = str(cfg.get("ai_speed", "balanced"))
     with _ai_lock:
-        _ai_detectors(key, [t for t in cd["templates"] if t is not None],
+        _ai_detectors(key, tmpl,
                       speed if speed in AI_SPEEDS else "balanced",
                       ai_overrides(cfg), _shots_for(area_dir))
     return True

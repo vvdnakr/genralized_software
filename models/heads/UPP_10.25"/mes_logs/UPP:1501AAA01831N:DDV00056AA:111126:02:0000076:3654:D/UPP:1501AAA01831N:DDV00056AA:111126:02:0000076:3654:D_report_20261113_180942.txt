@@ -1,0 +1,127 @@
+==================================================================
+DETECTION REPORT
+==================================================================
+model            : UPP_10.25"
+serial number    : UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D
+operator        : 356354  (scanned)
+machine          : 2
+stage            : 99 Pin Bend Testing
+product          : 901-1-04216 901-1-04216-UPP
+time             : 2026-11-13 18:09:42
+previous stage   : PASS — Previous stage is 99
+CYCLE RESULT     : PASS
+
+------------------------------------------------------------------
+DETECTION LOG
+------------------------------------------------------------------
+
+[18:09:22]  RUN  40_PIN_P1
+    [light] 40_PIN_P1: brightness +2%  contrast -2%  sharpness +1%
+     TOP_P1       OK  1/1 pins ok (limit 65px) [AI]   shift +30,+40 px
+     pinstop      OK  12/12 pins ok (limit 30px)   shift +0,+1 px   in TOP_P1#1 (moved +4,+28)
+     pinsdon      OK  1/1 pins ok (limit 65px) [AI]   shift +31,+40 px
+     pinsss       OK  12/12 pins ok (limit 65px)   shift +1,-1 px   in pinsdon#1 (moved +31,+41)
+     RESULT       OK   (4/4 areas ok)
+
+[18:09:25]  RUN  40_PIN_P2
+    [light] 40_PIN_P2: brightness +0%  contrast -5%  sharpness +2%
+     TOP_P2       OK  1/1 pins ok (limit 65px) [AI]   shift +15,+32 px
+     DOWN_P2      OK  1/1 pins ok (limit 65px) [AI]   shift +7,+28 px
+     PIN_TOP      OK  11/11 pins ok (limit 20px)   shift +2,+0 px   in TOP_P2#1 (moved +15,+32)
+     PINS_DOWN    OK  11/11 pins ok (limit 20px)   shift +0,+0 px   in DOWN_P2#1 (moved +17,+32)
+     RESULT       OK   (4/4 areas ok)
+
+[18:09:27]  RUN  USB
+    [light] USB: brightness -10%  contrast -19%  sharpness +5%
+     Connector    OK  1/1 pins ok (limit 65px)   shift +6,+26 px
+     RESULT       OK   (1/1 areas ok)
+
+[18:09:33]  RUN  FAKRA_4PIN
+    [light] FAKRA_4PIN: brightness +9%  contrast +10%  sharpness +12%
+    [FAKRA_4PIN] picture size 0.5x
+     pin1         OK  1/1 pins ok (limit 65px) [AI]   shift -8,+4 px
+     pin2         OK  1/1 pins ok (limit 65px) [AI]   shift -10,+7 px
+     pin3         OK  1/1 pins ok (limit 65px) [AI]   shift -8,+6 px
+     pin4         OK  1/1 pins ok (limit 65px) [AI]   shift -7,+10 px
+     RESULT       OK   (4/4 areas ok)
+
+[18:09:35]  RUN  FAKRA_2PIN
+    [light] FAKRA_2PIN: brightness +8%  contrast +14%  sharpness -7%
+    [FAKRA_2PIN] picture size 0.5x
+     pin11        OK  1/1 pins ok (limit 65px) [AI]   shift -10,+8 px
+     pin12        OK  1/1 pins ok (limit 65px) [AI]   shift -7,+5 px
+     RESULT       OK   (2/2 areas ok)
+
+[18:09:36]  RUN  SCREW_1
+    [light] SCREW_1: brightness -7%  contrast -10%  sharpness -1%
+    [SCREW_1] picture size 0.25x
+     SCREW_1      OK  1/1 pins ok (limit 65px)   shift +0,+2 px
+     RESULT       OK   (1/1 areas ok)
+
+[18:09:38]  RUN  SCREW_2
+    [light] SCREW_2: brightness +5%  contrast +4%  sharpness +1%
+    [SCREW_2] picture size 0.25x
+     SCREW_2      OK  1/1 pins ok (limit 65px)   shift +0,+2 px
+     RESULT       OK   (1/1 areas ok)
+
+[18:09:40]  RUN  SCREW_3
+    [light] SCREW_3: brightness +21%  contrast +36%  sharpness -12%
+    [SCREW_3] picture size 0.25x
+     SCREW_3      OK  1/1 pins ok (limit 65px)   shift +3,+2 px
+     RESULT       OK   (1/1 areas ok)
+
+[18:09:42]  RUN  SCREW_4
+    [light] SCREW_4: brightness -7%  contrast -6%  sharpness +56%
+    [SCREW_4] picture size 0.25x
+     SCREW_4      OK  1/1 pins ok (limit 65px)   shift -1,+5 px
+     RESULT       OK   (1/1 areas ok)
+
+------------------------------------------------------------------
+IMAGES UPLOADED TO MES
+------------------------------------------------------------------
+camera view            UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_00_camera_view.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918630
+40_PIN_P1 [result]     UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_01_40_PIN_P1__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918631
+40_PIN_P1 [pins]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_02_40_PIN_P1__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918632
+40_PIN_P2 [result]     UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_03_40_PIN_P2__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918633
+40_PIN_P2 [pins]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_04_40_PIN_P2__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918634
+USB [result]           UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_05_USB__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918635
+USB [pins]             UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_06_USB__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918636
+FAKRA_4PIN [result]    UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_07_FAKRA_4PIN__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918637
+FAKRA_4PIN [pins]      UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_08_FAKRA_4PIN__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918638
+FAKRA_2PIN [result]    UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_09_FAKRA_2PIN__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918639
+FAKRA_2PIN [pins]      UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_10_FAKRA_2PIN__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918640
+SCREW_1 [result]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_11_SCREW_1__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918641
+SCREW_1 [pins]         UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_12_SCREW_1__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918642
+SCREW_2 [result]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_13_SCREW_2__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918643
+SCREW_2 [pins]         UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_14_SCREW_2__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918644
+SCREW_3 [result]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_15_SCREW_3__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918645
+SCREW_3 [pins]         UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_16_SCREW_3__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918646
+SCREW_4 [result]       UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_17_SCREW_4__result_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918647
+SCREW_4 [pins]         UPP:1501AAA01831N:DDV00056AA:111126:02:0000076:3654:D_20261113_180942_18_SCREW_4__pins_.jpg
+                       link: https://mes.vvdntech.com/uploads/file_download/27918648
+
+------------------------------------------------------------------
+MES STAGE REPORT
+------------------------------------------------------------------
+report download link : https://mes.vvdntech.com/uploads/file_download/27918649
+status sent          : PASS
+MES response         : OK — Serial number passed from all stages.
+time                 : 2026-11-13 18:09:47

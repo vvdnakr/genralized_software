@@ -1,0 +1,8 @@
+{
+  "children": [
+    "TOP_P2",
+    "DOWN_P2",
+    "PIN_TOP",
+    "PINS_DOWN"
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "cycle": {
+    "ok": 124,
+    "ng": 79
+  },
+  "scenes": {
+    "40_PIN_P1": {
+      "ok": 252,
+      "ng": 8
+    },
+    "40_PIN_P2": {
+      "ok": 213,
+      "ng": 37
+    },
+    "USB": {
+      "ok": 245,
+      "ng": 5
+    },
+    "FAKRA_4PIN": {
+      "ok": 195,
+      "ng": 47
+    },
+    "FAKRA_2PIN": {
+      "ok": 174,
+      "ng": 48
+    },
+    "SCREW_1": {
+      "ok": 204,
+      "ng": 6
+    },
+    "SCREW_2": {
+      "ok": 194,
+      "ng": 14
+    },
+    "SCREW_3": {
+      "ok": 198,
+      "ng": 7
+    },
+    "SCREW_4": {
+      "ok": 188,
+      "ng": 15
+    }
+  },
+  "areas": {
+    "40_PIN_P1/TOP_P1": {
+      "ok": 259,
+      "ng": 1
+    },
+    "40_PIN_P1/DOWN_P1": {
+      "ok": 83,
+      "ng": 5
+    },
+    "40_PIN_P2/TOP_P2": {
+      "ok": 245,
+      "ng": 5
+    },
+    "40_PIN_P2/DOWN_P2": {
+      "ok": 214,
+      "ng": 36
+    },
+    "USB/Connector": {
+      "ok": 245,
+      "ng": 5
+    },
+    "FAKRA_4PIN/area_1": {
+      "ok": 83,
+      "ng": 0
+    },
+    "FAKRA_2PIN/2_PIN": {
+      "ok": 74,
+      "ng": 28
+    },
+    "SCREW_1/SCREW1": {
+      "ok": 74,
+      "ng": 4
+    },
+    "SCREW_2/SCREW2": {
+      "ok": 74,
+      "ng": 3
+    },
+    "SCREW_3/SCREW3": {
+      "ok": 74,
+      "ng": 2
+    },
+    "SCREW_4/SCREW4": {
+      "ok": 74,
+      "ng": 2
+    },
+    "40_PIN_P1/pinstop": {
+      "ok": 176,
+      "ng": 0
+    },
+    "40_PIN_P1/pinsdon": {
+      "ok": 173,
+      "ng": 3
+    },
+    "40_PIN_P1/pinsss": {
+      "ok": 173,
+      "ng": 3
+    },
+    "40_PIN_P2/PIN_TOP": {
+      "ok": 166,
+      "ng": 1
+    },
+    "40_PIN_P2/PINS_DOWN": {
+      "ok": 162,
+      "ng": 5
+    },
+    "FAKRA_2PIN/FK2PIN1": {
+      "ok": 11,
+      "ng": 14
+    },
+    "FAKRA_2PIN/FK2PIN1AREA": {
+      "ok": 24,
+      "ng": 1
+    },
+    "FAKRA_2PIN/FK2PIN2": {
+      "ok": 24,
+      "ng": 1
+    },
+    "FAKRA_4PIN/FK4PIN1AREA": {
+      "ok": 26,
+      "ng": 0
+    },
+    "FAKRA_4PIN/FK4PIN1": {
+      "ok": 26,
+      "ng": 0
+    },
+    "FAKRA_4PIN/FK4PIN2AREA": {
+      "ok": 25,
+      "ng": 1
+    },
+    "FAKRA_4PIN/FK4PIN2": {
+      "ok": 23,
+      "ng": 3
+    },
+    "FAKRA_4PIN/FK4PIN3AREA": {
+      "ok": 26,
+      "ng": 0
+    },
+    "FAKRA_4PIN/FK4PIN3": {
+      "ok": 26,
+      "ng": 0
+    },
+    "FAKRA_4PIN/FK4PIN4AREA": {
+      "ok": 23,
+      "ng": 3
+    },
+    "FAKRA_4PIN/FK4PIN4": {
+      "ok": 22,
+      "ng": 4
+    },
+    "SCREW_1/SCREW_1": {
+      "ok": 130,
+      "ng": 2
+    },
+    "SCREW_2/SCREW_2": {
+      "ok": 120,
+      "ng": 11
+    },
+    "SCREW_3/SCREW_3": {
+      "ok": 124,
+      "ng": 5
+    },
+    "SCREW_4/SCREW_4": {
+      "ok": 114,
+      "ng": 13
+    },
+    "FAKRA_4PIN/pin1": {
+      "ok": 121,
+      "ng": 12
+    },
+    "FAKRA_4PIN/pin2": {
+      "ok": 112,
+      "ng": 21
+    },
+    "FAKRA_4PIN/pin3": {
+      "ok": 126,
+      "ng": 7
+    },
+    "FAKRA_4PIN/pin4": {
+      "ok": 121,
+      "ng": 12
+    },
+    "FAKRA_2PIN/pin11": {
+      "ok": 117,
+      "ng": 3
+    },
+    "FAKRA_2PIN/pin12": {
+      "ok": 115,
+      "ng": 5
+    }
+  }
+}

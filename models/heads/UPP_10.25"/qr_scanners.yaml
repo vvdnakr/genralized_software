@@ -1,0 +1,12 @@
+scanners:
+- id: qr_1
+  scene: QR_SCANNER
+  name: QR_1
+  master: true
+  roi_norm:
+  - 0.06901
+  - 0.059414
+  - 0.87066
+  - 0.887346
+  length: 53
+  starts_with: UPP

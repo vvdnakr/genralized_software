@@ -38,7 +38,10 @@ from vision_detect import (
     get_scene_scale, set_scene_scale, scale_frame, detect_area, run_areas,
     inside_of, order_areas, descendants, object_center,
     AI_MODES, AI_CHOICES, AI_FORM_KEYS, MAX_SHOTS, ai_fields, ai_parse,
-    save_calib, load_calib, ai_note, warm_area)
+    save_calib, load_calib, ai_note, warm_area,
+    METHOD_AIP, AIP_PARAMS, MAX_MASTERS, aip_available, aip_get,
+    aip_report_text, aip_signature, save_masters, load_masters,
+    aip_store_model, aip_load)
 from two_point import (
     ParentModelManager,
     detect_multi_scale_templates,
@@ -6610,7 +6613,7 @@ class HeadScreen(BaseScreen):
         for p, loaded in self._children_cache.items():
             cm = self.parent_store.get_child_manager(p)
             for cname, d in loaded:
-                if d["config"].get("method") == METHOD_AI:
+                if d["config"].get("method") in (METHOD_AI, METHOD_AIP):
                     jobs.append((d, f"{self.head}/{p}/{cname}",
                                  os.path.dirname(cm._paths(cname)["config"])))
         if not jobs:
@@ -6977,7 +6980,8 @@ class HeadScreen(BaseScreen):
                 if child_filter is not None and child_name not in child_filter:
                     continue                 # a parent run only to locate
                 cfg = dict(children_data)[child_name]["config"]
-                tag = " [AI]" if r.get("method") == METHOD_AI else ""
+                tag = {METHOD_AI: " [AI]", METHOD_AIP: " [AI trained]"}.get(
+                    r.get("method"), "")
                 if r.get("skipped"):
                     logs.append(f" {child_name:<12} NG  SKIPPED: "
                                 f"{r['skipped']}")
@@ -8397,6 +8401,78 @@ class QrConfigDialog(QDialog):
 # ============================================================================
 # SCREEN 4 — BUILD SCENE (areas with ROI confirm/reset)
 # ============================================================================
+class RemovePicturesDialog(QDialog):
+    """Shows the templates (or masters) as small pictures; the user ticks
+    the ones to remove.  self.remove = list of ticked positions, or None."""
+
+    def __init__(self, master, title, what, images):
+        super().__init__(master)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.resize(640, 520)
+        _premium_dialog(self, C_ACCENT)
+        self.remove = None
+        self._boxes = []
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band(title.upper(), C_ACCENT))
+        hint = QLabel(f"Tick each {what} you want to remove, then press "
+                      "Remove.")
+        hint.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;"
+                           " padding: 8px 18px;")
+        lay.addWidget(hint)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body.setObjectName("rmbody")
+        body.setStyleSheet(f"#rmbody {{ background: {C_PANEL}; }}")
+        scroll.viewport().setStyleSheet(f"background: {C_PANEL};")
+        grid = QGridLayout(body)
+        grid.setContentsMargins(18, 8, 18, 8)
+        grid.setVerticalSpacing(10)
+        for i, img in enumerate(images):
+            cb = QCheckBox(f"{what.capitalize()} {i + 1}   "
+                           f"({img.shape[1]} x {img.shape[0]} px)")
+            cb.setStyleSheet(f"color: {C_TEXT}; font-size: 10pt;")
+            pic = QLabel()
+            k = min(260.0 / img.shape[1], 130.0 / img.shape[0], 6.0)
+            small = cv2.resize(img, (max(8, int(img.shape[1] * k)),
+                                     max(8, int(img.shape[0] * k))),
+                               interpolation=cv2.INTER_AREA if k < 1
+                               else cv2.INTER_NEAREST)
+            rgb = np.ascontiguousarray(cv2.cvtColor(small,
+                                                    cv2.COLOR_BGR2RGB))
+            qi = QImage(rgb.data, rgb.shape[1], rgb.shape[0],
+                        3 * rgb.shape[1], QImage.Format.Format_RGB888)
+            pic.setPixmap(QPixmap.fromImage(qi.copy()))
+            pic.setStyleSheet(f"border: 1px solid {C_LINE};")
+            grid.addWidget(cb, i, 0)
+            grid.addWidget(pic, i, 1, Qt.AlignmentFlag.AlignLeft)
+            self._boxes.append(cb)
+        grid.setColumnStretch(1, 1)
+        grid.setRowStretch(len(images), 1)
+        scroll.setWidget(body)
+        lay.addWidget(scroll, 1)
+        bb = QHBoxLayout()
+        bb.setContentsMargins(18, 10, 18, 14)
+        b1 = QPushButton("Cancel")
+        apply_btn_color(b1, "#44444e")
+        b1.clicked.connect(self.reject)
+        b2 = QPushButton("Remove")
+        apply_btn_color(b2, C_NG)
+        b2.clicked.connect(self._ok)
+        for b in (b1, b2):
+            b.setMinimumHeight(44)
+            bb.addWidget(b)
+        lay.addLayout(bb)
+
+    def _ok(self):
+        self.remove = [i for i, cb in enumerate(self._boxes)
+                       if cb.isChecked()]
+        self.accept()
+
+
 class AiSettingsDialog(QDialog):
     """Every setting of the AI detector for one area.  Only the values the
     user changed are kept (self.result_params); the rest follow the
@@ -8768,7 +8844,11 @@ class BuildParentScreen(BaseScreen):
         self.btn_clear_tmpls = styled_btn(sec2, "Remove All Templates",
                                           self.clear_templates,
                                           color="#44444e")
-        s2.addWidget(self.btn_clear_tmpls)
+        self.btn_pick_tmpl = styled_btn(sec2, "Remove Template",
+                                        self.remove_templates,
+                                        color="#44444e")
+        self.btn_pick_tmpl.setToolTip("Choose which template(s) to remove.")
+        s2.addWidget(btn_row([self.btn_pick_tmpl, self.btn_clear_tmpls]))
         self.tmpl_count_lbl = QLabel("Templates: 0")
         self.tmpl_count_lbl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
         self.tmpl_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -8780,10 +8860,14 @@ class BuildParentScreen(BaseScreen):
         self.cmb_method.setStyleSheet(combo_qss)
         self.cmb_method.addItem("Normal detection", METHOD_NORMAL)
         self.cmb_method.addItem("AI detection", METHOD_AI)
+        self.cmb_method.addItem("AI image processing (trained)", METHOD_AIP)
         self.cmb_method.setToolTip(
             "Normal: fast, the object must look like the template and not "
             "be turned.\nAI: also finds the object when it is turned, "
-            "bigger or smaller, or partly covered.")
+            "bigger or smaller, or partly covered.\nAI image processing: "
+            "for a fixed scene with small or shiny parts.  The area is the "
+            "MASTER, the template is the object; it trains by itself each "
+            "time a master or a template is added.")
         self.cmb_method.currentIndexChanged.connect(self._method_changed)
         s2.addWidget(self.cmb_method)
         clay2.addWidget(sec2)
@@ -8828,13 +8912,28 @@ class BuildParentScreen(BaseScreen):
         rows = [("Threshold", self.var_thresh.e, "normal"),
                 ("AI mode", self.cmb_ai_mode, "ai"),
                 ("AI score (0-1)", self.var_ai_score.e, "ai"),
-                ("Scale min", self.var_smin.e, "both"),
-                ("Scale max", self.var_smax.e, "both"),
+                ("Scale min", self.var_smin.e, "normal ai"),
+                ("Scale max", self.var_smax.e, "normal ai"),
                 ("Scale steps", self.var_steps.e, "normal"),
                 ("Max turn (deg)", self.var_ai_angle.e, "ai"),
                 ("AI speed", self.cmb_ai_speed, "ai"),
                 ("Max matches", self.var_maxm.e, "both"),
                 ("Pin limit (px)", self.var_pin.e, "both")]
+        # AI image processing: every setting of the trained matcher
+        self.aip_masters = []         # master pictures (the area's region)
+        self.aip_report = None        # what the last training learned
+        self.aip_w = {}               # key -> editor
+        for akey, adef, albl, ahelp in AIP_PARAMS:
+            if isinstance(adef, bool):
+                w_ = QCheckBox()
+                w_.setChecked(adef)
+                w_.toggled.connect(lambda _v: self._aip_changed())
+            else:
+                w_ = QLineEdit(f"{adef:g}")
+                w_.editingFinished.connect(self._aip_changed)
+            w_.setToolTip(ahelp)
+            self.aip_w[akey] = w_
+            rows.insert(len(rows) - 2, (albl, w_, "aip"))
         self._tune_rows = []
         for i, (label, wdg, kind) in enumerate(rows):
             l = QLabel(label)
@@ -8866,6 +8965,34 @@ class BuildParentScreen(BaseScreen):
         for wdg in (self.btn_ai_all, ai_row, self.lbl_ai_shots):
             self._tune_rows.append((wdg, wdg, "ai"))
         self._show_ai_shots()
+        # AI image processing: masters + training
+        self.btn_aip_master = styled_btn(sec3, "Add Master",
+                                         self.aip_add_master, color="#44444e")
+        self.btn_aip_master.setToolTip(
+            "Add the area as it looks NOW as one more master (another "
+            "part, other light).  It trains again by itself.")
+        self.btn_aip_clear = styled_btn(sec3, "Clear Masters",
+                                        self.aip_clear_masters,
+                                        color="#44444e")
+        self.btn_aip_pick = styled_btn(sec3, "Remove Master",
+                                       self.aip_remove_masters,
+                                       color="#44444e")
+        self.btn_aip_pick.setToolTip("Choose which master(s) to remove.  "
+                                     "It trains again by itself.")
+        self.btn_aip_train = styled_btn(sec3, "Train Again",
+                                        lambda: self._aip_train("manual"),
+                                        color="#44444e")
+        self.lbl_aip = QLabel("")
+        self.lbl_aip.setWordWrap(True)
+        self.lbl_aip.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
+        aip_row = btn_row([self.btn_aip_master, self.btn_aip_train])
+        aip_row2 = btn_row([self.btn_aip_pick, self.btn_aip_clear])
+        s3.addWidget(aip_row, r0 + 3, 0, 1, 2)
+        s3.addWidget(aip_row2, r0 + 4, 0, 1, 2)
+        s3.addWidget(self.lbl_aip, r0 + 5, 0, 1, 2)
+        for wdg in (aip_row, aip_row2, self.lbl_aip):
+            self._tune_rows.append((wdg, wdg, "aip"))
+        self._show_aip()
         clay2.addWidget(sec3)
         self._area_boxes = [sec, sec2, sec3]
         self._box_roi, self._box_tmpl, self._box_tune = sec, sec2, sec3
@@ -8998,21 +9125,28 @@ class BuildParentScreen(BaseScreen):
 
     def _method_changed(self):
         m = self._method()
-        if m == METHOD_AI:
-            ok, why = ai_available()
+        if m in (METHOD_AI, METHOD_AIP):
+            ok, why = ai_available() if m == METHOD_AI else aip_available()
             if not ok:
                 self.cmb_method.blockSignals(True)
                 self.cmb_method.setCurrentIndex(0)
                 self.cmb_method.blockSignals(False)
+                Message.warn(self, "AI DETECTION NOT INSTALLED"
+                             if m == METHOD_AI else
+                             "AI IMAGE PROCESSING NOT INSTALLED", why)
                 m = METHOD_NORMAL
-                Message.warn(self, "AI DETECTION NOT INSTALLED", why)
         for l, w, kind in self._tune_rows:
-            show = kind == "both" or kind == m
+            show = kind == "both" or m in kind.split()
             l.setVisible(show)
             w.setVisible(show)
         self.matches = None            # test again with the new method
         if hasattr(self, "btn_save"):
             self._update_buttons()
+            if m == METHOD_AIP and self.template_list and \
+                    not getattr(self, "_loading", False) and \
+                    not self._aip_is_trained():
+                # templates are already there: learn them now
+                self._aip_train("method")
 
     def _form_cfg(self):
         """The settings typed in the form, as an area config."""
@@ -9026,7 +9160,270 @@ class BuildParentScreen(BaseScreen):
                 "ai_score": float(self.var_ai_score.get()),
                 "ai_max_angle": float(self.var_ai_angle.get()),
                 "ai_speed": self.cmb_ai_speed.currentData() or "balanced",
-                "ai_params": dict(self.ai_params)}
+                "ai_params": dict(self.ai_params), **self._aip_form()}
+
+    # -- AI image processing: master + template -> training -----------------------
+    def _aip_form(self):
+        """The trained-matcher settings typed in the form (ValueError when
+        one is not a number)."""
+        out = {}
+        for akey, adef, _l, _h in AIP_PARAMS:
+            w_ = self.aip_w[akey]
+            if isinstance(adef, bool):
+                out[akey] = w_.isChecked()
+            elif isinstance(adef, int):
+                out[akey] = int(float(w_.text()))
+            else:
+                out[akey] = float(w_.text())
+        if not 0.0 <= out["aip_score"] <= 1.0:
+            raise ValueError("score")
+        if out["aip_expect"] < 0 or out["aip_max_templates"] < 1 or \
+                out["aip_augment"] < 4 or out["aip_variation"] < 0:
+            raise ValueError("range")
+        return out
+
+    def _aip_key(self):
+        return f"test/{self.head}/{self.parent_name}"
+
+    def _aip_is_trained(self):
+        try:
+            cfg = self._form_cfg()
+        except (TypeError, ValueError):
+            return False
+        return bool(self.aip_masters and self.template_list
+                    and getattr(self, "_aip_sig", None) == aip_signature(
+                        self.aip_masters, self.template_list, cfg))
+
+    def _show_aip(self):
+        nm, nt = len(self.aip_masters), len(self.template_list)
+        if not nt:
+            txt = ("Training: add a template. The area becomes the master "
+                   "and it trains by itself.")
+        elif not nm:
+            txt = f"Training: {nt} template(s), no master yet."
+        elif self._aip_is_trained():
+            rep = self.aip_report or {}
+            txt = (f"Trained: {nm} master(s), {nt} template(s). Objects "
+                   f"found in the master(s): "
+                   f"{rep.get('instances_per_master', '?')}")
+        else:
+            txt = (f"{nm} master(s), {nt} template(s) - NOT trained with "
+                   "these yet. It trains at Test Detect, or press Train "
+                   "Again.")
+        self.lbl_aip.setText(txt)
+        self.btn_aip_master.setEnabled(self.reg is not None
+                                       and nm < MAX_MASTERS and not self.busy)
+        self.btn_aip_clear.setEnabled(nm > 0 and not self.busy)
+        self.btn_aip_pick.setEnabled(nm > 0 and not self.busy)
+        self.btn_aip_train.setEnabled(bool(nm and nt) and not self.busy)
+
+    def _aip_changed(self):
+        """A training setting was edited: the old training no longer fits."""
+        if self._method() == METHOD_AIP:
+            self.matches = None
+            self._show_aip()
+            self._update_buttons()
+
+    def _aip_train(self, why=""):
+        """Train from the masters + templates in a helper thread (3-20 s).
+        Called by itself whenever a master or a template is added."""
+        if self._method() != METHOD_AIP or self.busy:
+            return
+        if not self.template_list:
+            self._show_aip()
+            return
+        if not self.aip_masters:
+            # no master yet: the area as it looks now is the master
+            self._aip_grab_master(lambda snap: (self.aip_masters.append(snap),
+                                                self._aip_train(why)))
+            return
+        try:
+            cfg = self._form_cfg()
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the values",
+                         "One of the training values is not valid.")
+            return
+        masters, temps = list(self.aip_masters), list(self.template_list)
+        sig = aip_signature(masters, temps, cfg)
+        self.busy = True
+        self.matches = None
+        self._set_status(f"Training… {len(masters)} master(s), "
+                         f"{len(temps)} template(s). Please wait (3-20 s)")
+        self._show_aip()
+        self._update_buttons()
+
+        def work():
+            img = err = rep = None
+            try:
+                m, rep = aip_get(self._aip_key(), masters, temps, cfg)
+                # what it learned, drawn on the first master: check it
+                ms, img, _ = detect_area(masters[0], temps, cfg,
+                                         key=self._aip_key(),
+                                         masters=masters)
+                img = np.vstack([banner(
+                    img.shape[1], f"LEARNED - {len(ms)} object(s) in the "
+                    "master", None, height=40), img])
+            except RuntimeError as e:
+                err = str(e)
+            except Exception:
+                err = "ERROR:\n" + traceback.format_exc()
+
+            def done():
+                if not self._alive:
+                    return
+                self.busy = False
+                if err:
+                    self._aip_sig = None
+                    self.aip_report = None
+                    self.log("Training failed: " + err)
+                    self._set_status("Training failed — see the messages")
+                    Message.warn(self, "TRAINING FAILED",
+                                 err.splitlines()[0][:300])
+                else:
+                    self._aip_sig = sig
+                    self.aip_report = rep
+                    self.log("AI training:\n" + aip_report_text(rep))
+                    if img is not None:
+                        self.result_img = img
+                        self.mode = self.MODE_RESULT
+                        self.canvas.fit()
+                    self._set_status("Trained OK — check the picture, then "
+                                     "Back to Live and Test Detect")
+                self._show_aip()
+                self._update_buttons()
+            self.after(0, done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _aip_grab_master(self, use):
+        """Cut the area out of the picture as it is NOW and hand it to
+        use(picture).  A nested area is first moved with its outer object."""
+        if self.reg is None:
+            return
+        frame = self._frame()
+        if frame is None:
+            Message.error(self, "No camera", "No camera picture yet.")
+            return
+
+        def cut(dx, dy):
+            x, y, w, h = [int(v) for v in self.reg]
+            x, y = x + dx, y + dy
+            snap = frame[max(0, y):y + h, max(0, x):x + w].copy()
+            if snap.size == 0:
+                Message.warn(self, "Area not in the picture",
+                             "The area is outside the picture now.")
+                return
+            use(snap)
+
+        if not (self.inside and self.inside.get("anchor")):
+            cut(0, 0)
+            return
+        self.busy = True
+        self._set_status("Looking for the outer object…")
+
+        def work():
+            try:
+                c = self._locate_inside(frame)
+            except Exception:
+                c = None
+
+            def done():
+                if not self._alive:
+                    return
+                self.busy = False
+                if c is None:
+                    Message.warn(self, "OUTER OBJECT NOT FOUND",
+                                 "Put the part in place and try again.")
+                    self._update_buttons()
+                    return
+                cut(int(round(c[0] - self.inside["anchor"][0])),
+                    int(round(c[1] - self.inside["anchor"][1])))
+            self.after(0, done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def aip_add_master(self):
+        """One more master = the area as it looks now.  Trains again."""
+        if self.busy or self.reg is None or self.mode == self.MODE_TEMPLATE:
+            return
+        if len(self.aip_masters) >= MAX_MASTERS:
+            Message.info(self, "Enough masters",
+                         f"At most {MAX_MASTERS} masters are used.")
+            return
+
+        def use(snap):
+            if self.aip_masters and snap.shape != self.aip_masters[0].shape:
+                Message.warn(self, "Area cut by the picture edge",
+                             "The whole area must be inside the picture.")
+                return
+            self.aip_masters.append(snap)
+            self.log(f"Master {len(self.aip_masters)} added")
+            self._show_aip()
+            self._aip_train("master")
+        self._aip_grab_master(use)
+
+    def aip_remove_masters(self):
+        """Remove the masters the user ticks, then train again."""
+        if self.busy or not self.aip_masters:
+            return
+        dlg = RemovePicturesDialog(self, "Remove master", "master",
+                                   self.aip_masters)
+        dlg.exec()
+        if not dlg.remove:
+            return
+        self.aip_masters = [m for i, m in enumerate(self.aip_masters)
+                            if i not in dlg.remove]
+        self._aip_sig = None
+        self.aip_report = None
+        self.matches = None
+        self.log("Removed master(s): "
+                 + ", ".join(str(i + 1) for i in dlg.remove)
+                 + f" - {len(self.aip_masters)} left")
+        self._show_aip()
+        self._update_buttons()
+        if self.aip_masters and self.template_list:
+            self._aip_train("master removed")
+        elif not self.aip_masters:
+            self._set_status("No master left — Add Master, or add a "
+                             "template")
+
+    def remove_templates(self):
+        """Remove the templates the user ticks (AI image processing then
+        trains again)."""
+        if self.busy or not self.template_list or \
+                self.mode == self.MODE_TEMPLATE:
+            return
+        dlg = RemovePicturesDialog(self, "Remove template", "template",
+                                   self.template_list)
+        dlg.exec()
+        if not dlg.remove:
+            return
+        keep = [i for i in range(len(self.template_list))
+                if i not in dlg.remove]
+        regs = list(self.temp_reg_list)
+        self.template_list = [self.template_list[i] for i in keep]
+        self.temp_reg_list = [regs[i] for i in keep if i < len(regs)]
+        self.matches = None
+        self._aip_sig = None
+        self.aip_report = None
+        self.log("Removed template(s): "
+                 + ", ".join(str(i + 1) for i in dlg.remove)
+                 + f" - {len(self.template_list)} left")
+        self._set_status("Template(s) removed — add more, or Test Detect"
+                         if self.template_list else
+                         "No template left — select a template")
+        self._update_buttons()
+        if self._method() == METHOD_AIP and self.template_list and \
+                self.aip_masters:
+            self._aip_train("template removed")
+
+    def aip_clear_masters(self):
+        self.aip_masters = []
+        self._aip_sig = None
+        self.aip_report = None
+        self.matches = None
+        self.log("Masters removed - the next template (or Train Again) "
+                 "takes the area as the master again")
+        self._show_aip()
+        self._update_buttons()
 
     def _area_dir(self, name):
         return os.path.dirname(self.child_manager._paths(name)["config"])
@@ -9291,6 +9688,8 @@ class BuildParentScreen(BaseScreen):
         self.btn_reset_tmpl.setEnabled(tmpl_mode)
         can_test = self.reg is not None and len(self.template_list) > 0
         self.btn_test.setEnabled(can_test and not self.busy)
+        if hasattr(self, "lbl_aip"):
+            self._show_aip()
         if hasattr(self, "btn_nested"):
             self.btn_nested.setVisible(
                 not self.master_scene and not tmpl_mode and bool(
@@ -9511,6 +9910,18 @@ class BuildParentScreen(BaseScreen):
         self.temp_reg_list.append((tx, ty, tw, th))
         self.log(f"Template {len(self.template_list)} added "
                  f"({self.current_child_name or f'area_{self.child_index}'})")
+        # AI image processing: the area this template was cut from is the
+        # MASTER (the first one, or one more when it is a different picture)
+        snap = self.region_snapshot
+        aip = self._method() == METHOD_AIP
+        if aip and snap is not None and len(self.aip_masters) < MAX_MASTERS \
+                and (not self.aip_masters
+                     or (snap.shape == self.aip_masters[0].shape
+                         and not any(np.array_equal(snap, m)
+                                     for m in self.aip_masters))):
+            self.aip_masters.append(snap.copy())
+            self.log(f"Master {len(self.aip_masters)} taken from this "
+                     "picture")
         self.canvas.select_enabled = False
         self.canvas.clear_rect()
         self.region_snapshot = None
@@ -9518,6 +9929,8 @@ class BuildParentScreen(BaseScreen):
         self.canvas.fit()
         self._set_status("Template added OK — add more, or Test Detect")
         self._update_buttons()
+        if aip:
+            self._aip_train("template")       # learn the new template now
 
     def reset_template(self):
         self.canvas.clear_rect()
@@ -9571,9 +9984,18 @@ class BuildParentScreen(BaseScreen):
             shots = (list(self.ai_shots)
                      if cfg["method"] == METHOD_AI else None)
             tkey = f"test/{self.head}/{self.parent_name}"
+            aip = cfg["method"] == METHOD_AIP
+            masters = list(self.aip_masters) if aip else None
+            if aip and not masters:
+                raise RuntimeError("no master yet - add a template first")
             matches, output, mask = detect_area(
                 region, self.template_list, cfg, config=None,
-                key=tkey, shots=shots)
+                key=tkey, shots=shots, masters=masters)
+            if aip:                         # it trained now if it had to
+                self._aip_sig = aip_signature(masters, self.template_list,
+                                              cfg)
+                self.aip_report = aip_get(tkey, masters, self.template_list,
+                                          cfg)[1]
             if shots and len(shots) >= 2:
                 cal = ai_note(tkey)
                 if cal:
@@ -9584,8 +10006,9 @@ class BuildParentScreen(BaseScreen):
                                  m["top_left"][1] + y0 - y)
                 m["bottom_right"] = (m["bottom_right"][0] + x0 - x,
                                      m["bottom_right"][1] + y0 - y)
-            note += (f"  [{'AI' if cfg['method'] == METHOD_AI else 'Normal'}"
-                     f" {1000 * (time.time() - t0):.0f} ms]")
+            mname = {METHOD_AI: "AI", METHOD_AIP: "AI trained"}.get(
+                cfg["method"], "Normal")
+            note += f"  [{mname} {1000 * (time.time() - t0):.0f} ms]"
             self._last_frame_for_save = frame
             msg = f"Detected: {len(matches)}{note}"
             res = np.vstack([banner(output.shape[1],
@@ -9610,6 +10033,7 @@ class BuildParentScreen(BaseScreen):
                 self.canvas.fit()
                 self._set_status(f"{msg} — Save Area if OK, or Back to Live")
             self.busy = False
+            self._show_aip()
             self._update_buttons()
         self.after(0, apply)
 
@@ -9652,9 +10076,15 @@ class BuildParentScreen(BaseScreen):
             Message.warn(self, "Check the values",
                          "One of the fine-tuning values is not a number.")
             return
-        extra = {k: extra[k] for k in ("method", "ai_mode", "ai_score",
+        extra = {k: extra[k] for k in ["method", "ai_mode", "ai_score",
                                        "ai_max_angle", "ai_speed",
-                                       "ai_params")}
+                                       "ai_params"]
+                 + [k for k, *_ in AIP_PARAMS]}
+        if extra["method"] == METHOD_AIP and not self._aip_is_trained():
+            Message.warn(self, "Not trained",
+                         "A master, a template or a training value changed "
+                         "after the last test. Press Test Detect again.")
+            return
         if self.inside and self.inside.get("anchor"):
             tt = getattr(self, "_test_teach", None)
             if tt:                       # the tested picture is the master
@@ -9699,6 +10129,18 @@ class BuildParentScreen(BaseScreen):
                        self.ai_shots if extra["method"] == METHOD_AI else [])
         except OSError:
             self.log("AI calibration shots not saved")
+        try:
+            adir = self._area_dir(self.current_child_name)
+            if extra["method"] == METHOD_AIP:
+                save_masters(adir, self.aip_masters)
+                # keep the training, so no run has to train again
+                if not aip_store_model(adir, self._aip_key()):
+                    self.log("trained file not written - it will train "
+                             "again when the model opens")
+            else:
+                save_masters(adir, [])
+        except OSError:
+            self.log("AI masters not saved")
         self.parent_store.add_child(self.parent_name,
                                     self.current_child_name)
         self.app.heads.add_parent(self.head, self.parent_name)
@@ -9745,6 +10187,11 @@ class BuildParentScreen(BaseScreen):
         self.ai_shots = []
         self.ai_params = {}
         self._shot_mode = False
+        self.aip_masters = []
+        self._aip_sig = None
+        self.aip_report = None
+        if hasattr(self, "lbl_aip"):
+            self._show_aip()
         if hasattr(self, "lbl_ai_shots"):
             self._show_ai_shots()
         if hasattr(self, "cmb_area"):
@@ -9827,11 +10274,35 @@ class BuildParentScreen(BaseScreen):
         self.ai_params = dict(cfg.get("ai_params") or {})
         self.ai_shots = load_calib(self._area_dir(name))
         self._show_ai_shots()
+        for akey, adef, _l, _h in AIP_PARAMS:
+            v_ = cfg.get(akey, adef)
+            if isinstance(adef, bool):
+                self.aip_w[akey].setChecked(bool(v_))
+            else:
+                self.aip_w[akey].setText(f"{float(v_):g}")
+        self.aip_masters = load_masters(self._area_dir(name))
+        self._aip_sig = None
+        self.aip_report = None
         self.var_ai_angle.set(cfg.get("ai_max_angle", 180))
         self.cmb_ai_speed.setCurrentIndex(max(0, self.cmb_ai_speed.findData(
             cfg.get("ai_speed", "balanced"))))
-        self.cmb_method.setCurrentIndex(max(0, self.cmb_method.findData(
-            cfg.get("method", METHOD_NORMAL))))
+        self._loading = True               # no training while the form fills
+        try:
+            self.cmb_method.setCurrentIndex(max(0, self.cmb_method.findData(
+                cfg.get("method", METHOD_NORMAL))))
+        finally:
+            self._loading = False
+        if cfg.get("method") == METHOD_AIP and self.aip_masters:
+            try:                           # the saved training, if it fits
+                fc = self._form_cfg()
+                rep_ = aip_load(self._aip_key(), self._area_dir(name),
+                                self.aip_masters, self.template_list, fc)
+                if rep_ is not None:
+                    self._aip_sig = aip_signature(self.aip_masters,
+                                                  self.template_list, fc)
+                    self.aip_report = rep_
+            except (TypeError, ValueError):
+                pass
         ins = inside_of(cfg)
         self.inside = ({"area": ins[0], "object": ins[1],
                         "anchor": list(ins[2]) if ins[2] else None}
@@ -9884,6 +10355,10 @@ class BuildParentScreen(BaseScreen):
         self.template_list = []
         self.temp_reg_list = []
         self.matches = None
+        self.aip_masters = []
+        self._aip_sig = None
+        self.aip_report = None
+        self._show_aip()
         self.log("All templates removed - add new ones")
         self._set_status("Templates removed — select new template(s)")
         self._update_buttons()

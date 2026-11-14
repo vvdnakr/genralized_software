@@ -1,0 +1,122 @@
+head:
+  SELECT: '1'
+  OK: OK
+  NG: NG
+qr:
+  REQ: qr
+  TRIGGER: QR
+  OK: OK
+  NG: NG
+events:
+  ASK_MODEL: MLR
+  BACK: ''
+  ERROR_PREFIX: ERR
+  WARN_PREFIX: ''
+parents:
+  40_PIN_P1:
+    PLC: T11
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      TOP_P1:
+        PLC: ''
+        OK: ''
+        NG: ''
+      DOWN_P1:
+        PLC: ''
+        OK: ''
+        NG: ''
+  40_PIN_P2:
+    PLC: T12
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      TOP_P2:
+        PLC: ''
+        OK: ''
+        NG: ''
+      DOWN_P2:
+        PLC: ''
+        OK: ''
+        NG: ''
+  USB:
+    PLC: T13
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      Connector:
+        PLC: ''
+        OK: ''
+        NG: ''
+  FAKRA_4PIN:
+    PLC: T14
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      area_1:
+        PLC: ''
+        OK: ''
+        NG: ''
+  FAKRA_2PIN:
+    PLC: T15
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      2_PIN:
+        PLC: ''
+        OK: ''
+        NG: ''
+  SCREW_1:
+    PLC: T16
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      SCREW1:
+        PLC: ''
+        OK: ''
+        NG: ''
+  SCREW_2:
+    PLC: T17
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      SCREW2:
+        PLC: ''
+        OK: ''
+        NG: ''
+  SCREW_3:
+    PLC: T18
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      SCREW3:
+        PLC: ''
+        OK: ''
+        NG: ''
+  SCREW_4:
+    PLC: T19
+    OK: OK
+    NG: NG
+    area_wise: false
+    combine: true
+    children:
+      SCREW4:
+        PLC: ''
+        OK: ''
+        NG: ''

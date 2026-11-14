@@ -1,0 +1,72 @@
+{
+  "reg": [
+    356,
+    355,
+    149,
+    143
+  ],
+  "temp_reg": [
+    [
+      44,
+      44,
+      20,
+      17
+    ],
+    [
+      37,
+      30,
+      22,
+      20
+    ],
+    [
+      48,
+      35,
+      27,
+      21
+    ],
+    [
+      17,
+      15,
+      28,
+      22
+    ],
+    [
+      83,
+      72,
+      26,
+      22
+    ]
+  ],
+  "threshold": 0.7,
+  "scale_range": [
+    0.7,
+    1.7
+  ],
+  "scale_steps": 20,
+  "max_matches": 1,
+  "matches": [
+    {
+      "score": 0.8514214703088981,
+      "scale": 1.0143618457733152,
+      "top_left": [
+        73,
+        70
+      ],
+      "bottom_right": [
+        101,
+        94
+      ],
+      "center": [
+        87,
+        82
+      ]
+    }
+  ],
+  "method": "ai",
+  "ai_mode": "template",
+  "ai_score": 0.6,
+  "ai_max_angle": 180.0,
+  "ai_speed": "accurate",
+  "ai_params": {},
+  "pin_limit": 65.0
+}
