@@ -1305,8 +1305,18 @@ class CommEngine:
         self.log.add("EVT", f"client {addr[0]} disconnected "
                             "(will accept reconnection)")
         if self.enabled and gen == self._gen:
-            self._popup("comm_client", "MACHINE DISCONNECTED",
-                        "Reason: machine is off or its cable is out.")
+            def tell():
+                # only while a part is being processed; between parts the
+                # machine may go away quietly (it is logged and shown in
+                # the status line)
+                if self.app.process_running():
+                    self.app.alert("comm_client", "MACHINE DISCONNECTED",
+                                   "Reason: machine is off or its cable is "
+                                   "out.")
+                else:
+                    self.log.add("EVT", "no popup - no part was being "
+                                        "processed")
+            self.app.after(0, tell)
 
     def handle_incoming(self, text, source="SIM"):
         if not text:
@@ -2895,6 +2905,20 @@ class App(QMainWindow):
         if old is not None:
             old.close()
         self._alerts[key] = Message.error(self, headline, text, retry=retry)
+
+    def process_running(self):
+        """True while a part is in the middle of its cycle: a check is
+        running, a QR read is going on, the barcode was sent to the machine,
+        or some scenes of the part are done but not all."""
+        scr = getattr(self, "current_screen", None)
+        if scr is None or not getattr(scr, "_alive", False) or \
+                not hasattr(scr, "cycle_scene_results"):
+            return False
+        return bool(scr.busy
+                    or scr.cycle_scene_results
+                    or getattr(scr, "qr_state", "idle") in
+                    ("waiting", "scanning", "retrying")
+                    or (scr.scan_value and scr.scan_sent))
 
     def clear_alert(self, key):
         box = self._alerts.pop(key, None)
