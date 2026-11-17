@@ -1,0 +1,57 @@
+{
+  "reg": [
+    463,
+    308,
+    144,
+    254
+  ],
+  "temp_reg": [
+    [
+      88,
+      100,
+      46,
+      28
+    ]
+  ],
+  "threshold": 0.8,
+  "scale_range": [
+    0.8,
+    1.5
+  ],
+  "scale_steps": 20,
+  "max_matches": 1,
+  "matches": [
+    {
+      "score": 0.9868242263658814,
+      "scale": 1.0,
+      "top_left": [
+        71,
+        99
+      ],
+      "bottom_right": [
+        117,
+        127
+      ],
+      "center": [
+        94,
+        113
+      ]
+    }
+  ],
+  "method": "aip",
+  "ai_mode": "auto",
+  "ai_score": 0.5,
+  "ai_max_angle": 180.0,
+  "ai_speed": "balanced",
+  "ai_params": {},
+  "aip_score": 0.7,
+  "aip_expect": 0,
+  "aip_max_templates": 4,
+  "aip_augment": 16,
+  "aip_variation": 1.0,
+  "aip_seed": 0,
+  "aip_harvest": true,
+  "pin_limit": 10.0,
+  "position_check": "relation",
+  "relation_limit": 8.0
+}

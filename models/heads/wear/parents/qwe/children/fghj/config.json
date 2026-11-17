@@ -1,0 +1,52 @@
+{
+  "reg": [
+    506,
+    198,
+    255,
+    358
+  ],
+  "temp_reg": [
+    [
+      158,
+      104,
+      46,
+      28
+    ],
+    [
+      78,
+      114,
+      46,
+      24
+    ],
+    [
+      74,
+      128,
+      54,
+      33
+    ]
+  ],
+  "threshold": 0.8,
+  "scale_range": [
+    0.8,
+    1.5
+  ],
+  "scale_steps": 20,
+  "max_matches": 2,
+  "matches": [],
+  "method": "aip",
+  "ai_mode": "template",
+  "ai_score": 0.5,
+  "ai_max_angle": 180.0,
+  "ai_speed": "accurate",
+  "ai_params": {},
+  "aip_score": 0.7,
+  "aip_expect": 0,
+  "aip_max_templates": 4,
+  "aip_augment": 16,
+  "aip_variation": 1.0,
+  "aip_seed": 0,
+  "aip_harvest": true,
+  "pin_limit": 20.0,
+  "position_check": "both",
+  "relation_limit": 8.0
+}

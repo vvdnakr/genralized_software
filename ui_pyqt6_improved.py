@@ -41,7 +41,9 @@ from vision_detect import (
     save_calib, load_calib, ai_note, warm_area,
     METHOD_AIP, AIP_PARAMS, MAX_MASTERS, aip_available, aip_get,
     aip_report_text, aip_signature, save_masters, load_masters,
-    aip_store_model, aip_load)
+    aip_store_model, aip_load,
+    POS_FIXED, POS_RELATION, POS_BOTH, get_scene_relation,
+    set_scene_relation, relation_reference, scene_relation)
 from two_point import (
     ParentModelManager,
     detect_multi_scale_templates,
@@ -7000,6 +7002,25 @@ class HeadScreen(BaseScreen):
                               stop=stop,
                               area_dir=lambda n, m=cmgr: os.path.dirname(
                                   m._paths(n)["config"]))
+            # areas against each other (picture pixels) - whole scene only
+            srel = get_scene_relation(self.parent_store, parent_name)
+            if srel["enabled"] and child_filter is None and not stop():
+                sm = scene_relation(found, srel["ref"], srel["limit"])
+                if sm["no_ref"]:
+                    logs.append(f"[{parent_name}] relation between areas: "
+                                "no reference for "
+                                + ", ".join(sm["no_ref"])
+                                + " - open the scene and press Set "
+                                "Reference")
+                if sm["pairs"]:
+                    logs.append(
+                        f"[{parent_name}] relation between areas: "
+                        f"{'OK' if not sm['out'] else 'NG'}  worst "
+                        f"{sm['max_err']:.1f}px (limit {sm['limit']:g}px, "
+                        f"{sm['objects']} objects)"
+                        + ("   out: " + ", ".join(
+                            f"{a}#{k} {e:.0f}px" for a, k, e in sm["out"])
+                           if sm["out"] else ""))
             for child_name, r in found.items():
                 if child_filter is not None and child_name not in child_filter:
                     continue                 # a parent run only to locate
@@ -7044,17 +7065,32 @@ class HeadScreen(BaseScreen):
                     where = (f"   in {r['inside'][0]}#{r['inside'][1]} "
                              f"(moved {r['shift'][0]:+.0f},"
                              f"{r['shift'][1]:+.0f})")
+                pmode = r.get("position_check", POS_FIXED)
+                if summ.get("relation"):          # judged against each other
+                    lim_txt = (f"relation limit {summ.get('limit', 0):g}px, "
+                               f"worst {summ['max_dist']:.1f}px")
+                elif summ.get("rel"):             # both checks
+                    lim_txt = (f"limit {area_thr:g}px + relation "
+                               f"{summ['rel'].get('limit', 0):g}px, worst "
+                               f"{summ['rel']['max_dist']:.1f}px")
+                else:
+                    lim_txt = f"limit {area_thr:g}px"
+                if r.get("scene_rel"):
+                    where = f"   NG between areas:{r['scene_rel']}"
                 if summ["total"]:
                     line = (f" {child_name:<12} "
                             f"{'OK ' if ok else 'NG '}"
                             f" {summ['in_range']}/{summ['total']} pins ok"
-                            f" (limit {area_thr:g}px){tag}"
+                            f" ({lim_txt}){tag}"
                             f"   shift {summ['mean_dx']:+.0f},"
                             f"{summ['mean_dy']:+.0f} px{where}")
                     n_shift = sum(1 for p in pins
                                   if p["paired"] and not p["in_range"])
                     n_miss = sum(1 for p in pins if not p["paired"])
-                    if n_shift:
+                    if n_shift and summ.get("relation"):
+                        line += (f"   {n_shift} out of place to the "
+                                 "others")
+                    elif n_shift:
                         line += (f"   {n_shift} too far "
                                  f"(max {summ['max_dist']:.0f} px)")
                     if n_miss:
@@ -7099,6 +7135,13 @@ class HeadScreen(BaseScreen):
                     (X0, Y0, X1 - X0, Y1 - Y0,
                      f"{child_name} {'OK' if ok else 'NG'} "
                      f"{count_txt}{shift_txt}", ok))
+                if summ.get("relation"):
+                    # show where each object should be NOW: its master
+                    # place moved by the shift of the whole group
+                    sx, sy = summ["shift"]
+                    pins = [dict(p, master=(p["master"][0] + sx,
+                                            p["master"][1] + sy))
+                            for p in pins]
                 if sc != 1.0:               # pin positions -> camera picture
                     pins = [dict(p, master=(p["master"][0] * k,
                                             p["master"][1] * k),
@@ -8803,6 +8846,42 @@ class BuildParentScreen(BaseScreen):
         ssz.addWidget(self.scale_hint)
         clay2.addWidget(sec_sz)
 
+        # the areas of this scene judged against each other
+        self.sec_rel = QGroupBox(" AREAS AGAINST EACH OTHER ")
+        srl = QVBoxLayout(self.sec_rel)
+        self.chk_rel = QCheckBox("Check the distance between the areas")
+        self.chk_rel.setStyleSheet(f"color: {C_TEXT}; font-size: 9pt;")
+        self.chk_rel.setToolTip(
+            "The objects of one area are compared with the objects of the "
+            "other areas, in picture pixels.  The whole part may move, but "
+            "the areas must stay in place to each other.")
+        srl.addWidget(self.chk_rel)
+        rl = QHBoxLayout()
+        lrl = QLabel("Limit between areas (px)")
+        lrl.setStyleSheet("color: #c8c8d0; font-size: 9pt;")
+        self.var_srel = FVar(QLineEdit("8"))
+        self.var_srel.e.setFixedWidth(72)
+        rl.addWidget(lrl)
+        rl.addStretch()
+        rl.addWidget(self.var_srel.e)
+        srl.addLayout(rl)
+        self.btn_rel_ref = styled_btn(self.sec_rel, "Set Reference",
+                                      self.set_relation_ref, color="#44444e")
+        self.btn_rel_ref.setToolTip(
+            "Put a GOOD part under the camera and press this.  The places "
+            "of all objects of all areas are saved as the reference.")
+        srl.addWidget(self.btn_rel_ref)
+        self.lbl_rel = QLabel("")
+        self.lbl_rel.setWordWrap(True)
+        self.lbl_rel.setStyleSheet("color: #c8c8d0; font-size: 8pt;")
+        srl.addWidget(self.lbl_rel)
+        clay2.addWidget(self.sec_rel)
+        _r = get_scene_relation(self.parent_store, parent_name)
+        self.chk_rel.setChecked(_r["enabled"])
+        self.var_srel.set(f"{_r['limit']:g}")
+        self.chk_rel.toggled.connect(lambda _v: self._rel_save())
+        self.var_srel.e.editingFinished.connect(self._rel_save)
+
         # saved areas of this scene: open one to change it, or delete it
         self.sec_areas = QGroupBox(" AREAS IN THIS SCENE ")
         sa = QVBoxLayout(self.sec_areas)
@@ -8943,6 +9022,24 @@ class BuildParentScreen(BaseScreen):
                 ("AI speed", self.cmb_ai_speed, "ai"),
                 ("Max matches", self.var_maxm.e, "both"),
                 ("Pin limit (px)", self.var_pin.e, "both")]
+        # how the place of the objects is judged
+        self.cmb_pos = QComboBox()
+        self.cmb_pos.setStyleSheet(self._combo_qss)
+        self.cmb_pos.addItem("Fixed place", POS_FIXED)
+        self.cmb_pos.addItem("Against each other", POS_RELATION)
+        self.cmb_pos.addItem("Both", POS_BOTH)
+        self.cmb_pos.setToolTip(
+            "Fixed place: every object must be where it was in the master "
+            "(Pin limit).\nAgainst each other: only the distances between "
+            "the objects are checked (Relation limit), so the whole group "
+            "may move together.\nBoth: both checks must pass.")
+        self.var_rel = FVar(QLineEdit("8"))
+        self.var_rel.e.setToolTip(
+            "How much a distance between two objects may differ from the "
+            "master, in pixels.")
+        rows += [("Place check", self.cmb_pos, "both"),
+                 ("Relation limit (px)", self.var_rel.e, "both")]
+        self.cmb_pos.currentIndexChanged.connect(self._pos_changed)
         # AI image processing: every setting of the trained matcher
         self.aip_masters = []         # master pictures (the area's region)
         self.aip_report = None        # what the last training learned
@@ -9098,6 +9195,8 @@ class BuildParentScreen(BaseScreen):
         self._apply_master_lock()
         self._method_changed()
         self._scale_lock()
+        self._pos_changed()
+        self._rel_show()
         QTimer.singleShot(2000, self._auto_light_ref)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
@@ -9185,6 +9284,124 @@ class BuildParentScreen(BaseScreen):
                 "ai_max_angle": float(self.var_ai_angle.get()),
                 "ai_speed": self.cmb_ai_speed.currentData() or "balanced",
                 "ai_params": dict(self.ai_params), **self._aip_form()}
+
+    # -- place check: fixed / against each other ----------------------------------
+    def _pos_changed(self):
+        rel = self.cmb_pos.currentData() in (POS_RELATION, POS_BOTH)
+        self.var_rel.e.setEnabled(rel)
+        self.var_pin.e.setEnabled(self.cmb_pos.currentData() != POS_RELATION)
+
+    def _rel_missing(self):
+        """Areas whose saved objects are not (all) in the reference."""
+        ref = get_scene_relation(self.parent_store, self.parent_name)["ref"]
+        miss = []
+        for n in self.parent_store.list_children(self.parent_name):
+            d = self.child_manager.load(n)
+            want = max(1, len((d or {}).get("config", {}).get("matches",
+                                                              [])))
+            if len(ref.get(n) or []) != want:
+                miss.append(n)
+        return miss
+
+    def _rel_show(self):
+        names = self.parent_store.list_children(self.parent_name)
+        self.sec_rel.setVisible(len(names) >= 2 and not self.master_scene)
+        if len(names) < 2:
+            return
+        ref = get_scene_relation(self.parent_store, self.parent_name)["ref"]
+        miss = self._rel_missing()
+        n_obj = sum(len(ref.get(n) or []) for n in names)
+        if not self.chk_rel.isChecked():
+            txt = "Off. Each area is judged by itself."
+        elif miss:
+            txt = ("Reference missing for: " + ", ".join(miss) + ". Put a "
+                   "good part under the camera and press Set Reference "
+                   "(it is also set when you finish the scene).")
+        else:
+            txt = (f"Reference set: {len(names)} areas, {n_obj} objects. "
+                   "Runs of the whole scene check it.")
+        self.lbl_rel.setText(txt)
+        self.btn_rel_ref.setEnabled(not self.busy)
+
+    def _rel_save(self):
+        try:
+            lim = float(self.var_srel.get())
+            if lim <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the value",
+                         "The limit between areas must be a number above 0.")
+            return
+        try:
+            set_scene_relation(self.parent_store, self.parent_name,
+                               enabled=self.chk_rel.isChecked(), limit=lim)
+        except OSError:
+            self.log("relation setting not saved")
+        self._rel_show()
+
+    def _rel_drop(self, name):
+        """An area changed or was deleted: its reference is no longer true."""
+        ref = get_scene_relation(self.parent_store, self.parent_name)["ref"]
+        if name in ref:
+            ref.pop(name)
+            try:
+                set_scene_relation(self.parent_store, self.parent_name,
+                                   ref=ref)
+            except OSError:
+                pass
+
+    def set_relation_ref(self, then=None):
+        """Run every area on the picture of NOW and save where all objects
+        are - the reference for the check between areas."""
+        if self.busy:
+            return
+        frame = self._frame()
+        if frame is None:
+            Message.error(self, "No camera", "No camera picture yet.")
+            return
+        self.busy = True
+        self._set_status("Setting the reference between the areas…")
+        self._update_buttons()
+
+        def work():
+            ref = err = None
+            try:
+                loaded = self.parent_store.load_all_children(
+                    self.parent_name)
+                found = run_areas(
+                    frame, loaded, self._model_pin, analyze_pins,
+                    key_prefix=f"{self.head}/{self.parent_name}",
+                    area_dir=self._area_dir)
+                ref = relation_reference(found)
+            except RuntimeError as e:
+                err = str(e)
+            except Exception:
+                err = "ERROR:\n" + traceback.format_exc()
+
+            def done():
+                if not self._alive:
+                    return
+                self.busy = False
+                if err:
+                    self.log("Reference between areas not set: " + err)
+                    Message.warn(self, "REFERENCE NOT SET",
+                                 "Every object of every area must be found. "
+                                 "Put a good part in place and try again.\n"
+                                 + err.splitlines()[0][:200])
+                    self._set_status("Reference not set — see the messages")
+                else:
+                    set_scene_relation(self.parent_store, self.parent_name,
+                                       ref=ref)
+                    n = sum(len(v) for v in ref.values())
+                    self.log(f"Reference between areas saved: {len(ref)} "
+                             f"areas, {n} objects")
+                    self._set_status("Reference between areas saved")
+                self._rel_show()
+                self._update_buttons()
+                if then is not None and not err:
+                    then()
+            self.after(0, done)
+        threading.Thread(target=work, daemon=True).start()
 
     # -- AI image processing: master + template -> training -----------------------
     def _aip_form(self):
@@ -10147,6 +10364,15 @@ class BuildParentScreen(BaseScreen):
         except Exception:
             self.log("light reference not saved:\n" + traceback.format_exc())
         extra["pin_limit"] = float(pin)
+        extra["position_check"] = self.cmb_pos.currentData() or POS_FIXED
+        try:
+            extra["relation_limit"] = float(self.var_rel.get())
+            if extra["relation_limit"] <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the values",
+                         "Relation limit must be a number above 0.")
+            return
         self._write_extra(self.current_child_name, extra)
         try:
             save_calib(self._area_dir(self.current_child_name),
@@ -10172,6 +10398,8 @@ class BuildParentScreen(BaseScreen):
         self._editing = self.current_child_name
         self._fill_areas(self.current_child_name)
         self._scale_lock()
+        self._rel_drop(self.current_child_name)   # its objects changed
+        self._rel_show()
         self.log(f"Saved area '{self.current_child_name}' under "
                  f"'{self.head}/{self.parent_name}'")
         self._set_status(f"Area '{self.current_child_name}' saved OK — "
@@ -10292,6 +10520,9 @@ class BuildParentScreen(BaseScreen):
         self.var_steps.set(cfg.get("scale_steps", 20))
         self.var_maxm.set(cfg.get("max_matches", 20))
         self.var_pin.set(f"{float(cfg.get('pin_limit', self._model_pin)):g}")
+        self.cmb_pos.setCurrentIndex(max(0, self.cmb_pos.findData(
+            cfg.get("position_check", POS_FIXED))))
+        self.var_rel.set(f"{float(cfg.get('relation_limit', 8)):g}")
         self.var_ai_score.set(cfg.get("ai_score", 0.5))
         self.cmb_ai_mode.setCurrentIndex(max(0, self.cmb_ai_mode.findData(
             cfg.get("ai_mode", "auto"))))
@@ -10373,6 +10604,8 @@ class BuildParentScreen(BaseScreen):
             self.app.heads.drop_scene_if_empty(self.head, self.parent_name)
         self._fill_areas()
         self._scale_lock()
+        self._rel_drop(name)
+        self._rel_show()
         self._set_status(f"Area '{name}' deleted")
 
     def clear_templates(self):
@@ -10404,6 +10637,15 @@ class BuildParentScreen(BaseScreen):
                                 "No areas saved yet — save at least one "
                                 "first.")
             return
+        # areas against each other: the reference must cover every area
+        if self.chk_rel.isChecked() and len(children) >= 2 and \
+                self._rel_missing() and not getattr(self, "_rel_tried",
+                                                    False):
+            self._rel_tried = True       # one automatic try per Finish
+            self.log("Setting the reference between the areas…")
+            self.set_relation_ref(then=self.finish_parent)
+            return
+        self._rel_tried = False
         self.app.heads.add_parent(self.head, self.parent_name)
         self.log(f"Scene '{self.parent_name}' finished with areas: "
                  f"{children}")

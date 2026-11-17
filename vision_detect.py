@@ -23,13 +23,22 @@ Area config.json (new, optional keys):
     "aip_variation", "aip_seed", "aip_harvest"      (see AIP_PARAMS)
     <area>/aip/master_N.png + setup.json : the master picture(s) = the region
     <area>/aip/trained.pkl               : the trained matcher (made again
-                                           by itself when anything changes)
+                                           by itself when anything changes,
+                                           or when ai_processing.py's model
+                                           version changes - AIP_MODEL_VERSION)
+    Long thin objects (a pin row, a strip, a slot: at least 2.5x longer than
+    thick) are matched in parts by ai_processing.py; their tilt comes back in
+    the match "angle" (degrees, counter-clockwise like the "ai" method) and
+    "poly" (the tilted box).  "top_left"/"bottom_right" stay the upright
+    template-sized box around the object's centre, so pins, the relation
+    check and nested areas use exactly the same centre as before.
     "inside"      : {"area": "a1", "object": 1, "anchor": [x, y]}
                     anchor = centre of that object (picture pixels) at the
                     moment this area's region was drawn
 Scene file  <scene>/scene.json :  {"image_scale": 1.0}
 """
 import json
+import math
 import os
 import threading
 import time
@@ -384,6 +393,14 @@ def detect_ai(image, templates, cfg, key=None, config=None, name=None,
 # trained.  master = the area's region, template = the object inside it.
 # ----------------------------------------------------------------------------
 MAX_MASTERS = 6
+# Raise this whenever ai_processing.py changes what a trained matcher holds.
+# It is part of the training signature, so a trained.pkl made by an older
+# ai_processing.py is never loaded into the new code (it would fail or give
+# wrong scores) - that area simply trains once again and stores the new file.
+#   1 = first version
+#   2 = long thin objects matched in parts, tilt, working scale (f), and a
+#       patch descriptor that keeps the object's proportions
+AIP_MODEL_VERSION = 2
 # (key in the area config, default, label, help)
 AIP_PARAMS = [
     ("aip_score", 0.40, "Score (0-1)",
@@ -434,9 +451,10 @@ def _img_sig(imgs):
 
 
 def aip_signature(masters, templates, cfg):
-    """Changes whenever a new training is needed."""
+    """Changes whenever a new training is needed (also when the trained
+    model format of ai_processing.py changes: AIP_MODEL_VERSION)."""
     p = aip_params(cfg)
-    return repr((_img_sig(masters), _img_sig(templates),
+    return repr((AIP_MODEL_VERSION, _img_sig(masters), _img_sig(templates),
                  [p[k] for k in _AIP_TRAIN_KEYS]))
 
 
@@ -577,6 +595,7 @@ def aip_get(key, masters, templates, cfg, area_dir=None, on_train=None):
             rep["dropped"] = list(getattr(m, "dropped", []))
             rep["score_weakest"] = round(float(m.score_weakest), 2)
             rep["joint_separable"] = bool(m.joint_separable)
+            rep["long_object"] = bool(getattr(m, "long", False))
             if len(_aip_cache) > 100:
                 _aip_cache.clear()
             hit = (sig, m, rep)
@@ -604,6 +623,11 @@ def aip_report_text(rep):
              f"weakest training object scored "
              f"{rep.get('score_weakest', '?')} (1 = typical object, "
              "0 = background)"]
+    if rep.get("long_object"):
+        ws = rep.get("working_scale")
+        lines.append("long thin object: matched in parts along its length, "
+                     "centre and tilt measured from the parts"
+                     + (f", working at {ws:g}x size" if ws else ""))
     if rep.get("dropped"):
         lines.append("WARNING: template(s) "
                      + ", ".join(str(i + 1) for i in rep["dropped"])
@@ -615,9 +639,26 @@ def aip_report_text(rep):
     return "\n".join(lines)
 
 
+def _tilted_box(cx, cy, w, h, ang_img):
+    """Corners (top-left, top-right, bottom-right, bottom-left of the
+    template) of a w x h box centred at (cx, cy), turned by `ang_img`
+    degrees in picture coordinates (y down: positive = clockwise on screen,
+    the convention of ai_processing.Match.angle and cv2.boxPoints)."""
+    t = math.radians(ang_img)
+    c, s = math.cos(t), math.sin(t)
+    out = []
+    for x, y in ((-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2),
+                 (-w / 2, h / 2)):
+        out.append([cx + c * x - s * y, cy + s * x + c * y])
+    return out
+
+
 def detect_aip(image, templates, cfg, key=None, config=None, name=None,
                masters=None, area_dir=None):
-    """Same return shape as the other methods: (matches, output, mask)."""
+    """Same return shape as the other methods: (matches, output, mask).
+    A long thin object comes back tilted: 'angle' (deg, counter-clockwise,
+    as in the "ai" method) and 'poly' (tilted box).  'top_left' and
+    'bottom_right' stay the upright box around its centre."""
     m, _rep = aip_get(key or "aip", list(masters or []), templates, cfg,
                       area_dir=area_dir)
     with _aip_lock:
@@ -629,12 +670,21 @@ def detect_aip(image, templates, cfg, key=None, config=None, name=None,
     found = found[:max(1, int(cfg.get("max_matches", 20)))]
     matches = []
     for d in found:
+        ang_img = float(getattr(d, "angle", 0.0) or 0.0)
+        if abs(ang_img) > 0.3:               # long object: tilted box
+            cx, cy = (d.center if getattr(d, "center", None)
+                      else (d.x + d.w / 2.0, d.y + d.h / 2.0))
+            poly = _tilted_box(float(cx), float(cy), d.w, d.h, ang_img)
+        else:
+            ang_img = 0.0
+            poly = [[d.x, d.y], [d.x + d.w, d.y], [d.x + d.w, d.y + d.h],
+                    [d.x, d.y + d.h]]
         matches.append({
-            "score": float(d.score), "scale": 1.0, "angle": 0.0,
+            "score": float(d.score), "scale": 1.0,
+            "angle": round(-ang_img, 2) + 0.0,     # counter-clockwise
             "top_left": (int(d.x), int(d.y)),
             "bottom_right": (int(d.x + d.w), int(d.y + d.h)),
-            "poly": [[d.x, d.y], [d.x + d.w, d.y], [d.x + d.w, d.y + d.h],
-                     [d.x, d.y + d.h]],
+            "poly": poly,
             "match": float(d.match), "patch": float(d.patch)})
     t_h = max(8, int(np.median([t.shape[0] for t in templates])))
     row = max(1, t_h // 2)
@@ -643,8 +693,12 @@ def detect_aip(image, templates, cfg, key=None, config=None, name=None,
                                 q["top_left"][0]))
     output = image.copy()
     for i, q in enumerate(matches):
-        cv2.rectangle(output, q["top_left"], q["bottom_right"],
-                      (0, 255, 0), 2)
+        if q["angle"]:
+            pts = np.int32(np.round(q["poly"])).reshape(-1, 1, 2)
+            cv2.polylines(output, [pts], True, (0, 255, 0), 2, cv2.LINE_AA)
+        else:
+            cv2.rectangle(output, q["top_left"], q["bottom_right"],
+                          (0, 255, 0), 2)
         cv2.putText(output, str(i + 1),
                     (q["top_left"][0], max(12, q["top_left"][1] - 5)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
@@ -676,6 +730,254 @@ def detect_area(image, templates, cfg, config=None, name=None, key=None,
     if isinstance(res, tuple) and len(res) == 3:
         return res
     return res[0], res[1], None
+
+
+# ----------------------------------------------------------------------------
+# relation check: objects judged against EACH OTHER, not against the picture
+# ----------------------------------------------------------------------------
+# Area key  "position_check":
+#     "fixed"    each object must be at its master place (pin limit)  [default]
+#     "relation" the objects must keep their distances to each other
+#                ("relation_limit" px); the whole group may move
+#     "both"     both must pass
+# Scene file  scene.json  "relation": {"enabled", "limit", "ref"}
+#     the same check between the objects of DIFFERENT areas, in picture
+#     pixels.  ref = {area: [[x, y] | None per master object]}
+POS_FIXED, POS_RELATION, POS_BOTH = "fixed", "relation", "both"
+
+
+def _centers(matches):
+    return [((m["top_left"][0] + m["bottom_right"][0]) / 2.0,
+             (m["top_left"][1] + m["bottom_right"][1]) / 2.0)
+            for m in matches]
+
+
+def pair_shifted(master, cur, tol):
+    """Pair each master point with a current point, allowing ONE common
+    shift of the whole group.  Returns ([index into cur or None], (sx, sy)).
+    Which object sits where does not matter - only that the place is taken."""
+    if not master or not cur:
+        return [None] * len(master), (0.0, 0.0)
+    M = np.asarray(master, float)
+    C = np.asarray(cur, float)
+
+    def assign(shift):
+        want = M + shift
+        d = np.hypot(want[:, None, 0] - C[None, :, 0],
+                     want[:, None, 1] - C[None, :, 1])
+        pairs, used = [None] * len(M), set()
+        for flat in np.argsort(d, axis=None):
+            i, j = divmod(int(flat), len(C))
+            if d[i, j] > tol:
+                break
+            if pairs[i] is None and j not in used:
+                pairs[i] = j
+                used.add(j)
+        got = [(i, j) for i, j in enumerate(pairs) if j is not None]
+        cost = sum(d[i, j] for i, j in got)
+        return pairs, len(got), cost
+
+    best = None
+    for i in range(len(M)):                 # every "this is that one" guess
+        for j in range(len(C)):
+            sh = C[j] - M[i]
+            pairs, n, cost = assign(sh)
+            if n >= 1:                      # refine on the pairs it gave
+                got = [(a, b) for a, b in enumerate(pairs) if b is not None]
+                sh2 = np.median([C[b] - M[a] for a, b in got], axis=0)
+                p2, n2, c2 = assign(sh2)
+                if (n2, -c2) >= (n, -cost):
+                    pairs, n, cost, sh = p2, n2, c2, sh2
+            if best is None or (n, -cost) > (best[1], -best[2]):
+                best = (pairs, n, cost, sh)
+    pairs, _n, _c, sh = best
+    return pairs, (float(sh[0]), float(sh[1]))
+
+
+def _blame(points_ref, points_cur, limit, skip=None):
+    """Compare every distance between two objects with its reference.
+    Returns (worst error per object, set of objects that are out, pairs
+    checked, worst error).  skip(i, j) -> True leaves that pair out."""
+    n = len(points_ref)
+    err = np.zeros((n, n))
+    used = np.zeros((n, n), bool)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if skip is not None and skip(i, j):
+                continue
+            dr = np.hypot(points_ref[i][0] - points_ref[j][0],
+                          points_ref[i][1] - points_ref[j][1])
+            dc = np.hypot(points_cur[i][0] - points_cur[j][0],
+                          points_cur[i][1] - points_cur[j][1])
+            err[i, j] = err[j, i] = abs(dc - dr)
+            used[i, j] = used[j, i] = True
+    worst = [float(err[i][used[i]].max()) if used[i].any() else 0.0
+             for i in range(n)]
+    bad = (err > float(limit)) & used
+    out, alive = set(), set(range(n))
+    while True:                              # the object in the most wrong
+        cnt = {i: int(bad[i][list(alive)].sum()) for i in alive}   # pairs
+        top = max(cnt.values()) if cnt else 0
+        if top == 0:
+            break
+        tied = [i for i in alive if cnt[i] == top]
+        if top == 1 and len(tied) == 2 and bad[tied[0], tied[1]]:
+            # one wrong pair between two objects: the one that is further
+            # off to ALL the others is the wrong one; if that does not
+            # tell them apart, both are marked
+            tot = [float(err[q][list(alive)].sum()) for q in tied]
+            if max(tot) > 1.5 * min(tot) + 1e-6:
+                i = tied[int(np.argmax(tot))]
+                out.add(i)
+                alive.discard(i)
+            else:
+                out.update(tied)
+                alive.difference_update(tied)
+            continue
+        i = max(tied, key=lambda q: float(err[q][list(alive)].sum()))
+        out.add(i)
+        alive.discard(i)
+    return worst, out, int(used.sum() // 2), float(err[used].max()
+                                                   if used.any() else 0.0)
+
+
+def analyze_relation(master_matches, matches, limit):
+    """Like analyze_pins, but the objects are judged against each other:
+    every distance between two objects must be within `limit` px of the
+    master distance.  A common shift of all objects is allowed.
+    Returns (ok, pins, summary) - pins/summary as analyze_pins gives them;
+    pin 'dist' = its worst distance error, 'dx','dy' = offset after the
+    common shift is taken out, summary['shift'] = the common shift."""
+    master = [tuple(float(v) for v in m["center"])
+              for m in (master_matches or [])]
+    cur = _centers(matches)
+    if not master:
+        return (len(matches) > 0, [], {
+            "paired": len(matches), "in_range": 0, "total": 0,
+            "max_dist": 0.0, "mean_dx": 0.0, "mean_dy": 0.0,
+            "relation": True, "shift": (0.0, 0.0), "pairs": 0})
+    limit = float(limit)
+    tol = max(3.0 * limit, 12.0)
+    if len(master) > 1:                      # never past half the spacing
+        M = np.asarray(master)
+        d = np.hypot(M[:, None, 0] - M[None, :, 0],
+                     M[:, None, 1] - M[None, :, 1])
+        d[d == 0] = np.inf
+        tol = max(1.5 * limit, min(tol, 0.5 * float(d.min())))
+    pairs, shift = pair_shifted(master, cur, tol)
+    idx = [i for i, j in enumerate(pairs) if j is not None]
+    worst, out, npairs, max_err = _blame(
+        [master[i] for i in idx], [cur[pairs[i]] for i in idx], limit)
+    pins = []
+    for i, mc in enumerate(master):
+        j = pairs[i]
+        if j is None:
+            pins.append({"master": mc, "current": None, "dist": None,
+                         "dx": None, "dy": None, "paired": False,
+                         "in_range": False})
+            continue
+        k = idx.index(i)
+        cc = cur[j]
+        pins.append({"master": mc, "current": cc, "dist": worst[k],
+                     "dx": cc[0] - mc[0] - shift[0],
+                     "dy": cc[1] - mc[1] - shift[1],
+                     "paired": True, "in_range": k not in out})
+    n_in = sum(1 for p in pins if p["in_range"])
+    return n_in == len(pins), pins, {
+        "paired": len(idx), "in_range": n_in, "total": len(pins),
+        "max_dist": max_err, "mean_dx": shift[0], "mean_dy": shift[1],
+        "relation": True, "shift": shift, "pairs": npairs}
+
+
+def get_scene_relation(parent_store, scene):
+    """{"enabled": bool, "limit": px, "ref": {area: [[x, y] | None]}}"""
+    out = {"enabled": False, "limit": 8.0, "ref": {}}
+    try:
+        with open(_scene_file(parent_store, scene)) as f:
+            d = json.load(f).get("relation") or {}
+        out["enabled"] = bool(d.get("enabled", False))
+        out["limit"] = float(d.get("limit", 8.0))
+        out["ref"] = dict(d.get("ref") or {})
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return out
+
+
+def set_scene_relation(parent_store, scene, **changes):
+    path = _scene_file(parent_store, scene)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = {}
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        pass
+    rel = dict(data.get("relation") or {})
+    rel.update(changes)
+    data["relation"] = rel
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def relation_reference(found):
+    """Reference for the between-areas check from one finished scene run:
+    {area: [[x, y] per master object]}.  Raises RuntimeError (plain words)
+    when an object is missing - the reference needs a complete, good part."""
+    ref = {}
+    for name, r in found.items():
+        if r.get("skipped"):
+            raise RuntimeError(f"area '{name}': {r['skipped']}")
+        pts = []
+        n = max(len(r.get("pins") or []), 1)
+        for k in range(1, n + 1):
+            c = object_center(r, k)
+            if c is None:
+                raise RuntimeError(f"area '{name}': object {k} was not "
+                                   "found")
+            pts.append([round(c[0], 2), round(c[1], 2)])
+        ref[name] = pts
+    return ref
+
+
+def scene_relation(found, ref, limit):
+    """Between-areas check on a finished scene run, in picture pixels: the
+    distance between objects of DIFFERENT areas must stay within `limit` of
+    the reference.  Marks the areas that are out (ok = False, 'scene_rel'
+    text) and returns a summary dict."""
+    items = []                        # (area, object no, ref xy, current xy)
+    no_ref = []
+    for name, r in found.items():
+        if r.get("skipped"):
+            continue
+        pts = ref.get(name)
+        if not pts:
+            no_ref.append(name)
+            continue
+        pins = r.get("pins") or []
+        for k, rp in enumerate(pts, 1):
+            c = object_center(r, k)
+            # an object already NG inside its own area is left out, so it
+            # cannot put the blame on the other areas
+            if k <= len(pins) and not pins[k - 1]["in_range"]:
+                continue
+            if rp is not None and c is not None:
+                items.append((name, k, (float(rp[0]), float(rp[1])), c))
+    summ = {"objects": len(items), "pairs": 0, "max_err": 0.0,
+            "limit": float(limit), "out": [], "no_ref": no_ref,
+            "areas": sorted({it[0] for it in items})}
+    if len(summ["areas"]) < 2:
+        return summ
+    worst, out, npairs, max_err = _blame(
+        [it[2] for it in items], [it[3] for it in items], limit,
+        skip=lambda i, j: items[i][0] == items[j][0])
+    summ.update(pairs=npairs, max_err=max_err,
+                out=[(items[i][0], items[i][1], round(worst[i], 1))
+                     for i in sorted(out)])
+    for name, k, e in summ["out"]:
+        r = found[name]
+        r["ok"] = False
+        r["scene_rel"] = (r.get("scene_rel", "") + f" #{k}:{e:.0f}px").strip()
+    return summ
 
 
 # ----------------------------------------------------------------------------
@@ -891,8 +1193,27 @@ def run_areas(frame, children_data, dist_thr, analyze_pins, only=None,
             area_thr = float(dist_thr)
         ok, pins, summ = analyze_pins(cfg.get("matches", []), matches,
                                       area_thr)
+        mode = str(cfg.get("position_check", POS_FIXED))
+        if mode in (POS_RELATION, POS_BOTH) and cfg.get("matches"):
+            try:
+                rel_thr = float(cfg.get("relation_limit") or area_thr)
+            except (TypeError, ValueError):
+                rel_thr = area_thr
+            rok, rpins, rsumm = analyze_relation(cfg["matches"], matches,
+                                                 rel_thr)
+            rsumm["limit"] = rel_thr
+            if mode == POS_RELATION:
+                ok, pins, summ = rok, rpins, rsumm
+            else:                      # both: fixed place AND relation
+                for p, rp in zip(pins, rpins):
+                    p["in_range"] = p["in_range"] and rp["in_range"]
+                    p["rel_err"] = rp["dist"]
+                summ["in_range"] = sum(1 for p in pins if p["in_range"])
+                summ["rel"] = rsumm
+                ok = ok and rok
         res.update(matches=matches, output=output, mask=mask, ok=ok,
-                   pins=pins, summ=summ, area_thr=area_thr)
+                   pins=pins, summ=summ, area_thr=area_thr,
+                   position_check=mode)
     return out
 
 

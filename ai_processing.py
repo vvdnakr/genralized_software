@@ -60,7 +60,7 @@ def relight(img: np.ndarray, rng: np.random.Generator, strength: float = 1.0) ->
 
 
 def vary(img: np.ndarray, rng: np.random.Generator, box: Tuple[int, int], strength: float = 1.0,
-         pose: bool = True) -> Tuple[np.ndarray, np.ndarray, float]:
+         pose: bool = True, max_rot: float = 10.0) -> Tuple[np.ndarray, np.ndarray, float]:
     """A random "other part": smooth local tone / colour differences, a slight change of shape and
     (pose=True) a small rotation / size change. Returns (image, 2x3 map master -> image, shape slack px)."""
     h, w = img.shape[:2]
@@ -76,7 +76,8 @@ def vary(img: np.ndarray, rng: np.random.Generator, box: Tuple[int, int], streng
     amp = 0.03 * R * strength
     d = smooth(2) * (amp / 2.0)
     if pose:
-        M = cv2.getRotationMatrix2D((w / 2, h / 2), rng.uniform(-5, 5) * strength, 1 + rng.uniform(-0.05, 0.05) * strength)
+        rot = float(np.clip(rng.uniform(-5, 5) * strength, -max_rot, max_rot))   # long thin objects: smaller turns
+        M = cv2.getRotationMatrix2D((w / 2, h / 2), rot, 1 + rng.uniform(-0.05, 0.05) * strength)
     else:
         M = np.float32([[1, 0, 0], [0, 1, 0]]).astype(np.float64)
     Mi = cv2.invertAffineTransform(M)
@@ -144,31 +145,53 @@ def _peaks(F: np.ndarray, radius: int, top: int, floor: float = -0.5) -> List[Tu
     return [(float(F[ys[i], xs[i]]), int(xs[i]), int(ys[i])) for i in order]
 
 
-def _descriptor(img: np.ndarray, cx: int, cy: int, w: int, h: int) -> np.ndarray:
-    """Patch descriptor for the classifier: contrast-normalised brightness layout (12x12), colour layout
-    (6x6 a/b, mean-free so a colour cast drops out) and edge-direction histograms (3x3 cells x 8 bins)."""
-    x0, y0 = int(round(cx - w / 2)), int(round(cy - h / 2))
-    pad = cv2.copyMakeBorder(img, h, h, w, w, cv2.BORDER_REFLECT)
-    p = pad[y0 + h: y0 + 2 * h, x0 + w: x0 + 2 * w]
-    lab = cv2.cvtColor(cv2.resize(p, (24, 24), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2Lab).astype(np.float32)
+def _descriptor(img: np.ndarray, cx: int, cy: int, w: int, h: int, M: Optional[np.ndarray] = None) -> np.ndarray:
+    """Patch descriptor for the classifier: contrast-normalised brightness layout, colour layout (a/b,
+    mean-free so a colour cast drops out) and edge-direction histograms in 8x8 cells. A compact object is
+    sampled on 24x24; a long one keeps its proportions (8 x up to 96) so its detail is not squeezed away."""
+    if M is not None:                                       # M: patch pixel -> image pixel (follows the object's tilt)
+        p = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT)
+    else:
+        x0, y0 = int(round(cx - w / 2)), int(round(cy - h / 2))
+        pad = cv2.copyMakeBorder(img, h, h, w, w, cv2.BORDER_REFLECT)
+        p = pad[y0 + h: y0 + 2 * h, x0 + w: x0 + 2 * w]
+    ar = w / max(h, 1)
+    if ar >= 2.0:
+        gw, gh = 8 * int(min(round(ar), 12)), 8
+    elif ar <= 0.5:
+        gw, gh = 8, 8 * int(min(round(1 / ar), 12))
+    else:
+        gw, gh = 24, 24
+    lab = cv2.cvtColor(cv2.resize(p, (gw, gh), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2Lab).astype(np.float32)
     L = lab[..., 0]
     Ln = (L - L.mean()) / (L.std() + 6.0)
-    f1 = cv2.resize(Ln, (12, 12), interpolation=cv2.INTER_AREA).ravel()
-    ab = cv2.resize(lab[..., 1:], (6, 6), interpolation=cv2.INTER_AREA)
+    f1 = cv2.resize(Ln, (gw // 2, gh // 2), interpolation=cv2.INTER_AREA).ravel()
+    ab = cv2.resize(lab[..., 1:], (max(gw // 4, 2), max(gh // 4, 2)), interpolation=cv2.INTER_AREA)
     f2 = ((ab - ab.reshape(-1, 2).mean(0)) / 12.0).ravel()
     f2b = (lab[..., 1:].reshape(-1, 2).std(0) / 12.0)
     gx, gy = cv2.Sobel(Ln, cv2.CV_32F, 1, 0), cv2.Sobel(Ln, cv2.CV_32F, 0, 1)
     mag, ang = cv2.cartToPolar(gx, gy)
     b = np.minimum((ang / (2 * math.pi) * 8).astype(int), 7)
-    hog = np.zeros((3, 3, 8), np.float32)
-    for i in range(3):
-        for j in range(3):
+    ny, nx = gh // 8, gw // 8
+    hog = np.zeros((ny, nx, 8), np.float32)
+    for i in range(ny):
+        for j in range(nx):
             hog[i, j] = np.bincount(b[8 * i: 8 * i + 8, 8 * j: 8 * j + 8].ravel(),
                                     mag[8 * i: 8 * i + 8, 8 * j: 8 * j + 8].ravel(), 8)
     hog = hog.ravel()
     hog /= np.linalg.norm(hog) + 1e-3
     f1 = f1 / (np.linalg.norm(f1) + 1e-3)
     return np.concatenate([f1, f2 / (np.linalg.norm(f2) + 0.5), f2b, hog]).astype(np.float32)
+
+
+def _shift(A: np.ndarray, ox: int, oy: int) -> np.ndarray:
+    """out[y, x] = A[y + oy, x + ox]  (-1 where that is outside)."""
+    H, W = A.shape
+    out = np.full_like(A, -1.0)
+    ys0, ys1, xs0, xs1 = max(0, -oy), min(H, H - oy), max(0, -ox), min(W, W - ox)
+    if ys1 > ys0 and xs1 > xs0:
+        out[ys0:ys1, xs0:xs1] = A[ys0 + oy: ys1 + oy, xs0 + ox: xs1 + ox]
+    return out
 
 
 def _logistic(X: np.ndarray, y: np.ndarray, l2: float = 1e-2, iters: int = 400) -> Tuple[np.ndarray, float]:
@@ -196,6 +219,7 @@ class Match:
     template: int
     center: Tuple[float, float] = (0.0, 0.0)
     evidence: dict = field(default_factory=dict)
+    angle: float = 0.0   # tilt in degrees (long objects; 0 for compact ones)
 
 
 class AIPatternMatcher:
@@ -213,13 +237,29 @@ class AIPatternMatcher:
         self.trained = False
 
     # ------------------------------------------------------------------ helpers
-    def _maps(self, img: np.ndarray, use: Sequence[str]) -> np.ndarray:
-        """S[t, c] maps (template centred) for the channels in `use`, stored as int8 (x127)."""
-        C = channels(img, self.sigma)
+    def _maps(self, img: np.ndarray, use: Sequence[str], C: Optional[dict] = None) -> np.ndarray:
+        """S[t, c] maps (template centred) for the channels in `use`, stored as int8 (x127).
+        A long thin template is matched in parts along its length: each part may sit a few pixels off
+        (a slight turn, size change or bend moves the ends of a long object by a large share of its
+        thickness), and the parts are averaged at their places."""
+        C = channels(img, self.sigma) if C is None else C
         S = np.empty((len(self.templates), len(use)) + img.shape[:2], np.int8)
         for ti, TC in enumerate(self.tchan):
+            parts = self.tparts[ti]
             for ci, c in enumerate(use):
-                S[ti, ci] = np.round(_zncc_map(C[c], TC[c]) * 127.0)
+                rigid = _zncc_map(C[c], TC[c])
+                if parts is None:
+                    S[ti, ci] = np.round(rigid * 127.0)
+                    continue
+                rects, slack = parts
+                th, tw = TC[c].shape[:2]
+                k = np.ones((2 * slack + 1, 2 * slack + 1), np.uint8)
+                acc = np.zeros(img.shape[:2], np.float32)
+                for x0, y0, pw, ph in rects:
+                    P = cv2.dilate(_zncc_map(C[c], TC[c][y0: y0 + ph, x0: x0 + pw]), k)
+                    acc += _shift(P, x0 + pw // 2 - tw // 2, y0 + ph // 2 - th // 2)
+                # mostly the parts; a little of the whole template keeps the peak sharp and in place
+                S[ti, ci] = np.round(np.clip((acc / len(rects) + 0.15 * rigid) / 1.15, -1, 1) * 127.0)
         return S
 
     def _fuse(self, S: np.ndarray, w: np.ndarray, skip: Optional[Dict[int, List[Tuple[float, float]]]] = None):
@@ -248,12 +288,107 @@ class AIPatternMatcher:
         dy, dx = np.unravel_index(int(sub.argmax()), sub.shape)
         return float(sub[dy, dx]), x0 + dx, y0 + dy
 
+    def _refine_long(self, C, x, y, ti):
+        """Long object at about (x, y): every part is looked up on its own within the slack. The parts'
+        offsets give the exact centre and the tilt. Returns (x, y, tilt in degrees, patch map for the
+        descriptor) - or the input unchanged when it cannot be measured."""
+        parts = self.tparts[ti] if ti < len(self.tparts) else None
+        bw, bh = self.box
+        if parts is None:
+            return x, y, 0.0, None
+        rects, sl = parts
+        TC = self.tchan[ti]
+        th, tw = self.templates[ti].shape[:2]
+        H, W = next(iter(C.values())).shape[:2]
+        horiz = tw >= th
+        along, perp, alo, wt = [], [], [], []
+        for x0, y0, pw, ph in rects:
+            ox_, oy_ = x0 + pw // 2 - tw // 2, y0 + ph // 2 - th // 2
+            xa, ya = x + ox_ - pw // 2 - sl, y + oy_ - ph // 2 - sl
+            xb, yb = xa + pw + 2 * sl, ya + ph + 2 * sl
+            if xa < 0 or ya < 0 or xb > W or yb > H:
+                continue
+            acc = np.zeros((2 * sl + 1, 2 * sl + 1), np.float32)
+            for c, wc in zip(self.use, self.w_use):
+                r = cv2.matchTemplate(C[c][ya:yb, xa:xb], TC[c][y0: y0 + ph, x0: x0 + pw], cv2.TM_CCOEFF_NORMED)
+                acc += float(wc) * np.clip(np.nan_to_num(r, nan=0.0, posinf=0.0, neginf=0.0), -1, 1)
+            iy, ix = np.unravel_index(int(acc.argmax()), acc.shape)
+            dx, dy = ix - sl, iy - sl
+            along.append(ox_ if horiz else oy_)
+            perp.append(dy if horiz else dx)
+            alo.append(dx if horiz else dy)
+            wt.append(max(float(acc.max()), 0.02))
+        if len(along) < 3:
+            return x, y, 0.0, None
+        along, perp, alo, wt = np.array(along, float), np.array(perp, float), np.array(alo, float), np.array(wt)
+        b, a = np.polyfit(along, perp, 1, w=wt)             # sideways offset of a part = a + b * (its place along the object)
+        lim = 1.5 * sl / (0.5 * max(tw, th))
+        b = float(np.clip(b, -lim, lim))
+        sh = float(np.average(alo, weights=wt))
+        n = math.hypot(1.0, b)
+        if horiz:
+            xc, yc = x + sh, y + a
+            u, v = (1 / n, b / n), (-b / n, 1 / n)          # along the object, across it
+            ang = math.degrees(math.atan(b))
+        else:
+            xc, yc = x + a, y + sh
+            u, v = (1 / n, -b / n), (b / n, 1 / n)
+            ang = -math.degrees(math.atan(b))
+        Mp = np.float64([[u[0], v[0], xc - u[0] * bw / 2 - v[0] * bh / 2],
+                         [u[1], v[1], yc - u[1] * bw / 2 - v[1] * bh / 2]])
+        return xc, yc, ang, Mp
+
+    def _desc_at(self, im, C, x, y, ti, refine: bool):
+        """Descriptor of the candidate at (x, y); a long object is first centred and un-tilted."""
+        if refine and self.long:
+            xc, yc, ang, Mp = self._refine_long(C, x, y, ti)
+            if Mp is not None:
+                return _descriptor(im, 0, 0, *self.box, M=Mp), xc, yc, ang
+        return _descriptor(im, x, y, *self.box), float(x), float(y), 0.0
+
+    def _same(self, x, y, pts, extra: float = 0.0) -> bool:
+        """Is (x, y) inside the zone that belongs to one of the objects at pts?"""
+        if not self.long:
+            r = self.r_ex + extra
+            return any((x - a) ** 2 + (y - b) ** 2 <= r * r for a, b in pts)
+        ex, ey = self.ex[0] + extra, self.ex[1] + extra
+        return any(((x - a) / ex) ** 2 + ((y - b) / ey) ** 2 <= 1.0 for a, b in pts)
+
     def _set_templates(self, templates):
         self.templates = templates
         self.tchan = [channels(t, self.sigma) for t in templates]
+        self.tparts = []
+        for t in templates:
+            h, w = t.shape[:2]
+            lo, hi = min(h, w), max(h, w)
+            if hi < 2.5 * lo or lo < 16:
+                self.tparts.append(None)                    # compact (or tiny) object: matched as a whole
+                continue
+            n = int(np.clip(round(hi / (1.5 * lo)), 3, 8))
+            edges = np.linspace(0, hi, n + 1).round().astype(int)
+            rects = [(int(a), 0, int(b - a), h) if w >= h else (0, int(a), w, int(b - a)) for a, b in zip(edges[:-1], edges[1:])]
+            self.tparts.append((rects, max(2, int(round(0.25 * lo)))))
 
     # ------------------------------------------------------------------ training
     def train(self, masters: Sequence[np.ndarray], templates: Sequence[np.ndarray]) -> dict:
+        """masters: scene images (or their search areas); templates: crops of the object."""
+        # A long thin object is matched in parts (several times the work) and has more pixels than it
+        # needs: everything for it runs at a reduced size (its thin side about 18 px). Compact objects: 1.0.
+        ws = [t.shape[1] for t in templates]
+        hs = [t.shape[0] for t in templates]
+        lo, hi = min(np.median(ws), np.median(hs)), max(np.median(ws), np.median(hs))
+        self.f = float(np.clip(18.0 / lo, 0.4, 1.0)) if (hi >= 2.5 * lo and lo >= 16) else 1.0
+        if self.f < 1.0:
+            small = lambda im: cv2.resize(im, (max(8, round(im.shape[1] * self.f)), max(8, round(im.shape[0] * self.f))),
+                                          interpolation=cv2.INTER_AREA)
+            masters, templates = [small(m) for m in masters], [small(t) for t in templates]
+        rep = self._train(masters, templates)
+        if self.f < 1.0:                                    # report in the pixels of the images given
+            rep["instances"] = [[(x / self.f, y / self.f) for x, y in pts] for pts in rep["instances"]]
+            rep["working_scale"] = round(self.f, 3)
+        return rep
+
+    def _train(self, masters: Sequence[np.ndarray], templates: Sequence[np.ndarray]) -> dict:
         masters = [m if m.ndim == 3 else cv2.cvtColor(m, cv2.COLOR_GRAY2BGR) for m in masters]
         user = [t if t.ndim == 3 else cv2.cvtColor(t, cv2.COLOR_GRAY2BGR) for t in templates]
         hs, ws = [t.shape[0] for t in user], [t.shape[1] for t in user]
@@ -262,6 +397,14 @@ class AIPatternMatcher:
         self.box = (int(np.median(ws)), int(np.median(hs)))
         # objects do not overlap: a peak within one box size of a stronger object is part of that object
         self.r_ex = max(2 * self.radius, int(0.9 * max(self.box)))
+        # a long object: the zone follows its shape (an ellipse), and simulated turns stay small enough
+        # for its ends to remain within the part slack
+        self.long = max(self.box) >= 2.5 * min(self.box) and min(self.box) >= 16
+        self.n_refine = 12                                  # strongest candidates per image that get centred / un-tilted
+        self.ex = (max(2 * self.radius, 0.9 * self.box[0]), max(2 * self.radius, 0.9 * self.box[1]))
+        self.max_rot = 10.0
+        if self.long:
+            self.max_rot = math.degrees(math.atan(1.5 * max(2, round(0.25 * min(self.box))) / (0.5 * max(self.box))))
         self._set_templates(user)
         nc = len(CHANNELS)
         near = lambda x, y, pts, r: any((x - a) ** 2 + (y - b) ** 2 <= r * r for a, b in pts)
@@ -275,7 +418,7 @@ class AIPatternMatcher:
                 if t.shape[0] <= m.shape[0] and t.shape[1] <= m.shape[1]:
                     r = cv2.matchTemplate(m, t, cv2.TM_CCOEFF_NORMED)
                     _, v, _, loc = cv2.minMaxLoc(r)
-                    if v > 0.93:
+                    if v > (0.93 if self.f == 1.0 else 0.88):
                         p = (loc[0] + t.shape[1] // 2, loc[1] + t.shape[0] // 2)
                         own[mi].setdefault(ti, []).append(p)
                         known[mi].append(p)
@@ -330,9 +473,9 @@ class AIPatternMatcher:
                             if gmax > 0.25 * (ref - bg):
                                 cut = 0.5 * (vals[gi] + vals[gi + 1])
                     for v, x, y in pk:
-                        if v >= cut and not near(x, y, new_inst[mi], self.r_ex):
+                        if v >= cut and not self._same(x, y, new_inst[mi]):
                             new_inst[mi].append((x, y))
-                    neg_pts = [(x, y) for v, x, y in pk if not near(x, y, new_inst[mi], self.r_ex)][:150]
+                    neg_pts = [(x, y) for v, x, y in pk if not self._same(x, y, new_inst[mi])][:150]
                     for (F, A), S in zip(fused, mv):
                         for x, y in new_inst[mi]:
                             if solo_known and (x, y) in known[mi]:
@@ -410,7 +553,8 @@ class AIPatternMatcher:
                 im = relight(m, self.rng)
                 if k % 2 == 1:
                     im = distract(im, inst[mi], self.box, self.rng)
-                im, M, amp = vary(im, self.rng, self.box, self.variation * self.rng.uniform(0.5, 2.0), pose=(k % 4 != 1))
+                im, M, amp = vary(im, self.rng, self.box, self.variation * self.rng.uniform(0.5, 2.0), pose=(k % 4 != 1),
+                                  max_rot=self.max_rot)
                 views.append((mi, im, M, amp))
 
         # ---- 3. learn on all copies (instances fixed): channel weights, threshold, patch classifier
@@ -422,6 +566,7 @@ class AIPatternMatcher:
             jp, jn = [], []                                                   # (match value, view index) per descriptor
             for vi, ((mi, im, M, amp), S) in enumerate(zip(views, S_all)):
                 Sv = S if idx is None else S[:, idx]
+                Cv = channels(im, self.sigma) if (with_desc and self.long) else None
                 solo = len(self.templates) == 1
                 skip = None if solo else {ti: self._map_pts(M, pts) for ti, pts in own[mi].items()}
                 F, A = self._fuse(Sv, wts, skip)
@@ -437,19 +582,22 @@ class AIPatternMatcher:
                     found.append((xx, yy))
                     zp.append(v)
                     px.append(Sv[A[yy, xx], :, yy, xx] / 127.0)
-                    if with_desc:
+                    if with_desc and self.long:
+                        dp.append(self._desc_at(im, Cv, xx, yy, int(A[yy, xx]), True)[0])
+                        jp.append((v, vi, True))
+                    elif with_desc:
                         for jx, jy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
                             dp.append(_descriptor(im, xx + jx, yy + jy, *self.box))
                             jp.append((v, vi, jx == 0 and jy == 0))
                 k = 0
                 for v, x, y in _peaks(F, self.radius, 120):
-                    if near(x, y, pts, self.r_ex + slack(amp)):
+                    if self._same(x, y, pts, slack(amp)):
                         continue
                     zn.append(v)
                     if k < 40:
                         nx.append(Sv[A[y, x], :, y, x] / 127.0)
                         if with_desc:
-                            dn.append(_descriptor(im, x, y, *self.box))
+                            dn.append(self._desc_at(im, Cv, x, y, int(A[y, x]), k < self.n_refine)[0])
                             jn.append((v, vi, True))
                     k += 1
             self._joint_samples = (jp, jn)
@@ -561,25 +709,38 @@ class AIPatternMatcher:
             x, y = max(x, 0), max(y, 0)
             img = img[y: y + h, x: x + w]
             ox, oy = x, y
-        S = self._maps(img, self.use)
+        f = self.f
+        if f < 1.0:
+            img = cv2.resize(img, (max(8, round(img.shape[1] * f)), max(8, round(img.shape[0] * f))), interpolation=cv2.INTER_AREA)
+        C = channels(img, self.sigma)
+        S = self._maps(img, self.use, C)
         F, A = self._fuse(S, self.w_use)
-        out = []
-        for v, x, y in _peaks(F, self.radius, 60, floor=self.z_floor):
-            d = (_descriptor(img, x, y, *self.box) - self.d_mu) / self.d_sd / math.sqrt(len(self.d_mu))
+        cand = []
+        for i, (v, x, y) in enumerate(_peaks(F, self.radius, 60, floor=self.z_floor)):
+            desc, xr, yr, ang = self._desc_at(img, C, x, y, int(A[y, x]), i < self.n_refine)
+            d = (desc - self.d_mu) / self.d_sd / math.sqrt(len(self.d_mu))
             lg = float(d @ self.d_w) + self.d_b
             pc = 1 / (1 + math.exp(-np.clip(lg, -30, 30)))
             j = self.j_w[0] * float(self._f_match(v)) + self.j_w[1] * float(self._f_patch(lg))
             score = float(np.clip((j - self.j_lo) / self.j_span, 0.0, 1.0))  # 0 = background level, 1 = typical object
-            ti = int(A[y, x])
-            th, tw = self.templates[ti].shape[:2]
-            out.append(Match(ox + x - tw // 2, oy + y - th // 2, tw, th, score, v, pc, ti,
-                             (float(ox + x), float(oy + y)), dict(match=round(v, 3), patch=round(pc, 3))))
-        out.sort(key=lambda m: -m.score)
+            cand.append((score, xr, yr, v, pc, int(A[y, x]), ang))
+        cand.sort(key=lambda c: -c[0])
         kept = []                                                             # the stronger one wins a shared place
-        for m in out:
-            if all(math.hypot(m.center[0] - k.center[0], m.center[1] - k.center[1]) >= self.min_dist for k in kept):
-                kept.append(m)
-        out = kept
+        for c in cand:
+            pts = [(k[1], k[2]) for k in kept]
+            if self.long:
+                free = not self._same(c[1], c[2], pts)
+            else:
+                free = all(math.hypot(c[1] - a, c[2] - b) >= self.min_dist for a, b in pts)
+            if free:
+                kept.append(c)
+        out = []
+        for score, x, y, v, pc, ti, ang in kept:
+            th, tw = self.templates[ti].shape[:2]
+            tw, th = int(round(tw / f)), int(round(th / f))
+            X, Y = ox + x / f, oy + y / f
+            out.append(Match(int(round(X - tw / 2)), int(round(Y - th / 2)), tw, th, score, v, pc, ti,
+                             (float(X), float(Y)), dict(match=round(v, 3), patch=round(pc, 3), angle=round(ang, 1)), ang))
         if self.expect:
             return out[: self.expect]
         return [m for m in out if m.score >= self.min_score]
@@ -588,7 +749,11 @@ class AIPatternMatcher:
 def draw_matches(img: np.ndarray, matches: Sequence[Match]) -> np.ndarray:
     vis = img.copy()
     for i, m in enumerate(matches):
-        cv2.rectangle(vis, (m.x, m.y), (m.x + m.w, m.y + m.h), (0, 255, 0), 2)
+        if abs(m.angle) > 0.3:                              # long object: the box follows its tilt
+            pts = cv2.boxPoints(((m.center[0], m.center[1]), (m.w, m.h), m.angle))
+            cv2.polylines(vis, [np.int32(np.round(pts))], True, (0, 255, 0), 2, cv2.LINE_AA)
+        else:
+            cv2.rectangle(vis, (m.x, m.y), (m.x + m.w, m.y + m.h), (0, 255, 0), 2)
         label = f"#{i} {m.score:.2f}"
         cv2.putText(vis, label, (m.x, max(12, m.y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3, cv2.LINE_AA)
         cv2.putText(vis, label, (m.x, max(12, m.y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
