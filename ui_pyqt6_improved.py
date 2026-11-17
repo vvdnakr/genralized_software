@@ -44,6 +44,7 @@ from vision_detect import (
     aip_store_model, aip_load,
     POS_FIXED, POS_RELATION, POS_BOTH, get_scene_relation,
     set_scene_relation, relation_reference, scene_relation)
+import ng_recovery as ngr       # NG recheck + Master/Template addition
 from two_point import (
     ParentModelManager,
     detect_multi_scale_templates,
@@ -109,6 +110,11 @@ class AppConfig:
                          "grab_keyboard": True,
                          "gnome_shortcuts": True,
                          "master_password_sha256": MASTER_DEFAULT_HASH},
+            # NG recovery: who may add a Master / Template from the NG popup
+            # (scan the ID badge, then this password).  allowed_ids: empty =
+            # any badge, otherwise only these IDs.  The popup itself is
+            # switched on per model (NG Recovery button, MASTER mode).
+            "ng_recovery": dict(ngr.DEFAULT_AUTH),
         }
         self.load()
 
@@ -128,6 +134,8 @@ class AppConfig:
                 self.data["health"].update(saved.get("health") or {})
                 self.data["cycle_popup"].update(saved.get("cycle_popup") or {})
                 self.data["security"].update(saved.get("security") or {})
+                self.data["ng_recovery"].update(
+                    saved.get("ng_recovery") or {})
             except yaml.YAMLError:
                 pass
         self.save()   # make sure the file exists with all parameters
@@ -4377,6 +4385,7 @@ class HeadScreen(BaseScreen):
         self.parent_store = app.heads.get_parent_store(head_name)
         self.busy = False
         self._run_gen = 0            # bumped to throw away a running check
+        self._ngr = None             # open NG recovery (NgRecoveryFlow)
         self.view = self.VIEW_LIVE
         self.result_views = {}
         self.result_key = "result"
@@ -4561,6 +4570,10 @@ class HeadScreen(BaseScreen):
                 if self.n_scenes and not self.finished:
                     mb.append(styled_btn(self, "Finish Model",
                                          self.finish_head, color="#f59f00"))
+                if self.n_scenes:
+                    mb.append(styled_btn(self, "NG Recovery",
+                                         self.open_ng_recovery_cfg,
+                                         color="#44444e"))
                 tl.addWidget(tool_group("Model", mb))
                 if self.finished:
                     tl.addWidget(vline())
@@ -5056,6 +5069,8 @@ class HeadScreen(BaseScreen):
 
     # ------------------------------------------------------------------
     def destroy_screen(self):
+        if self._ngr is not None:          # leaving: the part is not reported
+            self._ngr.abort("the model screen was closed")
         self._qr_stop.set()
         self._run_gen += 1                 # a running check is thrown away
         for pp in list(getattr(self, "_popups", {}).values()):
@@ -6174,6 +6189,8 @@ class HeadScreen(BaseScreen):
     def _stop_current_work(self):
         """Throw away whatever is running: a detection run, a QR read, a
         QR wait / retry, and the half-finished part."""
+        if self._ngr is not None:
+            self._ngr.abort("stopped by the client")
         if self.busy:
             self._run_gen += 1             # its result will be dropped
             self.busy = False
@@ -6884,6 +6901,13 @@ class HeadScreen(BaseScreen):
     # EXECUTION (manual buttons AND client triggers land here)
     # ------------------------------------------------------------------
     def execute(self, scope, source):
+        if self._ngr is not None:
+            self.log(f"NG RECOVERY OPEN — ignored trigger {scope} from "
+                     f"{source} (finish or skip the NG popup first)")
+            self.app.comm_log.add("EVT", f"NG recovery open — trigger "
+                                         f"{scope} ignored")
+            self._ngr.raise_popup()
+            return
         if self.busy:
             self.log(f"BUSY — ignored trigger {scope} from {source}")
             self.app.comm_log.add("EVT", f"BUSY — trigger {scope} ignored")
@@ -6967,12 +6991,16 @@ class HeadScreen(BaseScreen):
             return
         Message.warn(self, "CANNOT TEST THIS PART", str(reason))
 
-    def _run_group(self, plan, frame, dist_thr, logs, results, gen=None):
+    def _run_group(self, plan, frame, dist_thr, logs, results, gen=None,
+                   geo=None):
         """Run the scenes of `plan` on one camera picture.
 
         Each scene works on its own resized copy of the picture (scene
         scale); every position is mapped back to the camera picture for the
-        result view.  Areas may sit inside an object of another area."""
+        result view.  Areas may sit inside an object of another area.
+        geo (dict, optional): filled with where each area was looked for -
+        {(scene, area): {frame, scale, origin, roi, reg}} - so the NG
+        recovery can cut the master / template from that same picture."""
         frame_h, frame_w = frame.shape[:2]
         out_frame = frame.copy()
         proc = np.ones_like(frame)
@@ -7025,6 +7053,11 @@ class HeadScreen(BaseScreen):
                 if child_filter is not None and child_name not in child_filter:
                     continue                 # a parent run only to locate
                 cfg = dict(children_data)[child_name]["config"]
+                if geo is not None:
+                    geo[(parent_name, child_name)] = {
+                        "frame": frame, "scale": sc,
+                        "origin": r.get("origin"), "roi": r.get("roi"),
+                        "reg": dict(children_data)[child_name]["reg"]}
                 tag = {METHOD_AI: " [AI]", METHOD_AIP: " [AI trained]"}.get(
                     r.get("method"), "")
                 if r.get("skipped"):
@@ -7229,15 +7262,23 @@ class HeadScreen(BaseScreen):
                                      + " ".join(bad))
         Message.warn(self, "THE LIGHT HAS CHANGED", text)
 
-    def _worker(self, scope, plan, frame, dist_thr, gen=None):
+    # ------------------------------------------------------------------
+    # ONE inspection (worker thread) -> result record R
+    # ------------------------------------------------------------------
+    def _inspect(self, scope, plan, frame, dist_thr, gen=None):
+        """Worker thread: run `plan` once on NEW camera pictures (taken after
+        this call).  Returns R = {logs, results, views, run_summary,
+        drift_msgs, geo, all_ok}.  Reports nothing - see _finish_run."""
         logs = []
         results = {}
         views = {}
+        geo = {}
         run_summary = None
         drift_msgs = []
         try:
             groups = self._camera_groups(plan, frame, logs, drift_msgs)
-            parts = [self._run_group(gp, gf, dist_thr, logs, results, gen)
+            parts = [self._run_group(gp, gf, dist_thr, logs, results, gen,
+                                     geo)
                      for gp, gf in groups]
             for g in parts:
                 if g["any_output"]:
@@ -7277,80 +7318,1053 @@ class HeadScreen(BaseScreen):
                                        f"  ·  thr {dist_thr:g}px")
         except Exception:
             logs.append("ERROR:\n" + traceback.format_exc())
+        return {"logs": logs, "results": results, "views": views,
+                "run_summary": run_summary, "drift_msgs": drift_msgs,
+                "geo": geo, "all_ok": ngr.overall_ok(results)}
 
-        full_scenes = [p for p, f in plan if f is None]
+    def _ngr_settings(self):
+        """NG recovery settings of this model (see ng_recovery.py)."""
+        try:
+            return ngr.get_settings(self.app.heads, self.head)
+        except Exception:
+            return dict(ngr.DEFAULT_SETTINGS)
 
-        def apply():
-            if not self._alive:
-                return
-            if gen is not None and gen != self._run_gen:
-                self.log("[run] result dropped - the run was stopped")
-                return
-            # free the station first: nothing below may leave it "busy"
-            self.busy = False
+    def _worker(self, scope, plan, frame, dist_thr, gen=None):
+        R = self._inspect(scope, plan, frame, dist_thr, gen)
+        stopped = gen is not None and gen != self._run_gen
+        # AUTOMATIC NG RECHECK: an NG run is inspected once more, on a new
+        # picture.  Only the second result counts (counters, PLC, MES).
+        if (R["results"] and not R["all_ok"] and not stopped
+                and self._ngr_settings()["auto_recheck"]):
+            first = R
+            n_ng = len(ngr.ng_areas(first["results"]))
+            R2 = self._inspect(scope, plan, frame, dist_thr, gen)
+            if R2["results"]:
+                R2["logs"] = (first["logs"]
+                              + [f" NG ({n_ng} area(s)) — automatic recheck "
+                                 "on a new picture"]
+                              + R2["logs"]
+                              + [" RECHECK      "
+                                 + ("OK — the first NG is not counted"
+                                    if R2["all_ok"] else "NG again")])
+                if not R2["drift_msgs"]:
+                    R2["drift_msgs"] = first["drift_msgs"]
+                R = R2
+            else:
+                first["logs"].append(" RECHECK      failed - the first "
+                                     "result is used")
+            R["rechecked"] = True
+        self.after(0, lambda: self._apply_run(scope, plan, R, gen))
+
+    def _apply_run(self, scope, plan, R, gen):
+        """UI thread: a run is done.  NG (twice) with the model's NG popup
+        switched on -> the NG recovery opens FIRST and the result is
+        reported when it closes.  Otherwise it is reported now, exactly as
+        before."""
+        if not self._alive:
+            return
+        if gen is not None and gen != self._run_gen:
+            self.log("[run] result dropped - the run was stopped")
+            return
+        if (R["results"] and not R["all_ok"] and self._ngr is None
+                and self._ngr_settings()["popup_enabled"]):
             try:
-                finish()
+                flow = NgRecoveryFlow(
+                    self, scope, plan, R, gen,
+                    on_done=lambda Rf: self._finish_run(scope, plan, Rf))
+                if flow.fixable():
+                    self._ngr = flow           # the part is not finished:
+                    for m in R["logs"]:        # the station stays busy
+                        self.log(m)
+                    R["logs_shown"] = True
+                    if R["run_summary"] is not None:
+                        self.set_big_status(R["run_summary"][0],
+                                            R["run_summary"][1])
+                    self._show_result_views(R["views"], hold=False)
+                    flow.start()
+                    return
             except Exception:
-                self.log("ERROR after the run:\n" + traceback.format_exc())
-                self.back_to_live()
+                self._ngr = None
+                self.log("NG recovery could not open:\n"
+                         + traceback.format_exc())
+        self._finish_run(scope, plan, R)
 
-        def finish():
+    def _show_result_views(self, views, hold=True):
+        if not views:
+            return
+        self.result_views = views
+        self.result_key = "result"
+        self.btn_pinmap.setText("Map")
+        self.view = self.VIEW_RESULT
+        self.compare_ctl.setVisible(False)
+        self.result_ctl.setVisible(True)
+        self.canvas.fit()
+        self.canvas.show(views["result"])
+        if hold:
+            self._hold_result()
+        else:
+            self._view_gen = getattr(self, "_view_gen", 0) + 1
+
+    def _finish_run(self, scope, plan, R):
+        """UI thread: report one finished run (the final result) - log,
+        picture, counters, PLC / client, MES, cycle.  Unchanged behaviour;
+        only reached later when the NG recovery was open."""
+        self._ngr = None
+        if not self._alive:
+            return
+        # free the station first: nothing below may leave it "busy"
+        self.busy = False
+        try:
+            self._report_run(scope, plan, R)
+        except Exception:
+            self.log("ERROR after the run:\n" + traceback.format_exc())
+            self.back_to_live()
+
+    def _report_run(self, scope, plan, R):
+        logs, results, views = R["logs"], R["results"], R["views"]
+        run_summary, drift_msgs = R["run_summary"], R["drift_msgs"]
+        full_scenes = [p for p, f in plan if f is None]
+        if not R.get("logs_shown"):
             for m in logs:
                 self.log(m)
-            if drift_msgs:
-                QTimer.singleShot(0, lambda: self._alive
-                                  and self._show_drift(drift_msgs))
-            if run_summary is not None:
-                self.set_big_status(run_summary[0], run_summary[1])
-            if views:
-                self.result_views = views
-                self.result_key = "result"
-                self.btn_pinmap.setText("Map")
-                self.view = self.VIEW_RESULT
-                self.compare_ctl.setVisible(False)
-                self.result_ctl.setVisible(True)
-                self.canvas.fit()
-                self.canvas.show(views["result"])
-                self._hold_result()
-            if results:
-                self._mes_collect(scope, logs, views, results)
-                self.app.heads.add_result_counts(self.head, scope, results)
-                self._track_areas(results)
-                try:
-                    self.app.engine.send_results(self.comm_cfg, scope,
-                                                 results)
-                except Exception:
-                    self.log("send_results ERROR:\n" + traceback.format_exc())
-                # --- cycle tracking: mark each FULLY-run scene, and when
-                #     every scene of the model has been run -> one cycle
-                for scene in full_scenes:
-                    if scene in results and results[scene]:
-                        self.cycle_scene_results[scene] = all(
-                            r["ok"] for r in results[scene].values())
-                all_scenes = set(self.app.heads.list_parents(self.head))
-                if all_scenes and all_scenes <= set(
-                        self.cycle_scene_results):
-                    cycle_ok = all(self.cycle_scene_results[s]
-                                   for s in all_scenes)
-                    self.app.heads.add_cycle_count(self.head, cycle_ok)
-                    self.log(f" CYCLE COMPLETE — "
-                             f"{'OK' if cycle_ok else 'NG'}  "
-                             f"(all {len(all_scenes)} scene(s) run)")
-                    self.app.comm_log.add(
-                        "EVT", f"cycle complete on model '{self.head}': "
-                               f"{'OK' if cycle_ok else 'NG'}")
-                    self._end_cycle(cycle_ok)
-                    self.back_to_live()
-                elif all_scenes:
-                    left = sorted(all_scenes
-                                  - set(self.cycle_scene_results))
-                    if left:
-                        self.log(f" cycle progress: "
-                                 f"{len(self.cycle_scene_results)}"
-                                 f"/{len(all_scenes)} scenes — "
-                                 "left: " + ", ".join(left))
-                self.refresh_counters()
-        self.after(0, apply)
+        for m in R.get("extra_logs", []):
+            self.log(m)
+        if drift_msgs:
+            QTimer.singleShot(0, lambda: self._alive
+                              and self._show_drift(drift_msgs))
+        if run_summary is not None:
+            self.set_big_status(run_summary[0], run_summary[1])
+        if views:
+            self._show_result_views(views)
+        if results:
+            self._mes_collect(scope, logs, views, results)
+            self.app.heads.add_result_counts(self.head, scope, results)
+            self._track_areas(results)
+            try:
+                self.app.engine.send_results(self.comm_cfg, scope,
+                                             results)
+            except Exception:
+                self.log("send_results ERROR:\n" + traceback.format_exc())
+            # --- cycle tracking: mark each FULLY-run scene, and when
+            #     every scene of the model has been run -> one cycle
+            for scene in full_scenes:
+                if scene in results and results[scene]:
+                    self.cycle_scene_results[scene] = all(
+                        r["ok"] for r in results[scene].values())
+            all_scenes = set(self.app.heads.list_parents(self.head))
+            if all_scenes and all_scenes <= set(
+                    self.cycle_scene_results):
+                cycle_ok = all(self.cycle_scene_results[s]
+                               for s in all_scenes)
+                self.app.heads.add_cycle_count(self.head, cycle_ok)
+                self.log(f" CYCLE COMPLETE — "
+                         f"{'OK' if cycle_ok else 'NG'}  "
+                         f"(all {len(all_scenes)} scene(s) run)")
+                self.app.comm_log.add(
+                    "EVT", f"cycle complete on model '{self.head}': "
+                           f"{'OK' if cycle_ok else 'NG'}")
+                self._end_cycle(cycle_ok)
+                self.back_to_live()
+            elif all_scenes:
+                left = sorted(all_scenes
+                              - set(self.cycle_scene_results))
+                if left:
+                    self.log(f" cycle progress: "
+                             f"{len(self.cycle_scene_results)}"
+                             f"/{len(all_scenes)} scenes — "
+                             "left: " + ", ".join(left))
+            self.refresh_counters()
+
+    # ------------------------------------------------------------------
+    # NG RECOVERY settings (MASTER mode only)
+    # ------------------------------------------------------------------
+    def open_ng_recovery_cfg(self):
+        if not self.app.setup_open():
+            pw = ask_password(self, "Master password",
+                              "Only the master password changes the NG "
+                              "recovery settings.")
+            if pw is None:
+                return
+            if not self.app.is_master_password(pw):
+                Message.error(self, "Wrong password",
+                              "That is not the master password.")
+                return
+        NgRecoverySettingsDialog(self, self.app, self.head).exec()
+
+# ============================================================================
+# NG RECOVERY  (automatic recheck is in HeadScreen._worker; this is the popup)
+#
+#   NG twice + the model's popup switched on (NG Recovery button, MASTER
+#   mode) -> NgRecoveryFlow.  The part is reported only when it closes:
+#     * every NG area is listed with what its technique allows,
+#     * each change: scan the ID badge -> password -> add -> (train) ->
+#       the CURRENT part is inspected again on a new picture,
+#     * AI Image Processing: Master first; Template only when the newly
+#       trained master still cannot find the object,
+#     * Report / Skip (or the first popup timing out) reports the latest
+#       result through the normal path (counters, PLC, MES, cycle).
+#   Every addition goes to models/heads/<model>/ng_recovery_log.csv and to
+#   the detection log + communication log.
+#   Training and every recheck run in a helper thread: the window, the live
+#   view and the client link keep working.
+# ============================================================================
+class _NgWait(QDialog):
+    """'Please wait' box shown while a helper thread trains / checks (it
+    does not close by itself, unlike Message)."""
+
+    def __init__(self, parent, headline, text):
+        super().__init__(parent)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setModal(False)
+        self.setMinimumWidth(520)
+        _premium_dialog(self, C_BLUE)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(_band(headline, C_BLUE, pt=18))
+        self.lbl = QLabel(text)
+        self.lbl.setWordWrap(True)
+        self.lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl.setStyleSheet(f"color: {C_TEXT}; font-size: 13pt;"
+                               " padding: 18px;")
+        lay.addWidget(self.lbl)
+        self._t0 = time.time()
+        self._text = text
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(500)
+
+    def _tick(self):
+        self.lbl.setText(f"{self._text}\n({int(time.time() - self._t0)} s)")
+
+    def done_(self):
+        self._timer.stop()
+        self.close()
+
+    def closeEvent(self, e):           # only the flow closes it
+        if self._timer.isActive():
+            e.ignore()
+            return
+        e.accept()
+
+    def reject(self):                  # Esc does not close it either
+        if not self._timer.isActive():
+            super().reject()
+
+
+class NgPictureDialog(QDialog):
+    """Shows the area picture.  select=False: confirm it (a master).
+    select=True: drag a box around one object (a template / shot).
+    take_new(cb): optional - takes a new picture in the background and
+    calls cb(picture or None)."""
+
+    def __init__(self, parent, headline, hint, picture, ok_text,
+                 select=False, take_new=None):
+        super().__init__(parent)
+        self.setWindowTitle(headline)
+        self.setModal(True)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.resize(*fit_size(900, 680))
+        _premium_dialog(self, C_ACCENT)
+        self.picture = picture
+        self.rect = None
+        self.accepted_ = False
+        self._select = select
+        self._take_new = take_new
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band(headline, C_ACCENT, pt=18))
+        self.hint = QLabel(hint)
+        self.hint.setWordWrap(True)
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hint.setStyleSheet(f"color: {C_MUTED}; font-size: 11pt;"
+                                " padding: 8px 18px;")
+        lay.addWidget(self.hint)
+        self.canvas = VideoCanvas(self)
+        self.canvas.setMinimumSize(560, 340)
+        self.canvas.select_enabled = select
+        self.canvas.on_rect_drawn = self._drawn
+        lay.addWidget(self.canvas, 1)
+        row = QHBoxLayout()
+        row.setContentsMargins(18, 10, 18, 14)
+        row.setSpacing(10)
+        self.b_cancel = QPushButton("Cancel")
+        apply_btn_color(self.b_cancel, C_NEUTRAL)
+        self.b_cancel.clicked.connect(self.reject)
+        row.addWidget(self.b_cancel, 1)
+        self.b_new = None
+        if take_new is not None:
+            self.b_new = QPushButton("Take New Picture")
+            apply_btn_color(self.b_new, "#44444e")
+            self.b_new.clicked.connect(self._new_picture)
+            row.addWidget(self.b_new, 1)
+        self.b_ok = QPushButton(ok_text)
+        apply_btn_color(self.b_ok, C_ACCENT)
+        self.b_ok.clicked.connect(self._ok)
+        row.addWidget(self.b_ok, 1)
+        for b in (self.b_cancel, self.b_new, self.b_ok):
+            if b is not None:
+                b.setMinimumHeight(48)
+                b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                b.setStyleSheet(b.styleSheet()
+                                + " QPushButton { font-size: 13pt; }")
+        lay.addLayout(row)
+        self._refresh()
+
+    def _refresh(self):
+        self.rect = None
+        self.canvas.clear_rect()
+        if self.picture is None:
+            self.canvas.show_message("No picture of this area - press "
+                                     "Take New Picture")
+        else:
+            self.canvas.fit()
+            self.canvas.show(self.picture)
+        self.b_ok.setEnabled(self.picture is not None and not self._select)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._refresh)      # canvas has its size now
+
+    def _drawn(self, rect):
+        self.rect = rect
+        self.b_ok.setEnabled(self.picture is not None)
+
+    def _new_picture(self):
+        for b in (self.b_new, self.b_ok, self.b_cancel):
+            b.setEnabled(False)
+        self.hint.setText("Taking a new picture…")
+
+        def got(pic):
+            if not self.isVisible():
+                return
+            self.b_new.setEnabled(True)
+            self.b_cancel.setEnabled(True)
+            if pic is None:
+                self.hint.setText("No new picture - check the camera and "
+                                  "that the part is in place.")
+            else:
+                self.picture = pic
+                self.hint.setText("New picture taken.")
+            self._refresh()
+        self._take_new(got)
+
+    def _ok(self):
+        if self.picture is None or (self._select and self.rect is None):
+            return
+        self.accepted_ = True
+        self.accept()
+
+
+class NgRecoveryDialog(QDialog):
+    """The NG popup: the NG areas and what can be added to each.
+    choice = ("fix", scene, area) | ("finish",);  timed_out = True when the
+    countdown ended it."""
+
+    def __init__(self, parent, rows, part_ok, n_ops, timeout_s=0):
+        super().__init__(parent)
+        self.setWindowTitle("NG - add master / template")
+        self.setModal(True)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setMinimumWidth(min(820, fit_size(820, 400)[0]))
+        _premium_dialog(self, C_NG)
+        self.choice = ("finish",)
+        self.timed_out = False
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band("PART NG — ADD MASTER / TEMPLATE?" if not n_ops
+                            else "STILL NG — ANOTHER CHANGE?", C_NG, pt=18))
+        inner = QVBoxLayout()
+        inner.setContentsMargins(22, 16, 22, 16)
+        inner.setSpacing(10)
+        t = QLabel("The part was NG twice. An authorised operator (ID badge "
+                   "+ password) can add a master or a template; the part is "
+                   "then checked again." if not n_ops else
+                   f"{n_ops} change(s) made. These areas are still NG.")
+        t.setWordWrap(True)
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;")
+        inner.addWidget(t)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(8)
+        for i, r in enumerate(rows):
+            name = QLabel(f"{r['scene']} / {r['area']}")
+            name.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;"
+                               " font-weight: 700;")
+            tech = QLabel(r["technique"]
+                          + (f"\n{r['reason']}" if r.get("reason") else ""))
+            tech.setWordWrap(True)
+            tech.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+            grid.addWidget(name, i, 0)
+            grid.addWidget(tech, i, 1)
+            if r["actions"]:
+                b = QPushButton(ngr.ACTION_LABEL[r["actions"][0]])
+                apply_btn_color(b, C_ACCENT)
+                b.clicked.connect(lambda _=False, s=r["scene"], a=r["area"]:
+                                  self._pick(("fix", s, a)))
+            else:
+                b = QPushButton(r.get("why_not") or "Not possible here")
+                apply_btn_color(b, "#44444e")
+                b.setEnabled(False)
+            b.setMinimumHeight(42)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            grid.addWidget(b, i, 2)
+        grid.setColumnStretch(1, 1)
+        inner.addLayout(grid)
+        self.count_lbl = QLabel("")
+        self.count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.count_lbl.setStyleSheet(f"color: {C_WARN}; font-size: 10pt;")
+        inner.addWidget(self.count_lbl)
+        bf = QPushButton(("Report NG and continue" if not part_ok else
+                          "Report result and continue"))
+        bf.setMinimumHeight(48)
+        bf.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        apply_btn_color(bf, C_NEUTRAL)
+        bf.setStyleSheet(bf.styleSheet() + " QPushButton { font-size: 13pt; }")
+        bf.clicked.connect(lambda: self._pick(("finish",)))
+        inner.addWidget(bf)
+        lay.addLayout(inner)
+        self._left = int(timeout_s or 0)
+        self._timer = QTimer(self)
+        if self._left > 0:
+            self._timer.timeout.connect(self._tick)
+            self._timer.start(1000)
+            self._tick(first=True)
+
+    def _tick(self, first=False):
+        if not first:
+            self._left -= 1
+        if self._left <= 0:
+            self._timer.stop()
+            self.timed_out = True
+            self._pick(("finish",))
+            return
+        self.count_lbl.setText(f"No answer: NG is reported by itself in "
+                               f"{self._left} s")
+
+    def _pick(self, choice):
+        self._timer.stop()
+        self.choice = choice
+        self.accept()
+
+    def reject(self):                    # Esc = report as it is
+        self._pick(("finish",))
+
+
+class NgRecoverySettingsDialog(QDialog):
+    """Model-level NG recovery settings (MASTER mode only)."""
+
+    def __init__(self, parent, app, head):
+        super().__init__(parent)
+        self.app, self.head = app, head
+        self.setWindowTitle("NG recovery")
+        self.setModal(True)
+        self.setMinimumWidth(min(680, fit_size(680, 420)[0]))
+        _premium_dialog(self, "#845ef7")
+        s = ngr.get_settings(app.heads, head)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(_band(f"NG RECOVERY — {head}", "#845ef7", pt=18))
+        inner = QVBoxLayout()
+        inner.setContentsMargins(24, 16, 24, 16)
+        inner.setSpacing(10)
+        cs = f"color: {C_TEXT}; font-size: 12pt;"
+        self.chk_recheck = QCheckBox("Check an NG part once more, "
+                                     "automatically, on a new picture")
+        self.chk_recheck.setChecked(s["auto_recheck"])
+        self.chk_popup = QCheckBox("Enable NG Master/Template Addition Popup"
+                                   " (NG twice)")
+        self.chk_popup.setChecked(s["popup_enabled"])
+        for c in (self.chk_recheck, self.chk_popup):
+            c.setStyleSheet(cs)
+            inner.addWidget(c)
+        row = QHBoxLayout()
+        lt = QLabel("Popup reports NG by itself after (s, 0 = wait):")
+        lt.setStyleSheet(cs)
+        self.ed_timeout = QLineEdit(str(s["popup_timeout_s"]))
+        self.ed_timeout.setMaximumWidth(110)
+        self.ed_timeout.setStyleSheet(f"background: {C_FIELD}; color: white;"
+                                      " padding: 6px; font-size: 12pt;")
+        row.addWidget(lt)
+        row.addWidget(self.ed_timeout)
+        row.addStretch()
+        inner.addLayout(row)
+        auth = ngr.auth_config(app.app_config.data)
+        info = QLabel(
+            "Adding a master / template needs the operator's ID badge "
+            "(barcode scanner) and the authorization password "
+            f"({'any badge' if not auth['allowed_ids'] else str(len(auth['allowed_ids'])) + ' allowed IDs'}"
+            "; set in models/app_config.yaml, section ng_recovery).\n"
+            "While the popup is open the part is not reported yet.\n"
+            "Log: " + ngr.AuditLog(app.heads._head_dir(head)).path)
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+        inner.addWidget(info)
+        btns = [styled_btn(self, "Show Log", self._show_log, color="#44444e"),
+                styled_btn(self, "Cancel", self.reject, color="#44444e"),
+                styled_btn(self, "Save", self._save, color=C_ACCENT)]
+        inner.addWidget(btn_row(btns))
+        lay.addLayout(inner)
+
+    def _save(self):
+        try:
+            t = int(float(self.ed_timeout.text()))
+            if t < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            Message.warn(self, "Check the value",
+                         "The popup time must be 0 or more seconds.")
+            return
+        new = ngr.set_settings(self.app.heads, self.head,
+                               auto_recheck=self.chk_recheck.isChecked(),
+                               popup_enabled=self.chk_popup.isChecked(),
+                               popup_timeout_s=t)
+        self.app.comm_log.add(
+            "EVT", f"NG recovery settings of '{self.head}' changed "
+                   f"(MASTER): recheck {'on' if new['auto_recheck'] else 'off'}"
+                   f", popup {'on' if new['popup_enabled'] else 'off'}, "
+                   f"timeout {new['popup_timeout_s']} s")
+        Message.ok(self.parent(), "SAVED", "NG recovery settings saved.")
+        self.accept()
+
+    def _show_log(self):
+        rows = ngr.AuditLog(self.app.heads._head_dir(self.head)).read(300)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("NG recovery log")
+        dlg.resize(*fit_size(1100, 600))
+        l = QVBoxLayout(dlg)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setStyleSheet(f"background: {C_FIELD}; color: {C_TEXT};"
+                          " font-family: Consolas, monospace; font-size: 9pt;")
+        if rows:
+            txt.setPlainText("\n".join(
+                f"{r['date_time']}  {r['operator_id'] or '-':<12} "
+                f"{r['scene']}/{r['area']:<10} {r['technique']:<22} "
+                f"{r['operation']:<22} before {r['previous_result']:<3} "
+                f"training {r['training_status']:<14} after "
+                f"{r['final_result']:<16} {r['status']}"
+                + (f"  ({r['details']})" if r['details'] else "")
+                for r in reversed(rows)))
+        else:
+            txt.setPlainText("Nothing logged yet.")
+        l.addWidget(txt)
+        l.addWidget(styled_btn(dlg, "Close", dlg.accept, color=C_ACCENT))
+        dlg.exec()
+
+
+class NgRecoveryFlow:
+    """One NG recovery for one run (see the block comment above).
+    on_done(R) reports R - the latest inspection of this part."""
+
+    def __init__(self, screen, scope, plan, R, gen, on_done):
+        self.s = screen
+        self.app = screen.app
+        self.scope, self.plan, self.gen = scope, plan, gen
+        self.R = R
+        self.on_done = on_done
+        self.auth = ngr.auth_config(self.app.app_config.data)
+        self.settings = screen._ngr_settings()
+        self.audit = ngr.AuditLog(self.app.heads._head_dir(screen.head))
+        self.ops = 0
+        self.last_operator = ""
+        self.closed = False
+        self._dlg = None
+        self._wait = None
+        self._touched = False
+
+    # -- areas --------------------------------------------------------------
+    def _area(self, scene, area):
+        """Everything about one area, or None (QR check, deleted area)."""
+        try:
+            cm = self.s.parent_store.get_child_manager(scene)
+            p = cm._paths(area)
+            if not os.path.isfile(p["config"]):
+                return None
+            data = cm.load(area)
+        except Exception:
+            return None
+        if data is None:
+            return None
+        cfg = data["config"]
+        method = cfg.get("method", METHOD_NORMAL)
+        actions, why_not = ngr.recovery_actions(cfg, p["dir"]), ""
+        if method == METHOD_AIP and not aip_available()[0]:
+            actions, why_not = [], "AI Image Processing not installed"
+        elif method == METHOD_AI and not ai_available()[0]:
+            actions, why_not = [], "AI detection not installed"
+        return {"scene": scene, "area": area, "cfg": cfg, "dir": p["dir"],
+                "config_path": p["config"], "method": method,
+                "technique": ngr.technique_label(method),
+                "actions": actions, "why_not": why_not,
+                "key": f"{self.s.head}/{scene}/{area}"}
+
+    def rows(self):
+        out = []
+        for scene, area, res in ngr.ng_areas(self.R["results"]):
+            info = self._area(scene, area)
+            if info is None:
+                info = {"scene": scene, "area": area, "technique":
+                        "QR check" if str(area).startswith("QR:")
+                        else "-", "actions": [],
+                        "why_not": "Not an area"}
+            info["reason"] = res.get("reason", "")
+            out.append(info)
+        return out
+
+    def fixable(self):
+        return any(r["actions"] for r in self.rows())
+
+    # -- life cycle -----------------------------------------------------------
+    def start(self):
+        n = len(ngr.ng_areas(self.R["results"]))
+        self.s.log(f"[NG recovery] NG twice ({n} area(s)) — popup open; the "
+                   "part is reported when it closes")
+        self.app.comm_log.add("EVT", f"NG recovery popup opened on model "
+                                     f"'{self.s.head}' ({n} NG area(s))")
+        QTimer.singleShot(0, self._menu)
+
+    def raise_popup(self):
+        for d in (self._dlg, self._wait):
+            if d is not None and d.isVisible():
+                d.raise_()
+                d.activateWindow()
+
+    def abort(self, why):
+        """Leave without reporting (screen closed, client stopped the part)."""
+        if self.closed:
+            return
+        self.closed = True
+        self._close_dialogs()
+        if self.s._ngr is self:
+            self.s._ngr = None
+        self.s.log(f"[NG recovery] closed: {why} — the part is not reported")
+        self.app.comm_log.add("EVT", f"NG recovery closed on '{self.s.head}':"
+                                     f" {why}")
+
+    def _close_dialogs(self):
+        if self._dlg is not None:
+            try:
+                self._dlg.reject()
+            except Exception:
+                pass
+        if self._wait is not None:
+            self._wait.done_()
+            self._wait = None
+
+    def _finish(self, reason):
+        if self.closed:
+            return
+        self.closed = True
+        self._close_dialogs()
+        R = self.R
+        R["logs_shown"] = True
+        res = ngr.result_text(R["all_ok"])
+        self.s.log(f"[NG recovery] finished ({reason}) — {self.ops} "
+                   f"change(s); result reported: {res}")
+        self.app.comm_log.add("EVT", f"NG recovery finished on "
+                                     f"'{self.s.head}' ({reason}), "
+                                     f"{self.ops} change(s), reported {res}")
+        if self.ops:
+            self._log_row(operator_id=self.last_operator, scene="", area="",
+                          technique="", operation="Recovery finished",
+                          previous_result="NG", training_status="",
+                          final_result=f"part {res}", status="Success",
+                          details=reason)
+        elif reason.startswith("no answer") or reason.startswith("skipped"):
+            self._log_row(operator_id="", scene="", area="", technique="",
+                          operation="Popup " + ("timed out"
+                                                if reason.startswith("no")
+                                                else "skipped"),
+                          previous_result="NG", training_status="",
+                          final_result=f"part {res}", status="Skipped",
+                          details="")
+        self.on_done(R)
+
+    def _log_row(self, **row):
+        row.setdefault("model", self.s.head)
+        try:
+            r = self.audit.write(**row)
+            line = ngr.AuditLog.line(r)
+        except Exception:
+            line = f"[NG recovery] log NOT written: {row}"
+        self.s.log(line)
+        self.app.comm_log.add("EVT", line)
+
+    # -- the popup ------------------------------------------------------------
+    def _menu(self):
+        if self.closed:
+            return
+        if self.R["all_ok"]:
+            return self._finish("all areas OK")
+        rows = self.rows()
+        if not any(r["actions"] for r in rows):
+            return self._finish("nothing more can be added")
+        timeout = (self.settings["popup_timeout_s"]
+                   if not self._touched else 0)
+        dlg = NgRecoveryDialog(self.s, rows, self.R["all_ok"], self.ops,
+                               timeout)
+        self._dlg = dlg
+        dlg.exec()
+        self._dlg = None
+        if self.closed:
+            return
+        ch = dlg.choice
+        if ch[0] != "fix":
+            return self._finish("no answer in time" if dlg.timed_out else
+                                ("skipped by the operator" if not self.ops
+                                 else "operator finished"))
+        self._touched = True
+        info = self._area(ch[1], ch[2])
+        if info is None or not info["actions"]:
+            Message.warn(self.s, "CANNOT CHANGE THIS AREA",
+                         "Nothing can be added to this area.")
+            return self._menu()
+        act = info["actions"][0]
+        if act == "master":
+            self._add_master(info)
+        else:
+            self._add_box(info, act)
+
+    # -- authorisation --------------------------------------------------------
+    def _authorize(self, info, op):
+        """Scan the ID badge, then the password.  Returns the operator ID or
+        None (cancelled).  Wrong ID / password: message + try again."""
+        label = ngr.ACTION_LABEL[op]
+        where = f"{info['scene']} / {info['area']}"
+        code = None
+        while code is None:
+            if self.closed:
+                return None
+            got = QuickScanInput.ask(
+                self.s, prompt="SCAN YOUR ID BADGE",
+                sub=f"{label} — area {where}.  Scan your operator ID with "
+                    "the barcode scanner (Esc = cancel).",
+                timeout_s=int(self.auth["scan_timeout_s"]))
+            if self.closed:
+                return None
+            if not got:
+                if QuickScanInput.last_unlocked:
+                    return None
+                if Message.confirm(
+                        self.s, "NO ID SCANNED",
+                        "Nothing came from the barcode scanner.\nCheck that "
+                        "the scanner is connected, then scan your ID badge "
+                        "again.", yes="Scan again", no="Cancel",
+                        color=C_WARN):
+                    continue
+                return None
+            ok, why = ngr.validate_operator_id(self.auth, got)
+            if not ok:
+                self._auth_failed(info, op, got.strip(), "ID refused: " + why)
+                if Message.confirm(self.s, "ID NOT ACCEPTED", why,
+                                   yes="Scan again", no="Cancel",
+                                   color=C_NG):
+                    continue
+                return None
+            code = got.strip()
+        while True:
+            if self.closed:
+                return None
+            pw = ask_password(self.s, "Authorization password",
+                              f"Operator {code}: enter the password to "
+                              f"{label.lower()} ({where}).")
+            if self.closed or pw is None:
+                return None
+            if ngr.check_password(self.auth, pw):
+                self.s.log(f"[NG recovery] operator {code} authorised: "
+                           f"{label} ({where})")
+                self.last_operator = code
+                return code
+            self._auth_failed(info, op, code, "wrong password")
+            if not Message.confirm(self.s, "WRONG PASSWORD",
+                                   "That password is not correct.",
+                                   yes="Try again", no="Cancel", color=C_NG):
+                return None
+
+    def _auth_failed(self, info, op, code, why):
+        self._log_row(operator_id=code, scene=info["scene"], area=info["area"],
+                      technique=info["technique"],
+                      operation=f"Authorization failed ({ngr.ACTION_LABEL[op]})",
+                      previous_result=ngr.result_text(ngr.area_ok(
+                          self.R["results"], info["scene"], info["area"])),
+                      training_status="", final_result="",
+                      status="Failed", details=why)
+
+    # -- pictures ---------------------------------------------------------------
+    def _geo(self, info):
+        return self.R.get("geo", {}).get((info["scene"], info["area"]))
+
+    def _take_new(self, info, full, cb):
+        """Inspect the part again on a new picture (helper thread); hand the
+        area picture to cb.  The new inspection becomes the current one."""
+        def done(R2, _err):
+            if R2 is not None and R2["results"]:
+                self._use_inspection(R2, "new picture")
+            cb(ngr.area_picture(self._geo(info), full=full)
+               if R2 is not None else None)
+        self._run_bg(None, None, self._inspect_job(), done)
+
+    # -- background work --------------------------------------------------------
+    def _inspect_job(self):
+        """A job that inspects the current part on new pictures."""
+        frame0 = self.app.camera.get_frame()        # fallback picture
+        dist_thr = self.s.get_dist_thr()
+        gen = self.s._run_gen
+        return lambda: self.s._inspect(self.scope, self.plan, frame0,
+                                       dist_thr, gen)
+
+    def _run_bg(self, headline, text, job, done):
+        """job() in a helper thread; done(result, error_text) on the UI
+        thread.  A 'please wait' box while it runs (headline=None: none)."""
+        if headline:
+            self._wait = _NgWait(self.s, headline, text)
+            self._wait.show()
+            self._wait.raise_()
+
+        def work():
+            res = err = None
+            try:
+                res = job()
+            except RuntimeError as e:
+                err = str(e)
+            except Exception:
+                err = "ERROR:\n" + traceback.format_exc()
+
+            def back():
+                if self._wait is not None:
+                    self._wait.done_()
+                    self._wait = None
+                if self.closed or not self.s._alive:
+                    return
+                done(res, err)
+            self.s.after(0, back)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _use_inspection(self, R2, why):
+        """A new inspection of the current part: it is now the result."""
+        self.R = R2
+        self.s.log(f"── NG recovery: part checked again ({why}) ──")
+        for m in R2["logs"]:
+            self.s.log(m)
+        if R2["run_summary"] is not None:
+            self.s.set_big_status(R2["run_summary"][0], R2["run_summary"][1])
+        self.s._show_result_views(R2["views"], hold=False)
+
+    # -- one change, done in a helper thread ---------------------------------
+    def _change_job(self, info, apply_change, train):
+        """Build the helper-thread job of one change:
+          1. how the area does on its own master picture NOW,
+          2. back up the area, make the change, train (AI Image Processing),
+          3. the area on its master picture again - if it passed before and
+             fails now, the change is taken back completely,
+          4. inspect the current part on a new picture.
+        Any error: the area is restored.  Returns a dict for _after_change."""
+        cm = self.s.parent_store.get_child_manager(info["scene"])
+        inspect = self._inspect_job()
+        lim = self.s.get_dist_thr()
+
+        def check():
+            return ngr.master_check(cm, info["area"], info["key"],
+                                    analyze_pins, lim)
+
+        def job():
+            base_ok, _ = check()
+            bk = ngr.AreaBackup(info["dir"], info["config_path"], info["key"],
+                                info["method"])
+            out = {"rep": None, "stored": None, "regression": None,
+                   "check": "", "R2": None}
+            try:
+                out["details"] = apply_change()
+                if train:
+                    out["rep"], out["stored"] = ngr.train_aip(
+                        info["key"], info["dir"],
+                        ngr.area_masters(info["dir"]),
+                        ngr.load_templates(info["dir"]), info["cfg"])
+                after_ok, out["check"] = check()
+            except Exception:
+                bk.restore()                # nothing of it is kept
+                raise
+            if base_ok and not after_ok:
+                bk.restore()
+                out["regression"] = out["check"]
+                return out
+            out["R2"] = inspect()
+            return out
+        return job
+
+    # -- AI Image Processing: master ---------------------------------------
+    def _add_master(self, info):
+        where = f"{info['scene']} / {info['area']}"
+        op_id = self._authorize(info, "master")
+        if op_id is None:
+            return self._cancelled(info, "master")
+        dlg = NgPictureDialog(
+            self.s, f"ADD MASTER — {where}",
+            "This is the area as it was inspected. Use it as a new master "
+            "(the model is trained with it), or take a new picture first.",
+            ngr.area_picture(self._geo(info), full=True),
+            "Use as Master and Train",
+            take_new=lambda cb: self._take_new(info, True, cb))
+        self._dlg = dlg
+        dlg.exec()
+        self._dlg = None
+        if self.closed:
+            return
+        if not dlg.accepted_:
+            return self._cancelled(info, "master")
+        before = ngr.area_ok(self.R["results"], info["scene"], info["area"])
+        try:
+            masters, dropped = ngr.merge_masters(ngr.area_masters(info["dir"]),
+                                                 dlg.picture)
+        except ValueError as e:
+            self._op_row(info, "master", op_id, before, "not started", None,
+                         "Failed", str(e))
+            Message.warn(self.s, "MASTER NOT ADDED", str(e))
+            return self._menu()
+
+        def apply_change():
+            save_masters(info["dir"], masters)     # trained right after
+            return (f"master {len(masters)} of {len(masters)}"
+                    + (f", master {dropped + 1} replaced (at most "
+                       f"{MAX_MASTERS})" if dropped is not None else ""))
+
+        self._run_bg("TRAINING", f"Training {where} with {len(masters)} "
+                     "master(s), then checking the part again…",
+                     self._change_job(info, apply_change, train=True),
+                     lambda res, err: self._after_change(
+                         info, "master", op_id, before, res, err))
+
+    # -- template / AI calibration shot -----------------------------------------
+    def _add_box(self, info, op, op_id=None):
+        where = f"{info['scene']} / {info['area']}"
+        if op_id is None:                 # every addition is authorised
+            op_id = self._authorize(info, op)
+        if op_id is None:
+            return self._cancelled(info, op)
+        what = "template" if op == "template" else "calibration shot"
+        dlg = NgPictureDialog(
+            self.s, f"{ngr.ACTION_LABEL[op].upper()} — {where}",
+            "Drag a box around ONE whole object, then press "
+            f"{ngr.ACTION_LABEL[op]}.  (Right mouse button + wheel: zoom)",
+            ngr.area_picture(self._geo(info)), ngr.ACTION_LABEL[op],
+            select=True, take_new=lambda cb: self._take_new(info, False, cb))
+        self._dlg = dlg
+        dlg.exec()
+        self._dlg = None
+        if self.closed:
+            return
+        if not dlg.accepted_:
+            return self._cancelled(info, op)
+        before = ngr.area_ok(self.R["results"], info["scene"], info["area"])
+        try:
+            crop, rect = ngr.crop_template(dlg.picture, dlg.rect)
+        except ValueError as e:
+            Message.warn(self.s, "BOX NOT USABLE", str(e))
+            return self._add_box(info, op, op_id) if Message.confirm(
+                self.s, "DRAW AGAIN?", f"Draw the {what} box again?",
+                yes="Draw again", no="Cancel") else self._menu()
+        picture = dlg.picture
+
+        def apply_change():
+            if op == "template":
+                n = ngr.add_template(info["dir"], info["config_path"], crop,
+                                     rect)
+                return f"template {n + 1}"
+            n = ngr.add_calib_shot(info["dir"], picture, rect)
+            return f"calibration shot ({n} in total)"
+
+        aip = info["method"] == METHOD_AIP
+        self._run_bg(
+            "TRAINING" if aip else "CHECKING",
+            (f"Training {where} with the new template, then checking the "
+             "part again…" if aip else
+             f"Checking the part again with the new {what}"
+             + (" (the AI detector is rebuilt first)"
+                if info["method"] == METHOD_AI else "") + "…"),
+            self._change_job(info, apply_change, train=aip),
+            lambda res, err: self._after_change(info, op, op_id, before,
+                                                res, err))
+
+    # -- after a change -------------------------------------------------------------
+    def _after_change(self, info, op, op_id, before, res, err):
+        where = f"{info['scene']} / {info['area']}"
+        trained = info["method"] == METHOD_AIP
+        if err:
+            self._op_row(info, op, op_id, before,
+                         "FAILED" if trained else "-", None, "Failed",
+                         err.splitlines()[0][:200] + "; nothing changed")
+            Message.error(self.s, "TRAINING FAILED" if trained
+                          else f"{ngr.ACTION_LABEL[op].upper()} FAILED",
+                          err.splitlines()[0][:300]
+                          + "\nNothing was changed.")
+            return self._menu()
+        details = res.get("details") or ""
+        if res["regression"]:
+            self._op_row(info, op, op_id, before,
+                         "OK" if trained else "-", None, "Failed",
+                         f"{details}; taken back - the master part would "
+                         f"fail ({res['regression']})")
+            Message.error(
+                self.s, "CHANGE NOT KEPT",
+                f"{where}: with this {ngr.ACTION_LABEL[op].lower()[4:]} the "
+                f"area no longer finds its own master part "
+                f"({res['regression']}).\nThe change was taken back.")
+            return self._menu()
+        rep, stored, R2 = res["rep"], res["stored"], res["R2"]
+        train_status = ("OK" + ("" if stored else " (file not stored)")
+                        if trained else
+                        "rebuilt at recheck" if info["method"] == METHOD_AI
+                        else "not needed")
+        if R2 is not None and R2["results"]:
+            self._use_inspection(R2, f"after {ngr.ACTION_LABEL[op].lower()}")
+            now = ngr.area_ok(self.R["results"], info["scene"], info["area"])
+            final = (f"area {ngr.result_text(now)}, part "
+                     f"{ngr.result_text(self.R['all_ok'])}")
+        else:
+            now, final = None, "recheck failed"
+        self.ops += 1
+        if trained and rep:
+            details += (f"; objects found in the masters: "
+                        f"{rep.get('instances_per_master')}")
+        if res.get("check"):
+            details += f"; master part still OK ({res['check']})"
+        self._op_row(info, op, op_id, before, train_status, final, "Success",
+                     details)
+        # master trained but the area is still NG: offer the template
+        if op == "master" and now is False and "template" in info["actions"]:
+            if Message.confirm(
+                    self.s, "STILL NG AFTER THE NEW MASTER",
+                    f"{where}: the new master was trained, but the object is "
+                    "still not found.\nAdd a template of the object? (ID "
+                    "badge and password again)", yes="Add Template",
+                    no="Not now", color=C_WARN):
+                return self._add_box(info, "template")
+        if self.R["all_ok"]:
+            Message.ok(self.s, "PART OK NOW",
+                       "After the change the part is OK.", auto_ms=2500)
+            return self._finish("part OK after the change")
+        if now:
+            Message.ok(self.s, "AREA OK NOW", f"{where} is OK now.",
+                       auto_ms=2500)
+        return self._menu()
+
+    def _op_row(self, info, op, op_id, before, training, final, status,
+                details):
+        self._log_row(operator_id=op_id, scene=info["scene"],
+                      area=info["area"], technique=info["technique"],
+                      operation=ngr.OPERATION_NAME[op],
+                      previous_result=ngr.result_text(before),
+                      training_status=training,
+                      final_result=final or "-", status=status,
+                      details=details)
+
+    def _cancelled(self, info, op):
+        self.s.log(f"[NG recovery] {ngr.ACTION_LABEL[op]} for "
+                   f"{info['scene']} / {info['area']} cancelled")
+        return self._menu()
 
 
 class _Donut(QWidget):
