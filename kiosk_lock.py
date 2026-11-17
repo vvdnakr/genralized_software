@@ -1,14 +1,22 @@
 # coding=utf-8
 """
 KIOSK INPUT LOCK  -  while the program is LOCKED the keyboard and the mouse
-can only be used inside the program.
+can only be used inside the program.  The window keeps its size and place
+(it is NOT made full screen).
 
 Layers (each one works on its own, together they close the usual ways out):
-  1. the window goes full screen and stays on top; every other monitor gets
-     a "locked" cover, so the mouse can only reach this program
+  1. the MOUSE POINTER is kept inside the program window (and inside the
+     program's own popups): when it leaves, it is put back at once - so
+     nothing outside can be clicked, not even the desktop top bar / dock,
+     which are drawn above every window.  Also, everything OUTSIDE the
+     program window is covered by dark "locked" covers (the rest of this monitor, the desktop top bar, every other
+     monitor), so a mouse click outside the program does nothing.  The
+     window loses its minimise / maximise / close buttons, stays on top and
+     is put back where it was if it is minimised, moved or resized
   2. the keyboard is grabbed (X11): Alt+Tab, the Windows/Super key, Alt+F4,
-     Ctrl+Alt+... never reach the desktop.  Normal keys (and the barcode
-     scanner, which is a keyboard too) are passed on to the program
+     Alt+F7..F10 (move / resize / minimise / maximise), Ctrl+Alt+... never
+     reach the desktop.  Normal keys (and the barcode scanner, which is a
+     keyboard too) are passed on to the program
   3. GNOME desktop shortcuts and the hot corner are switched off while
      locked and restored afterwards (a backup file restores them even after
      a crash, at the next start).  This also works on Wayland, where layer 2
@@ -20,7 +28,8 @@ Master password (default 8252, stored only as a SHA-256 hash):
 
 Not blocked (done by the system itself): Ctrl+Alt+Del and switching to a
 text console with Ctrl+Alt+F1..F12 under X11 - see the notes at the end of
-this file.
+this file.  On Wayland a program may not place windows itself, so the
+covers of layer 1 need an X11 session ("Ubuntu on Xorg").
 """
 import os
 import json
@@ -29,9 +38,10 @@ import hashlib
 import threading
 import subprocess
 
-from PyQt6.QtCore import Qt, QObject, QEvent, QTimer
-from PyQt6.QtGui import QGuiApplication, QKeyEvent
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
+from PyQt6.QtCore import Qt, QObject, QEvent, QTimer, QRect
+from PyQt6.QtGui import QGuiApplication, QKeyEvent, QCursor
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout,
+                             QDialog, QSizePolicy)
 
 MASTER_DEFAULT_HASH = hashlib.sha256(b"8252").hexdigest()
 
@@ -149,24 +159,62 @@ class GnomeShortcuts:
 
 
 # ----------------------------------------------------------------------------
-# covers for the other monitors (layer 1)
+# covers: everything outside the program window (layer 1)
 # ----------------------------------------------------------------------------
 class _Shield(QWidget):
-    def __init__(self, screen):
+    """A dark cover that swallows the mouse and the keyboard."""
+
+    def __init__(self, rect, text="LOCKED"):
         super().__init__(None, Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint
-                         | Qt.WindowType.Tool)
+                         | Qt.WindowType.Tool
+                         | Qt.WindowType.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setStyleSheet("background: #101114;")
+        self.setWindowOpacity(0.82)        # the desktop shows through a bit
         lay = QVBoxLayout(self)
-        t = QLabel("LOCKED")
+        lay.setContentsMargins(0, 0, 0, 0)
+        t = QLabel(text)
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        t.setStyleSheet("color: #3a3d46; font-size: 40pt; font-weight: 800;"
-                        " letter-spacing: 8px;")
+        # the text must never make the cover bigger than its strip (it
+        # would then lie over the program window)
+        t.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        t.setMinimumSize(0, 0)
+        self.setMinimumSize(1, 1)
+        big = rect.width() > 300 and rect.height() > 120
+        t.setStyleSheet("color: #4a4d58; font-weight: 800; letter-spacing: 6px;"
+                        f" font-size: {'34pt' if big else '9pt'};")
+        t.setVisible(bool(text) and rect.width() > 60 and rect.height() > 24)
         lay.addWidget(t)
-        self.setGeometry(screen.geometry())
+        self.setGeometry(rect)
+
+    def mousePressEvent(self, e):
+        e.accept()
+
+    def mouseReleaseEvent(self, e):
+        e.accept()
+
+    def mouseDoubleClickEvent(self, e):
+        e.accept()
+
+    def wheelEvent(self, e):
+        e.accept()
 
     def keyPressEvent(self, e):
         e.accept()
+
+
+def _outside(screen_rect, win_rect):
+    """The parts of screen_rect not covered by win_rect (up to 4 rects)."""
+    s = screen_rect
+    w = win_rect.intersected(s)
+    if w.isEmpty():
+        return [s]
+    out = [QRect(s.left(), s.top(), s.width(), w.top() - s.top()),            # above
+           QRect(s.left(), w.bottom() + 1, s.width(), s.bottom() - w.bottom()),  # below
+           QRect(s.left(), w.top(), w.left() - s.left(), w.height()),         # left
+           QRect(w.right() + 1, w.top(), s.right() - w.right(), w.height())]  # right
+    return [r for r in out if r.width() > 0 and r.height() > 0]
 
 
 # ----------------------------------------------------------------------------
@@ -186,10 +234,16 @@ class InputLock(QObject):
         self.on_master_key = on_master_key
         self.log = log or (lambda msg: None)
         self._shields = []
+        self._shield_key = None
         self._timer = QTimer(self)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._keep)
+        self._mouse = QTimer(self)          # keeps the pointer inside
+        self._mouse.setInterval(15)
+        self._mouse.timeout.connect(self._confine)
         self._was_flags = None
+        self._geom = None                  # window place / size to keep
+        self._maxed = False
         self.wayland = QGuiApplication.platformName().startswith("wayland")
         self._fwd = False
 
@@ -210,21 +264,22 @@ class InputLock(QObject):
         self.engaged = True
         w = self.win
         self._was_flags = w.windowFlags()
-        # no title bar (cannot be minimised or moved), always on top.
-        # Changing the flags re-creates the window and some window managers
-        # then leave it minimised / behind: so only change them when needed,
-        # show it again at once, and push it to the front several times.
-        want = (self._was_flags | Qt.WindowType.WindowStaysOnTopHint
-                | Qt.WindowType.FramelessWindowHint)
+        self._maxed = w.isMaximized()
+        self._geom = QRect(w.geometry())
+        # the window keeps its size and place.  Title bar without the
+        # minimise / maximise / close buttons, always on top.  Changing the
+        # flags re-creates the window: put it back exactly as it was.
+        T = Qt.WindowType
+        want = ((self._was_flags | T.WindowStaysOnTopHint
+                 | T.CustomizeWindowHint | T.WindowTitleHint)
+                & ~T.WindowMinimizeButtonHint & ~T.WindowMaximizeButtonHint
+                & ~T.WindowCloseButtonHint & ~T.WindowMinMaxButtonsHint)
         if w.windowFlags() != want:
             w.setWindowFlags(want)
-        w.show()
-        w.showFullScreen()
-        w.raise_()
-        w.activateWindow()
+        self._show_as_before()
         for ms in (100, 400, 1000, 2500):
             QTimer.singleShot(ms, self._front)
-        self._cover_other_screens()
+        QTimer.singleShot(300, self._cover_outside)
         QGuiApplication.instance().focusWindowChanged.connect(
             self._focus_changed)
         QApplication.instance().installEventFilter(self)
@@ -233,17 +288,20 @@ class InputLock(QObject):
         if self.gnome is not None:
             threading.Thread(target=self.gnome.disable, daemon=True).start()
         self._timer.start()
+        self._mouse.start()
         if self.wayland:
             self.log("keyboard lock: Wayland session - desktop shortcuts are "
-                     "switched off, but a full keyboard grab needs an X11 "
-                     "session ('Ubuntu on Xorg')")
-        self.log("keyboard and mouse locked to the program")
+                     "switched off, but the full keyboard grab and the covers "
+                     "outside the window need an X11 session ('Ubuntu on "
+                     "Xorg')")
+        self.log("keyboard and mouse locked to the program window")
 
     def release(self, wait=False):
         if not self.engaged:
             return
         self.engaged = False
         self._timer.stop()
+        self._mouse.stop()
         try:
             QGuiApplication.instance().focusWindowChanged.disconnect(
                 self._focus_changed)
@@ -254,14 +312,11 @@ class InputLock(QObject):
             self.win.releaseKeyboard()
         except Exception:
             pass
-        for s in self._shields:
-            s.close()
-            s.deleteLater()
-        self._shields = []
+        self._drop_shields()
         w = self.win
         if self._was_flags is not None:
             w.setWindowFlags(self._was_flags)
-        w.showMaximized()
+        self._show_as_before()
         if self.gnome is not None:
             if wait:
                 self.gnome.restore()
@@ -271,14 +326,93 @@ class InputLock(QObject):
         self.log("keyboard and mouse free again")
 
     # -- helpers ------------------------------------------------------------------------
-    def _cover_other_screens(self):
-        mine = self.win.screen()
-        for sc in QGuiApplication.screens():
-            if sc is mine:
+    def _show_as_before(self):
+        w = self.win
+        if self._maxed:
+            w.showMaximized()
+        else:
+            w.showNormal()
+            if self._geom is not None:
+                w.setGeometry(self._geom)
+        w.raise_()
+        w.activateWindow()
+
+    def _drop_shields(self):
+        for s in self._shields:
+            s.close()
+            s.deleteLater()
+        self._shields = []
+        self._shield_key = None
+
+    def _cover_outside(self):
+        """Dark covers on every screen area outside the window."""
+        if not self.engaged:
+            return
+        fr = self.win.frameGeometry()
+        screens = QGuiApplication.screens()
+        key = (fr.x(), fr.y(), fr.width(), fr.height(),
+               tuple((sc.geometry().x(), sc.geometry().y(),
+                      sc.geometry().width(), sc.geometry().height())
+                     for sc in screens))
+        if key == self._shield_key:
+            return
+        self._drop_shields()
+        self._shield_key = key
+        for sc in screens:
+            for r in _outside(sc.geometry(), fr):
+                s = _Shield(r)
+                s.show()
+                self._shields.append(s)
+        self._raise_ours()
+
+    def _raise_ours(self):
+        """Our window and our open popups above the covers."""
+        self.win.raise_()
+        for tl in QApplication.topLevelWidgets():
+            if tl is not self.win and tl.isVisible() and \
+                    isinstance(tl, QDialog):
+                tl.raise_()
+        m = QApplication.activeModalWidget()
+        if m is not None:
+            m.raise_()
+
+    def _allowed_rects(self):
+        """Where the pointer may be: the main window and every visible
+        window of the program itself (dialogs, popups), not the covers."""
+        out = [self.win.frameGeometry()]
+        shields = set(id(s) for s in self._shields)
+        for tl in QApplication.topLevelWidgets():
+            if tl is self.win or id(tl) in shields or not tl.isVisible() \
+                    or not tl.isWindow():
                 continue
-            s = _Shield(sc)
-            s.show()
-            self._shields.append(s)
+            out.append(tl.frameGeometry())
+        m = QApplication.activeModalWidget()
+        return out, (m.frameGeometry() if m is not None else None)
+
+    def _confine(self):
+        """Pointer outside the program: put it back to the nearest point
+        inside (inside the open popup, when one is open)."""
+        if not self.engaged or self.wayland:
+            return
+        try:
+            pos = QCursor.pos()
+            rects, modal = self._allowed_rects()
+        except RuntimeError:
+            return
+        if any(r.contains(pos) for r in rects):
+            return
+        targets = [modal] if modal is not None else rects
+        best, bd = None, None
+        for r in targets:
+            if r.isEmpty():
+                continue
+            x = min(max(pos.x(), r.left() + 2), r.right() - 2)
+            y = min(max(pos.y(), r.top() + 2), r.bottom() - 2)
+            d = (x - pos.x()) ** 2 + (y - pos.y()) ** 2
+            if bd is None or d < bd:
+                best, bd = (x, y), d
+        if best is not None:
+            QCursor.setPos(best[0], best[1])
 
     def _grab(self):
         if self.engaged and QApplication.activePopupWidget() is None:
@@ -291,21 +425,19 @@ class InputLock(QObject):
             QTimer.singleShot(0, self._front)
 
     def _front(self):
-        """Bring the main window back to the front."""
+        """Bring the main window back to the front, at its own size."""
         if not self.engaged:
             return
         w = self.win
         if QApplication.activeModalWidget() is not None or \
                 QApplication.activePopupWidget() is not None:
+            self._raise_ours()
             return
         if not w.isVisible() or w.isMinimized():
-            w.showNormal()
-            w.showFullScreen()
-        elif not w.isFullScreen():
-            w.showFullScreen()
+            self._show_as_before()
         if w.isActiveWindow():
             return
-        w.raise_()
+        self._raise_ours()
         w.activateWindow()
         h = w.windowHandle()
         if h is not None:
@@ -316,16 +448,15 @@ class InputLock(QObject):
         """Some window managers refuse to give the focus back to a program;
         wmctrl / xdotool (if installed) can force it.  At most once a
         second."""
-        import shutil, subprocess, time
+        import time
         now = time.time()
         if self.wayland or now - getattr(self, "_x11_t", 0) < 1.0:
             return
         self._x11_t = now
         wid = int(self.win.winId())
         if shutil.which("wmctrl"):
-            # keep it above the other windows, then activate it
-            cmd = ["sh", "-c", f"wmctrl -i -r {hex(wid)} -b add,above,"
-                               f"fullscreen; wmctrl -i -a {hex(wid)}"]
+            cmd = ["sh", "-c", f"wmctrl -i -r {hex(wid)} -b add,above; "
+                               f"wmctrl -i -a {hex(wid)}"]
         elif shutil.which("xdotool"):
             cmd = ["xdotool", "windowactivate", str(wid)]
         else:
@@ -337,24 +468,27 @@ class InputLock(QObject):
             pass
 
     def _keep(self):
-        """Every half second: stay on top, keep the keyboard, cover screens
-        that were plugged in later."""
+        """Every quarter second: keep the window where it was, on top, with
+        the keyboard; covers follow screens plugged in later."""
         if not self.engaged:
             return
         w = self.win
-        if not w.isFullScreen():
-            w.showFullScreen()
+        if w.isMinimized() or not w.isVisible():
+            self._show_as_before()
+        elif self._maxed and not w.isMaximized():
+            w.showMaximized()
+        elif not self._maxed and self._geom is not None and \
+                w.geometry() != self._geom and not w.isMaximized():
+            w.setGeometry(self._geom)       # moved / resized: put it back
+        elif not self._maxed and w.isMaximized():
+            w.showNormal()
+            w.setGeometry(self._geom)
+        self._cover_outside()
         self._front()
         if self.grab and not self.wayland and \
                 QApplication.activePopupWidget() is None and \
                 QWidget.keyboardGrabber() is not w:
             w.grabKeyboard()
-        if len(self._shields) != len(QGuiApplication.screens()) - 1:
-            for s in self._shields:
-                s.close()
-                s.deleteLater()
-            self._shields = []
-            self._cover_other_screens()
 
     # -- keys -----------------------------------------------------------------------------
     @staticmethod
@@ -368,15 +502,22 @@ class InputLock(QObject):
             return True
         if m & META:
             return True
+        # Alt+Tab, Alt+F4 (close), Alt+F1/F2 (menus, run), Alt+F3, Alt+F5
+        # (un-maximise), Alt+F6, Alt+F7 (move), Alt+F8 (resize), Alt+F9
+        # (minimise), Alt+F10 (maximise), Alt+Esc, Alt+Space (window menu)
         if (m & ALT) and k in (
                 Qt.Key.Key_Tab, Qt.Key.Key_Backtab, Qt.Key.Key_F4,
                 Qt.Key.Key_Escape, Qt.Key.Key_Space, Qt.Key.Key_F1,
-                Qt.Key.Key_F2, Qt.Key.Key_F7, Qt.Key.Key_F8,
-                Qt.Key.Key_F10):
+                Qt.Key.Key_F2, Qt.Key.Key_F3, Qt.Key.Key_F5, Qt.Key.Key_F6,
+                Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9,
+                Qt.Key.Key_F10, Qt.Key.Key_F11, Qt.Key.Key_F12):
             return True
         if (m & CTRL) and (m & ALT):
             return True
-        if (m & CTRL) and k == Qt.Key.Key_Escape:
+        if (m & CTRL) and k in (Qt.Key.Key_Escape, Qt.Key.Key_Q,
+                                Qt.Key.Key_W):
+            return True
+        if k == Qt.Key.Key_F11:            # full-screen toggle
             return True
         return False
 
@@ -388,6 +529,9 @@ class InputLock(QObject):
                 QTimer.singleShot(0, self._front)
             elif t in (QEvent.Type.Hide, QEvent.Type.WindowDeactivate):
                 QTimer.singleShot(60, self._front)
+        if self.engaged and t == QEvent.Type.Show and \
+                isinstance(obj, QDialog) and obj.isWindow():
+            QTimer.singleShot(0, obj.raise_)      # our popups above the covers
         if not self.engaged or t not in (QEvent.Type.KeyPress,
                                          QEvent.Type.KeyRelease,
                                          QEvent.Type.ShortcutOverride):
@@ -427,4 +571,5 @@ class InputLock(QObject):
 #          Option "DontVTSwitch" "true"
 #          Option "DontZap"      "true"
 #      EndSection
-#  * best: log in with "Ubuntu on Xorg" so the keyboard grab works fully.
+#  * best: log in with "Ubuntu on Xorg" so the keyboard grab and the covers
+#    outside the window work fully.

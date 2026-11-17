@@ -1,0 +1,67 @@
+date_time,operator_id,model,scene,area,technique,operation,previous_result,training_status,final_result,status,details
+2026-11-17 13:40:17,y4,wear,asd,asdt,AI Image Processing,Authorization failed (Add Master),NG,,,Failed,ID refused: The ID is too short (at least 3 characters).
+2026-11-17 13:40:33,3678,wear,asd,asdt,AI Image Processing,Authorization failed (Add Master),NG,,,Failed,wrong password
+2026-11-17 13:40:55,3678,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,-,Failed,master 5 of 5; taken back - the master part would fail (1/2 pins on the master)
+2026-11-17 13:41:13,4677,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,-,Failed,master 5 of 5; taken back - the master part would fail (1/2 pins on the master)
+2026-11-17 13:41:19,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:42:05,8909,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,-,Failed,master 5 of 5; taken back - the master part would fail (1/2 pins on the master)
+2026-11-17 13:42:13,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:42:40,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:42:50,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:43:01,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:43:09,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:43:16,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:43:22,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:44:05,6789,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,-,Failed,master 5 of 5; taken back - the master part would fail (1/2 pins on the master)
+2026-11-17 13:44:07,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:44:17,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:51:01,23456,wear,asd,asdt,AI Image Processing,Authorization failed (Add Master),NG,,,Failed,wrong password
+2026-11-17 13:51:19,23456,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,"area NG, part NG",Success,"master 5 of 5; objects found in the masters: [2, 2, 1, 2, 2]; master part still OK (2/2 pins on the master)"
+2026-11-17 13:51:45,32456,wear,asd,asdt,AI Image Processing,Template Added,NG,OK,"area NG, part NG",Success,"template 3; objects found in the masters: [2, 2, 1, 2, 2]; master part still OK (2/2 pins on the master)"
+2026-11-17 13:52:02,3442,wear,asd,asdt,AI Image Processing,Master Added,NG,OK,"area NG, part NG",Success,"master 6 of 6; objects found in the masters: [2, 2, 1, 2, 2, 2]; master part still OK (2/2 pins on the master)"
+2026-11-17 13:52:21,43532,wear,asd,asdt,AI Image Processing,Template Added,NG,OK,"area NG, part NG",Success,"template 4; objects found in the masters: [2, 2, 1, 2, 2, 2]; master part still OK (2/2 pins on the master)"
+2026-11-17 13:52:25,43532,wear,,,,Recovery finished,NG,,part NG,Success,operator finished
+2026-11-17 13:52:32,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:52:57,1345369,wear,asd,eye,AI detection (few-shot),Template Added,NG,rebuilt at recheck,"area OK, part NG",Success,template 2; master part still OK (1/1 pins on the master)
+2026-11-17 13:53:03,1345369,wear,,,,Recovery finished,NG,,part NG,Success,operator finished
+2026-11-17 13:53:10,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:53:14,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:53:18,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:53:21,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:53:25,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:53:30,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:57:02,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:59:10,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 13:59:23,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:08:27,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:08:32,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:08:37,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:08:41,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:15:55,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:16:01,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:16:04,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:16:09,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 14:16:20,,wear,,,,Popup timed out,NG,,part NG,Skipped,
+2026-11-17 14:16:27,,wear,,,,Popup timed out,NG,,part NG,Skipped,
+2026-11-17 14:16:47,,wear,,,,Popup timed out,NG,,part NG,Skipped,
+2026-11-17 15:05:06,,wear,,,,Popup timed out,NG,,part NG,Skipped,
+2026-11-17 15:06:07,,wear,,,,Popup timed out,NG,,part NG,Skipped,
+2026-11-17 15:17:44,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:34:33,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:39:32,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:42:25,6780,wear,asd,eye,AI detection (few-shot),Template Added,NG,rebuilt at recheck,"area OK, part OK",Success,template 3; master part still OK (1/1 pins on the master)
+2026-11-17 15:42:25,6780,wear,,,,Recovery finished,NG,,part OK,Success,part OK after the change
+2026-11-17 15:43:09,7890,wear,asd,asdt,AI Image Processing,Template Added,NG,OK,"area OK, part OK",Success,"template 6; objects found in the masters: [2, 2, 1, 2, 2, 2]; master part still OK (2/2 pins on the master)"
+2026-11-17 15:43:09,7890,wear,,,,Recovery finished,NG,,part OK,Success,part OK after the change
+2026-11-17 15:45:56,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:47:11,56789,wear,asd,asdt,AI Image Processing,Pixel Limit Changed,NG,not needed,"area OK, part OK",Success,allowed change of distance between objects: 20.0 -> 20 px; master part still OK (2/2 pins on the master)
+2026-11-17 15:47:11,56789,wear,,,,Recovery finished,NG,,part OK,Success,part OK after the change
+2026-11-17 15:48:22,789,wear,asd,asdt,AI Image Processing,Pixel Limit Changed,NG,not needed,"area OK, part OK",Success,allowed change of distance between objects: 20.0 -> 25 px; master part still OK (2/2 pins on the master)
+2026-11-17 15:48:22,789,wear,,,,Recovery finished,NG,,part OK,Success,part OK after the change
+2026-11-17 15:48:40,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:48:44,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:49:13,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:50:58,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:51:16,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:51:58,,wear,,,,Popup skipped,NG,,part NG,Skipped,
+2026-11-17 15:52:04,,wear,,,,Popup skipped,NG,,part NG,Skipped,

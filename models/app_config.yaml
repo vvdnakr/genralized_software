@@ -33,7 +33,12 @@ cycle_popup:
   enabled: true
   auto_close_s: 5
 security:
-  kiosk_lock: false
+  kiosk_lock: true
   grab_keyboard: true
   gnome_shortcuts: true
   master_password_sha256: 85d12a96eaa7ad0c85a5a4faa7be55c95d82a94cbbd04de55a8daa5213a30f5a
+ng_recovery:
+  password: '89012'
+  min_id_length: 3
+  allowed_ids: []
+  scan_timeout_s: 30

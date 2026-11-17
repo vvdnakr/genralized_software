@@ -1,0 +1,8 @@
+{
+  "distance_threshold": 20,
+  "ng_recovery": {
+    "auto_recheck": true,
+    "popup_enabled": false,
+    "popup_timeout_s": 0
+  }
+}

@@ -60,10 +60,25 @@ TECHNIQUE_LABEL = {METHOD_AIP: "AI Image Processing",
                    METHOD_NORMAL: "Template matching"}
 ACTION_LABEL = {"master": "Add Master",
                 "template": "Add Template",
-                "shot": "Add Master shot (AI calibration)"}
+                "shot": "Add Master shot (AI calibration)",
+                "limit": "Change allowed distance"}
 # what the audit log calls each operation
 OPERATION_NAME = {"master": "Master Added", "template": "Template Added",
-                  "shot": "Master Shot Added"}
+                  "shot": "Master Shot Added", "limit": "Pixel Limit Changed"}
+# the technique in words an operator understands
+SIMPLE_TECH = {METHOD_AIP: "AI picture check (trained with master pictures)",
+               METHOD_AI: "AI object finder",
+               METHOD_NORMAL: "Picture matching (template)"}
+# what each button does, in plain words
+ACTION_HELP = {
+    "master": "Teaches the program this whole picture as a GOOD part. Best "
+              "when the part only looks a little different (light, colour, "
+              "small changes).",
+    "template": "Teaches the program the look of ONE object. Use it when the "
+                "object itself looks different from before.",
+    "shot": "Teaches the AI one more good picture of the object.",
+    "limit": "Use only when ALL objects were found but are a little out of "
+             "place. A bigger number lets more out-of-place parts pass."}
 MIN_TEMPLATE_PX = 8
 
 
@@ -171,11 +186,12 @@ def technique_label(method):
 
 
 def recovery_actions(cfg, area_dir):
-    """Ordered operations offered for an area: 'master', 'template', 'shot'.
-    AI Image Processing always starts with the master."""
+    """Operations offered for an area, the RECOMMENDED one first:
+    'master', 'template', 'shot'.  AI Image Processing: master recommended,
+    template also allowed."""
     method = (cfg or {}).get("method", METHOD_NORMAL)
     if method == METHOD_AIP:
-        return ["master", "template"]
+        return ["master", "template"]          # master = recommended
     if method == METHOD_AI:
         return ["shot"] if len(load_calib(area_dir)) >= 2 else ["template"]
     return ["template"]
@@ -332,6 +348,213 @@ def add_calib_shot(area_dir, picture, roi):
 
 def area_masters(area_dir):
     return load_masters(area_dir)
+
+
+# ----------------------------------------------------------------------------
+# why is it NG - in plain words
+# ----------------------------------------------------------------------------
+def _limit_range(limit, worst):
+    """(suggested, lowest, highest) for the allowed-distance editor."""
+    import math
+    limit = float(limit or 0)
+    worst = float(worst or 0)
+    suggest = int(math.ceil(max(worst * 1.15 + 1.0, limit + 1.0)))
+    hi = int(min(500, max(30, math.ceil(worst * 2.0), math.ceil(limit * 3))))
+    return suggest, 1, max(hi, suggest + 5)
+
+
+def diagnose(diag, scene_limit=None):
+    """diag = what the run kept about one area (see HeadScreen._run_group).
+    Returns {kind, text, limit (or None), worst, suggest, lo, hi, limit_key,
+    outer, outer_obj}.  kind: nested | skipped | missing | distance |
+    relation | scene_relation | other."""
+    d = diag or {}
+    out = {"kind": "other", "text": "The check said NG.", "limit": None,
+           "worst": None, "suggest": None, "lo": 1, "hi": 50,
+           "limit_key": None, "outer": None, "outer_obj": None}
+    if d.get("skipped"):
+        ins = d.get("inside")
+        if ins and "not found" in str(d["skipped"]):
+            out.update(kind="nested", outer=ins[0], outer_obj=ins[1], text=(
+                f"This area sits INSIDE object {ins[1]} of area '{ins[0]}'. "
+                f"That object was not found, so this area could not be "
+                f"checked at all.  Fix area '{ins[0]}' first - this area is "
+                "then checked again by itself."))
+        else:
+            out.update(kind="skipped", text="This area could not be checked: "
+                       + str(d["skipped"]))
+        return out
+    summ = d.get("summ") or {}
+    total = int(summ.get("total") or d.get("master_n") or 0)
+    paired = int(summ.get("paired", d.get("detected", 0)) or 0)
+    if total and paired < total:
+        miss = total - paired
+        out.update(kind="missing", text=(
+            f"The program should find {total} object(s) here but found only "
+            f"{paired}.  {miss} object(s) missing (red circles in the "
+            "picture) - the object is not there, or it looks different from "
+            "what the program learned."))
+        return out
+    if not total and not d.get("detected"):
+        out.update(kind="missing", text="Nothing was found in this area.")
+        return out
+    if summ.get("in_range", total) < total:
+        n_out = total - int(summ.get("in_range", 0))
+        if summ.get("relation"):                          # relation mode
+            lim, worst = summ.get("limit"), summ.get("max_dist", 0.0)
+            out.update(kind="relation", limit_key="relation_limit", text=(
+                f"All {total} objects were found, but {n_out} of them are "
+                "not at the right distance to the others: off by up to "
+                f"{worst:.0f} pixels, allowed {float(lim or 0):g} pixels."))
+        else:
+            lim, worst = d.get("area_thr"), summ.get("max_dist", 0.0)
+            rel = summ.get("rel")
+            if rel and float(worst) <= float(lim or 0):    # 'both': relation
+                lim, worst = rel.get("limit"), rel.get("max_dist", 0.0)
+                out.update(kind="relation", limit_key="relation_limit")
+                out["text"] = (f"All {total} objects were found, but {n_out} "
+                               "of them are not at the right distance to the "
+                               f"others: off by up to {worst:.0f} pixels, "
+                               f"allowed {float(lim or 0):g} pixels.")
+            else:
+                out.update(kind="distance", limit_key="pin_limit", text=(
+                    f"All {total} objects were found, but {n_out} of them "
+                    f"are not in their place: off by up to {worst:.0f} "
+                    f"pixels, allowed {float(lim or 0):g} pixels (red lines "
+                    "in the picture)."))
+        sug, lo, hi = _limit_range(lim, worst)
+        out.update(limit=float(lim or 0), worst=float(worst), suggest=sug,
+                   lo=lo, hi=hi)
+        return out
+    if d.get("scene_rel"):
+        nums = [float(x) for x in re.findall(r":(\d+(?:\.\d+)?)px",
+                                             str(d["scene_rel"]))]
+        worst = max(nums) if nums else 0.0
+        out.update(kind="scene_relation", limit_key="scene_relation", text=(
+            "The objects of this area are fine by themselves, but compared "
+            "with the OTHER areas they moved: off by up to "
+            f"{worst:.0f} pixels, allowed {float(scene_limit or 0):g} "
+            "pixels."))
+        sug, lo, hi = _limit_range(scene_limit, worst)
+        out.update(limit=float(scene_limit or 0), worst=worst, suggest=sug,
+                   lo=lo, hi=hi)
+        return out
+    return out
+
+
+def set_area_value(config_path, key, value):
+    """Write one setting of an area (e.g. pin_limit) into its config.json."""
+    with open(config_path) as f:
+        cfg = json.load(f)
+    old = cfg.get(key)
+    cfg[key] = value
+    tmp = config_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, config_path)
+    return old
+
+
+# ----------------------------------------------------------------------------
+# pictures for the operator
+# ----------------------------------------------------------------------------
+YELLOW, ORANGE, GREEN = (0, 220, 255), (0, 140, 255), (60, 200, 60)
+
+
+def _ascii(t):
+    return (str(t).replace("\u2014", "-").replace("\u00b7", "|")
+            .encode("ascii", "replace").decode())
+
+
+def _label(img, text, x, y, col, scale=None):
+    h, w = img.shape[:2]
+    scale = scale or max(0.5, min(1.4, w / 1100.0))
+    th = max(1, int(round(2 * scale)))
+    (tw, tht), _ = cv2.getTextSize(_ascii(text), cv2.FONT_HERSHEY_SIMPLEX,
+                                   scale, th)
+    x = int(max(0, min(x, w - tw - 8)))
+    y = int(max(tht + 8, y))
+    cv2.rectangle(img, (x, y - tht - 8), (x + tw + 8, y + 4), col, -1)
+    cv2.putText(img, _ascii(text), (x + 4, y - 2), cv2.FONT_HERSHEY_SIMPLEX,
+                scale, (0, 0, 0), th, cv2.LINE_AA)
+
+
+def highlight_area(img, geo, label, top=0):
+    """Copy of img with a thick YELLOW box where the area was checked (the
+    camera picture; `top` = height of a banner above it)."""
+    out = img.copy()
+    if not geo or geo.get("roi") is None:
+        return out
+    s = float(geo.get("scale") or 1.0)
+    x0, y0, x1, y1 = [int(round(v / s)) for v in geo["roi"]]
+    t = max(3, int(out.shape[1] / 300))
+    cv2.rectangle(out, (x0 - t, y0 + top - t), (x1 + t, y1 + top + t),
+                  YELLOW, t, cv2.LINE_AA)
+    _label(out, label, x0 - t, y0 + top - t - 4, YELLOW)
+    return out
+
+
+def _template_is_here(region, tmpl, rect, min_corr=0.85):
+    """True when the template was cut from `region` at `rect`."""
+    if tmpl is None or region is None:
+        return False
+    x, y, w, h = [int(v) for v in rect]
+    if x < 0 or y < 0 or w < 2 or h < 2:
+        return False
+    crop = region[y:y + h, x:x + w]
+    if crop.shape != tmpl.shape:
+        return False
+    if np.array_equal(crop, tmpl):
+        return True
+    a = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+    b = cv2.cvtColor(tmpl, cv2.COLOR_BGR2GRAY) if tmpl.ndim == 3 else tmpl
+    r = cv2.matchTemplate(a.astype(np.float32), b.astype(np.float32),
+                          cv2.TM_CCOEFF_NORMED)
+    v = float(r[0, 0]) if r.size else 0.0
+    return np.isfinite(v) and v >= min_corr
+
+
+def reference_picture(child_manager, area):
+    """'What we look for': the area's master picture with every object it
+    must find (green, numbered) and the template(s) (orange).  Returns
+    (picture or None, [template crops], number of objects)."""
+    data = child_manager.load(area)
+    if data is None or data.get("region") is None or not data["region"].size:
+        return None, [], 0
+    cfg = data["config"]
+    img = data["region"].copy()
+    k = 1.0
+    if max(img.shape[:2]) < 500:                    # small: draw it bigger
+        k = 500.0 / max(img.shape[:2])
+        img = cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_CUBIC)
+    t = max(2, int(img.shape[1] / 350))
+    for i, m in enumerate(cfg.get("matches") or []):
+        (ax, ay), (bx, by) = m["top_left"], m["bottom_right"]
+        p1 = (int(ax * k), int(ay * k))
+        p2 = (int(bx * k), int(by * k))
+        cv2.rectangle(img, p1, p2, GREEN, t, cv2.LINE_AA)
+        _label(img, str(i + 1), p1[0], p1[1] - 2, GREEN, scale=0.6)
+    region = data["region"]
+    tmpls = data["templates"]
+    for j, r in enumerate((cfg.get("temp_reg") or [])[:1]):
+        # only the MAIN template (the one taught on this master picture);
+        # templates added later are not shown
+        if j >= len(tmpls) or not _template_is_here(region, tmpls[j], r):
+            continue
+        x, y, w, h = [int(v * k) for v in r]
+        cv2.rectangle(img, (x, y), (x + w, y + h), ORANGE, t + 1, cv2.LINE_AA)
+        _label(img, f"TEMPLATE {j + 1}", x, y + h + 26, ORANGE, scale=0.6)
+    n = len(cfg.get("matches") or [])
+    head = np.full((46, img.shape[1], 3), (40, 40, 40), np.uint8)
+    cap = f"LOOK FOR: {n} object(s) (green) like the TEMPLATE (orange)"
+    sc = 0.8                                        # shrink until it fits
+    while sc > 0.35 and cv2.getTextSize(cap, cv2.FONT_HERSHEY_SIMPLEX, sc,
+                                        2)[0][0] > img.shape[1] - 20:
+        sc -= 0.05
+    cv2.putText(head, cap, (10, 31), cv2.FONT_HERSHEY_SIMPLEX, sc,
+                (255, 255, 255), 2 if sc > 0.5 else 1, cv2.LINE_AA)
+    templates = [x for x in data["templates"][:1] if x is not None]
+    return np.vstack([head, img]), templates, n
 
 
 # ----------------------------------------------------------------------------

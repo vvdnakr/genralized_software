@@ -11,6 +11,18 @@
       82,
       184,
       83
+    ],
+    [
+      11,
+      35,
+      223,
+      101
+    ],
+    [
+      53,
+      140,
+      191,
+      82
     ]
   ],
   "threshold": 0.8,
@@ -22,24 +34,24 @@
   "max_matches": 2,
   "matches": [
     {
-      "score": 0.9999997848768568,
-      "scale": 0.8949768789841233,
+      "score": 0.9836586386538724,
+      "scale": 0.9452258561582596,
       "top_left": [
-        37,
-        74
+        -43,
+        93
       ],
       "bottom_right": [
-        206,
-        154
+        189,
+        215
       ],
       "center": [
-        121,
-        114
+        73,
+        154
       ]
     }
   ],
   "method": "ai",
-  "ai_mode": "auto",
+  "ai_mode": "both",
   "ai_score": 0.7,
   "ai_max_angle": 180.0,
   "ai_speed": "accurate",
@@ -53,5 +65,5 @@
   "aip_harvest": true,
   "pin_limit": 20.0,
   "position_check": "relation",
-  "relation_limit": 8.0
+  "relation_limit": 20.0
 }

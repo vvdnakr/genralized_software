@@ -5,6 +5,7 @@ os.environ["QT_XCB_FORCE_SOFTWARE_OPENGL"] = "1"
 os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
 import html
 import json
+import math
 import re
 import shutil
 import time
@@ -23,7 +24,8 @@ try:                      # optional: precise Ethernet link detection
 except ImportError:       # pip install psutil
     psutil = None
 
-from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
+from PyQt6.QtCore import (Qt, QTimer, QRectF, QPointF, pyqtSignal,
+                          QObject, QEvent)
 from PyQt6.QtGui import (QImage, QPixmap, QPainter, QColor, QPen, QFont,
                          QBrush, QCursor, QShortcut, QKeySequence,
                          QPainterPath, QLinearGradient)
@@ -31,7 +33,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QDialog, QLabel, QPushButton,
     QLineEdit, QTextEdit, QCheckBox, QComboBox, QVBoxLayout, QHBoxLayout,
     QGridLayout, QGroupBox, QMessageBox, QInputDialog, QTreeWidget,
-    QTreeWidgetItem, QScrollArea, QSizePolicy, QListWidget)
+    QTreeWidgetItem, QScrollArea, QSizePolicy, QListWidget, QSlider,
+    QSpinBox)
 
 from vision_detect import (
     METHOD_NORMAL, METHOD_AI, SCALES, AI_SPEEDS, ai_available,
@@ -495,6 +498,8 @@ class HeadManager:
                 for k in d:
                     if k in saved:
                         d[k] = saved[k]
+                for k, v in saved.items():      # dashboard extras (recheck,
+                    d.setdefault(k, v)          # mes): keep them on save
             except (json.JSONDecodeError, OSError):
                 pass
         return d
@@ -531,6 +536,29 @@ class HeadManager:
             json.dump({"cycle": {"ok": 0, "ng": 0},
                        "scenes": {}, "areas": {}}, f, indent=2)
 
+    def add_extra_count(self, head, group, key):
+        """Small extra counters for the dashboard, e.g. ('recheck', 'saved')
+        or ('mes', 'failed').  Kept in counters.json next to the others."""
+        p = self._counters_path(head)
+        c = {}
+        if os.path.isfile(p):
+            try:
+                with open(p) as f:
+                    c = json.load(f) or {}
+            except (json.JSONDecodeError, OSError):
+                c = {}
+        g = c.setdefault(group, {})
+        g[key] = int(g.get(key, 0)) + 1
+        with open(p, "w") as f:
+            json.dump(c, f, indent=2)
+
+    def get_extra_counts(self, head, group):
+        try:
+            with open(self._counters_path(head)) as f:
+                return dict((json.load(f) or {}).get(group) or {})
+        except (OSError, json.JSONDecodeError):
+            return {}
+
     # -- finished cycles (for the dashboard), last 300 kept ------------------
     def _cycles_path(self, head):
         return os.path.join(self._head_dir(head), "cycle_history.json")
@@ -551,6 +579,21 @@ class HeadManager:
                 json.dump(items[-keep:], f)
         except OSError:
             pass
+
+    def update_cycle_record(self, head, rid, **fields):
+        """Change a stored cycle (found by its id), e.g. the MES state that
+        is known only after the upload."""
+        items = self.get_cycles(head)
+        for rec in reversed(items):
+            if rec.get("id") == rid:
+                rec.update(fields)
+                try:
+                    with open(self._cycles_path(head), "w") as f:
+                        json.dump(items, f)
+                except OSError:
+                    pass
+                return rec
+        return None
 
 
 # ============================================================================
@@ -1014,7 +1057,10 @@ class CommConfig:
     #   BACK        = exact signal -> popup "go back to models / continue"
     #   ERROR_PREFIX / WARN_PREFIX = any message that STARTS with it is shown
     #   in a popup (with the text after the prefix) and asks the same
-    EVENT_FIELDS = ["ASK_MODEL", "BACK", "ERROR_PREFIX", "WARN_PREFIX"]
+    #   MES_FAIL    = we send it instead of the last scene's result when
+    #                 the MES upload of the part failed
+    EVENT_FIELDS = ["ASK_MODEL", "BACK", "ERROR_PREFIX", "WARN_PREFIX",
+                    "MES_FAIL"]
 
     def __init__(self, heads: HeadManager, head_name: str):
         self.heads = heads
@@ -1027,7 +1073,7 @@ class CommConfig:
         d = {"head": {"SELECT": "", "OK": "", "NG": ""},
              "qr": {"REQ": "", "TRIGGER": "", "OK": "", "NG": ""},
              "events": {"ASK_MODEL": "", "BACK": "", "ERROR_PREFIX": "",
-                        "WARN_PREFIX": ""},
+                        "WARN_PREFIX": "", "MES_FAIL": ""},
              "parents": {}}
         for p, children in structure.items():
             d["parents"][p] = {
@@ -1599,6 +1645,9 @@ def banner(width, text, ok=None, height=52):
         ((60, 150, 40) if ok else (50, 40, 200))
     img = np.zeros((height, width, 3), np.uint8)
     img[:] = color
+    # OpenCV draws only plain ASCII ("—" / "·" came out as "???")
+    text = (str(text).replace("\u2014", "-").replace("\u2013", "-")
+            .replace("\u00b7", "|").encode("ascii", "replace").decode())
     cv2.putText(img, text, (14, height - 17), cv2.FONT_HERSHEY_SIMPLEX,
                 0.95, (255, 255, 255), 2, cv2.LINE_AA)
     return img
@@ -2923,6 +2972,10 @@ class App(QMainWindow):
         scr = getattr(self, "current_screen", None)
         if scr is None or not getattr(scr, "_alive", False) or \
                 not hasattr(scr, "cycle_scene_results"):
+            return False
+        # the part's final result has gone to the machine: the machine may
+        # now disconnect (it often does right away) - that is not an error
+        if getattr(scr, "part_done", False) and not scr.busy:
             return False
         return bool(scr.busy
                     or scr.cycle_scene_results
@@ -4493,6 +4546,10 @@ class HeadScreen(BaseScreen):
         # that finished last (shown under Details and in the Dashboard)
         self.cycle_areas = {}          # {scene: {area: bool}}
         self.cycle_started = None      # "HH:MM:SS" of the first result
+        self.cycle_t0 = None           # time.time() of the first result
+        self.cycle_rechecks = [0, 0]   # second checks this part: [saved, still NG]
+        self.part_done = False         # final result of the part sent
+        self._pending_send = None      # last scene's result, held for MES
         self.prev_cycle = None
         recent = app.heads.get_cycles(head_name)
         if recent:
@@ -5411,6 +5468,7 @@ class HeadScreen(BaseScreen):
     def _track_areas(self, results):
         if self.cycle_started is None:
             self.cycle_started = datetime.datetime.now().strftime("%H:%M:%S")
+            self.cycle_t0 = time.time()
         for sc, areas in results.items():
             for a, r in (areas or {}).items():
                 self.cycle_areas.setdefault(sc, {})[a] = bool(r["ok"])
@@ -5421,10 +5479,20 @@ class HeadScreen(BaseScreen):
                or datetime.datetime.now().strftime("%H:%M:%S"),
                "date": datetime.date.today().isoformat(),
                "ok": bool(all_ok), "validation": bool(validation),
-               "scenes": {sc: dict(ar) for sc, ar in self.cycle_areas.items()}}
+               "scenes": {sc: dict(ar) for sc, ar in self.cycle_areas.items()},
+               "id": f"{time.time():.3f}",
+               "end": datetime.datetime.now().strftime("%H:%M:%S"),
+               "seconds": (round(time.time() - self.cycle_t0, 1)
+                           if self.cycle_t0 else None),
+               "rechecked_ok": self.cycle_rechecks[0],
+               "rechecked_ng": self.cycle_rechecks[1],
+               "mes": ("validation" if validation else
+                       "sending" if self._mes_will_upload() else
+                       "off" if not self.mes_active else "not sent")}
         self.prev_cycle = rec
         self.app.heads.add_cycle_record(self.head, rec)
         self.cycle_areas, self.cycle_started = {}, None
+        self.cycle_t0, self.cycle_rechecks = None, [0, 0]
         if self._dash is not None:
             self._dash.refresh()
 
@@ -5814,16 +5882,17 @@ class HeadScreen(BaseScreen):
                                                     "Pin Bend")),
                     "description": desc,
                 })
+        # pictures: per SCENE one raw camera picture + one result picture
+        # with the boxes (no pin map, no combined picture)
+        scene_imgs = {}
         if self.mes_cfg.get("upload_images", True):
-            for key in ("result", "pins"):
-                img = views.get(key)
-                if img is not None:
-                    label = f"{name} [{key}]".replace("/", "-")
-                    images.append((label, img.copy()))
+            for scene, sv in (views.get("scenes") or {}).items():
+                scene_imgs[scene] = (sv["raw"].copy(), sv["proc"].copy())
         self.cycle_runs = [r for r in self.cycle_runs
                            if not self._scope_covers(scope, r["scope"])]
         self.cycle_runs.append({"scope": scope, "lines": lines,
-                                "defects": defects, "images": images})
+                                "defects": defects, "images": images,
+                                "scene_images": scene_imgs})
         cam = views.get("camera")
         if cam is not None:
             self.cycle_camera = cam.copy()      # always the latest run
@@ -5831,14 +5900,18 @@ class HeadScreen(BaseScreen):
     def _mes_flatten(self):
         """cycle_runs -> the lists the submission uses."""
         lines, defects, images = [], [], []
+        latest = {}                     # scene -> pictures of its LAST run
         for r in self.cycle_runs:
             lines += r["lines"]
             defects += r["defects"]
             images += r["images"]
-        up = self.app.app_config.data.get("mes_upload", {})
-        if (self.cycle_camera is not None and up.get("include_camera_view", True)
-                and self.mes_cfg.get("upload_images", True)):
-            images.insert(0, ("camera view", self.cycle_camera))
+            latest.update(r.get("scene_images") or {})
+        order = self.app.heads.list_parents(self.head)
+        for scene in sorted(latest, key=lambda sc: (
+                order.index(sc) if sc in order else len(order), sc)):
+            raw, proc = latest[scene]
+            images.append((f"{scene} raw", raw))
+            images.append((f"{scene} result", proc))
         self.cycle_report_lines, self.cycle_defects = lines, defects
         self.cycle_images = images
 
@@ -5867,6 +5940,7 @@ class HeadScreen(BaseScreen):
         images = list(self.cycle_images)
         report_lines = list(self.cycle_report_lines)
         defects = list(self.cycle_defects)
+        rid = (self.prev_cycle or {}).get("id")     # record of this part
         self.mes_busy = True
         prev_state, prev_msg = self.mes_prev_state, self.mes_prev_msg
         self._set_mes_status("sending", f"report for '{serial}'…")
@@ -5949,6 +6023,18 @@ class HeadScreen(BaseScreen):
                 self.mes_busy = False
                 if not self._alive:
                     return
+                m = str(msg)
+                offline = (not ok and (m.startswith("MES login failed")
+                                       or m.startswith("mes_client not")))
+                state = "sent" if ok else "offline" if offline else "failed"
+                self.app.heads.add_extra_count(self.head, "mes", state)
+                if rid:
+                    self.app.heads.update_cycle_record(self.head, rid,
+                                                       mes=state)
+                    if self.prev_cycle and self.prev_cycle.get("id") == rid:
+                        self.prev_cycle["mes"] = state
+                # the last scene's result goes to the machine NOW
+                self._mes_finished(state, m)
                 if ok:
                     self._set_mes_status("sent", str(msg))
                     self.log(f"[MES] OK stage report accepted - {msg}")
@@ -6594,6 +6680,7 @@ class HeadScreen(BaseScreen):
             self.app.comm_log.add("EVT", f"VALIDATION cycle '{serial}' "
                                          f"{'OK' if all_ok else 'NG'} — not "
                                          "sent to MES")
+            self._mes_finished("skipped")
             self._start_next_cycle()
             return
         # MES first: the next unit may only be scanned once this one has been
@@ -6603,6 +6690,7 @@ class HeadScreen(BaseScreen):
                                                                   all_ok):
             self.log("[scanner] cycle complete — waiting for MES…")
             return
+        self._mes_finished("skipped")
         if self.scan_active:
             self.log("[scanner] cycle complete — scan next barcode")
         self._start_next_cycle()
@@ -6948,6 +7036,7 @@ class HeadScreen(BaseScreen):
             self.log("Nothing to run — model has no scenes.")
             return
         self.busy = True
+        self.part_done = False
         dist_thr = self.get_dist_thr()
         name = "/".join(scope) if scope[0] != "head" else "MODEL (all scenes)"
         self.log(f"\n── RUN {name}  [{source}] · thr {dist_thr:g}px ──")
@@ -7006,6 +7095,10 @@ class HeadScreen(BaseScreen):
         proc = np.ones_like(frame)
         child_boxes = []
         pin_overlays = []
+        # the same drawing again, per scene: {scene: {pastes, pins, boxes}}
+        # -> one result picture per scene (MES gets one raw + one result
+        #    picture for every scene)
+        scene_parts = {}
         any_output = False
         stop = (lambda: gen is not None and gen != self._run_gen)
         for parent_name, child_filter in plan:
@@ -7018,6 +7111,9 @@ class HeadScreen(BaseScreen):
                 logs.append(f"[{parent_name}] no loadable areas.")
                 continue
             results[parent_name] = {}
+            sp = scene_parts.setdefault(parent_name,
+                                        {"pastes": [], "pins": [],
+                                         "boxes": []})
             sc = get_scene_scale(self.parent_store, parent_name)
             k = 1.0 / sc                      # scene px -> camera picture px
             sframe = scale_frame(frame, sc)
@@ -7057,7 +7153,16 @@ class HeadScreen(BaseScreen):
                     geo[(parent_name, child_name)] = {
                         "frame": frame, "scale": sc,
                         "origin": r.get("origin"), "roi": r.get("roi"),
-                        "reg": dict(children_data)[child_name]["reg"]}
+                        "reg": dict(children_data)[child_name]["reg"],
+                        # why it is OK / NG (NG recovery explains it)
+                        "diag": {"skipped": r.get("skipped"),
+                                 "inside": r.get("inside"),
+                                 "summ": r.get("summ"),
+                                 "area_thr": r.get("area_thr"),
+                                 "position_check": r.get("position_check"),
+                                 "scene_rel": r.get("scene_rel"),
+                                 "master_n": r.get("master_n"),
+                                 "detected": len(r.get("matches") or [])}}
                 tag = {METHOD_AI: " [AI]", METHOD_AIP: " [AI trained]"}.get(
                     r.get("method"), "")
                 if r.get("skipped"):
@@ -7071,6 +7176,7 @@ class HeadScreen(BaseScreen):
                                           for v in r["roi"]]
                         child_boxes.append((x0, y0, x1 - x0, y1 - y0,
                                             f"{child_name} NG", False))
+                        sp["boxes"].append(child_boxes[-1])
                         any_output = True
                     continue
                 matches, output, mask = r["matches"], r["output"], r["mask"]
@@ -7147,6 +7253,7 @@ class HeadScreen(BaseScreen):
                     oh = min(output.shape[0], Y1 - Y0)
                     ow = min(output.shape[1], X1 - X0)
                     out_frame[Y0:Y0 + oh, X0:X0 + ow] = output[:oh, :ow]
+                    sp["pastes"].append((X0, Y0, output[:oh, :ow]))
                     if mask is not None:
                         mh = min(mask.shape[0], y1 - y0)
                         mw = min(mask.shape[1], x1 - x0)
@@ -7168,6 +7275,7 @@ class HeadScreen(BaseScreen):
                     (X0, Y0, X1 - X0, Y1 - Y0,
                      f"{child_name} {'OK' if ok else 'NG'} "
                      f"{count_txt}{shift_txt}", ok))
+                sp["boxes"].append(child_boxes[-1])
                 if summ.get("relation"):
                     # show where each object should be NOW: its master
                     # place moved by the shift of the whole group
@@ -7183,17 +7291,20 @@ class HeadScreen(BaseScreen):
                                            p["current"][1] * k)))
                             for p in pins]
                 pin_overlays.append((pins, ox * k, oy * k, area_thr))
+                sp["pins"].append(pin_overlays[-1])
                 any_output = True
 
             # camera QR scanners of this scene (full-scene / model runs)
             if self.qr_camera and child_filter is None:
+                n0 = len(child_boxes)
                 if self._qr_scene_checks(parent_name, frame_w, frame_h,
                                          results, child_boxes, logs):
                     any_output = True
+                sp["boxes"].extend(child_boxes[n0:])
 
         return {"frame": frame, "out_frame": out_frame, "proc": proc,
                 "child_boxes": child_boxes, "pin_overlays": pin_overlays,
-                "any_output": any_output}
+                "scene_parts": scene_parts, "any_output": any_output}
 
     def _camera_groups(self, plan, frame, logs, drift_msgs):
         """Split the run by camera + settings set; one picture per group.
@@ -7288,6 +7399,7 @@ class HeadScreen(BaseScreen):
                         label_box(g["out_frame"], bx, by, bw, bh, text, ok)
                         label_box(g["proc"], bx, by, bw, bh, text, ok)
                     g["ok"] = all(b[5] for b in g["child_boxes"])
+            views["scenes"] = self._scene_views(parts, results)
             outs = [g for g in parts if g["any_output"]]
             if outs:
                 # the picture shown: the first camera that failed, else
@@ -7321,6 +7433,37 @@ class HeadScreen(BaseScreen):
         return {"logs": logs, "results": results, "views": views,
                 "run_summary": run_summary, "drift_msgs": drift_msgs,
                 "geo": geo, "all_ok": ngr.overall_ok(results)}
+
+    @staticmethod
+    def _scene_views(parts, results):
+        """One RAW picture (the camera picture, nothing drawn) and one RESULT
+        picture (only this scene's boxes / labels) per scene."""
+        out = {}
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        for g in parts:
+            for scene, sp in (g.get("scene_parts") or {}).items():
+                if g["frame"] is None:
+                    continue
+                img = g["frame"].copy()
+                H, W = img.shape[:2]
+                for X0, Y0, crop in sp["pastes"]:
+                    h = min(crop.shape[0], H - Y0)
+                    w = min(crop.shape[1], W - X0)
+                    if h > 0 and w > 0:
+                        img[Y0:Y0 + h, X0:X0 + w] = crop[:h, :w]
+                for pins, ox, oy, athr in sp["pins"]:
+                    draw_pin_overlay(img, pins, ox, oy, athr)
+                for (bx, by, bw, bh, text, ok) in sp["boxes"]:
+                    label_box(img, bx, by, bw, bh, text, ok)
+                areas = results.get(scene) or {}
+                ok = bool(areas) and all(r.get("ok") for r in areas.values())
+                n_ok = sum(1 for r in areas.values() if r.get("ok"))
+                txt = (f"SCENE {scene}  —  {'OK' if ok else 'NG'}   "
+                       f"({n_ok}/{len(areas)} areas OK)  {stamp}")
+                out[scene] = {"raw": g["frame"],
+                              "proc": np.vstack([banner(W, txt, ok), img]),
+                              "ok": ok}
+        return out
 
     def _ngr_settings(self):
         """NG recovery settings of this model (see ng_recovery.py)."""
@@ -7440,11 +7583,11 @@ class HeadScreen(BaseScreen):
             self._mes_collect(scope, logs, views, results)
             self.app.heads.add_result_counts(self.head, scope, results)
             self._track_areas(results)
-            try:
-                self.app.engine.send_results(self.comm_cfg, scope,
-                                             results)
-            except Exception:
-                self.log("send_results ERROR:\n" + traceback.format_exc())
+            if R.get("rechecked"):            # dashboard: second checks
+                saved = bool(R.get("all_ok"))
+                self.cycle_rechecks[0 if saved else 1] += 1
+                self.app.heads.add_extra_count(
+                    self.head, "recheck", "saved" if saved else "still_ng")
             # --- cycle tracking: mark each FULLY-run scene, and when
             #     every scene of the model has been run -> one cycle
             for scene in full_scenes:
@@ -7452,8 +7595,18 @@ class HeadScreen(BaseScreen):
                     self.cycle_scene_results[scene] = all(
                         r["ok"] for r in results[scene].values())
             all_scenes = set(self.app.heads.list_parents(self.head))
-            if all_scenes and all_scenes <= set(
-                    self.cycle_scene_results):
+            cycle_done = bool(all_scenes) and all_scenes <= set(
+                self.cycle_scene_results)
+            # the LAST scene of the part: when the part goes to MES, its
+            # result is sent to the machine only after the MES upload
+            # (_mes_finished).  Otherwise it is sent now, as always.
+            if cycle_done and self._mes_will_upload():
+                self._pending_send = (scope, results)
+                self.log("[MES] last scene done — its result goes to the "
+                         "machine after the MES upload")
+            else:
+                self._send_results(scope, results, final=cycle_done)
+            if cycle_done:
                 cycle_ok = all(self.cycle_scene_results[s]
                                for s in all_scenes)
                 self.app.heads.add_cycle_count(self.head, cycle_ok)
@@ -7478,6 +7631,52 @@ class HeadScreen(BaseScreen):
     # ------------------------------------------------------------------
     # NG RECOVERY settings (MASTER mode only)
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # results to the machine (client)
+    # ------------------------------------------------------------------
+    def _send_results(self, scope, results, final=False):
+        try:
+            self.app.engine.send_results(self.comm_cfg, scope, results)
+        except Exception:
+            self.log("send_results ERROR:\n" + traceback.format_exc())
+        if final:
+            # the part is finished for the machine: if it disconnects now,
+            # that is normal (no 'machine disconnected' popup)
+            self.part_done = True
+
+    def _mes_will_upload(self):
+        """True when the finished part will be uploaded to MES (then the
+        last scene's result waits for the upload)."""
+        return bool(self.mes_active and self.mes is not None
+                    and not self.validation_mode and self.scan_value)
+
+    def _mes_finished(self, outcome, msg=""):
+        """The MES upload of the part is over: send the held result.
+        outcome: 'sent' | 'failed' (MES answered, upload/report failed) |
+        'offline' (MES not connected: send as if MES were not used) |
+        'skipped' (nothing was uploaded)."""
+        held, self._pending_send = self._pending_send, None
+        if held is None:
+            return
+        scope, results = held
+        if outcome == "failed":
+            sig = str(self.comm_cfg.data.get("events", {})
+                      .get("MES_FAIL", "") or "").strip()
+            if sig:
+                self.app.engine.send(sig, why="MES upload failed")
+                self.part_done = True
+                self.log(f"[MES] upload failed — sent '{sig}' to the "
+                         "machine instead of the result")
+                self.app.comm_log.add("EVT", f"MES upload failed — sent "
+                                             f"'{sig}' instead of the result")
+                return
+            self.log("[MES] upload failed and no 'MES upload failed' signal "
+                     "is set (Communication > Machine messages) — the "
+                     "result is sent as usual")
+        elif outcome == "offline":
+            self.log("[MES] not connected — the result is sent as usual")
+        self._send_results(scope, results, final=True)
+
     def open_ng_recovery_cfg(self):
         if not self.app.setup_open():
             pw = ask_password(self, "Master password",
@@ -7563,7 +7762,10 @@ class NgPictureDialog(QDialog):
         self.setWindowTitle(headline)
         self.setModal(True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.resize(*fit_size(900, 680))
+        scr = (parent.screen() if parent is not None else None) or \
+            QApplication.primaryScreen()
+        ag = scr.availableGeometry()
+        self.resize(int(ag.width() * 0.9), int(ag.height() * 0.9))
         _premium_dialog(self, C_ACCENT)
         self.picture = picture
         self.rect = None
@@ -7585,6 +7787,7 @@ class NgPictureDialog(QDialog):
         self.canvas.select_enabled = select
         self.canvas.on_rect_drawn = self._drawn
         lay.addWidget(self.canvas, 1)
+        lay.addWidget(zoom_controls(self, self.canvas))
         row = QHBoxLayout()
         row.setContentsMargins(18, 10, 18, 14)
         row.setSpacing(10)
@@ -7656,81 +7859,244 @@ class NgPictureDialog(QDialog):
         self.accept()
 
 
-class NgRecoveryDialog(QDialog):
-    """The NG popup: the NG areas and what can be added to each.
-    choice = ("fix", scene, area) | ("finish",);  timed_out = True when the
-    countdown ended it."""
+def place_clear_of(dlg, target, margin=8):
+    """Move a popup so it does NOT cover `target` (the camera view): into
+    the widest free strip of the screen beside / below it, narrowing the
+    popup to that strip when it can.  No free room: bottom-right corner."""
+    try:
+        if target is None or not target.isVisible():
+            return
+        g = target.mapToGlobal(target.rect().topLeft())
+        tx, ty, tw, th = g.x(), g.y(), target.width(), target.height()
+        scr = (target.screen() or QApplication.primaryScreen())
+        a = scr.availableGeometry()
+    except RuntimeError:
+        return
+    ax, ay, aw, ah = a.x(), a.y(), a.width(), a.height()
+    strips = [(tx + tw, ay, ax + aw - (tx + tw), ah),        # right
+              (ax, ay, tx - ax, ah),                         # left
+              (ax, ty + th, aw, ay + ah - (ty + th)),        # below
+              (ax, ay, aw, ty - ay)]                         # above
+    dw, dh = dlg.width(), dlg.height()
 
-    def __init__(self, parent, rows, part_ok, n_ops, timeout_s=0):
+    def score(st):
+        x, y, w, h = st
+        fits = w >= dw + 2 * margin and h >= dh + 2 * margin
+        return (fits, min(w, dw) * min(h, dh))
+    x, y, w, h = max(strips, key=score)
+    if w < 260 or h < 140:
+        dlg.move(ax + aw - dw - margin, ay + ah - dh - margin)
+        return
+    if dw > w - 2 * margin:                  # narrow it to the strip
+        dlg.setMinimumWidth(0)
+        nw = max(dlg.minimumSizeHint().width(), w - 2 * margin)
+        dlg.resize(nw, dlg.heightForWidth(nw) if dlg.hasHeightForWidth()
+                   else dlg.sizeHint().height())
+        dw, dh = dlg.width(), dlg.height()
+    dh = min(dh, h - 2 * margin) if h > dh else dh
+    dlg.move(x + max(margin, (w - dw) // 2),
+             y + max(margin, (h - dh) // 2))
+
+
+class _NgPlacer(QObject):
+    """While an NG recovery is open: every popup it opens (scan box,
+    password, questions, 'please wait', the NG list) is placed beside the
+    camera view, never over it.  The picture dialog (master / template) is
+    the exception - it shows the part itself."""
+
+    def __init__(self, target):
+        super().__init__()
+        self.target = target
+
+    def eventFilter(self, obj, ev):
+        if (ev.type() == QEvent.Type.Show and isinstance(obj, QDialog)
+                and obj.isWindow()
+                and not isinstance(obj, (NgPictureDialog, NgRecoveryDialog))):
+            QTimer.singleShot(0, lambda o=obj: self._place(o))
+        return False
+
+    def _place(self, dlg):
+        try:
+            if dlg.isVisible():
+                place_clear_of(dlg, self.target)
+        except RuntimeError:                 # closed already
+            pass
+
+
+def _small_pixmap(img, max_w, max_h):
+    k = min(max_w / float(img.shape[1]), max_h / float(img.shape[0]), 1.0)
+    small = cv2.resize(img, (max(8, int(img.shape[1] * k)),
+                             max(8, int(img.shape[0] * k))),
+                       interpolation=cv2.INTER_AREA)
+    rgb = np.ascontiguousarray(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
+    qi = QImage(rgb.data, rgb.shape[1], rgb.shape[0], 3 * rgb.shape[1],
+                QImage.Format.Format_RGB888)
+    return QPixmap.fromImage(qi.copy())
+
+
+class NgRecoveryDialog(QDialog):
+    """The NG window, made for an operator who only reads:
+      left : the picture, big and zoomable - RESULT (boxes), RAW (as the
+             camera took it) or WHAT WE LOOK FOR (the master picture with
+             the objects and the template marked).  The checked area is a
+             thick yellow box.
+      right: every NG area in plain words, what went wrong, what the program
+             looks for, the allowed distance (when that is the problem) and
+             the buttons - the recommended one first.
+    choice = ("fix", scene, area, action) | ("limit", scene, area, key,
+    value) | ("finish",).  timed_out: the countdown reported NG by itself."""
+
+    VIEWS = (("proc", "Result (with boxes)"), ("raw", "Raw picture"),
+             ("ref", "What we look for"))
+
+    def __init__(self, parent, flow, rows, part_ok, n_ops, timeout_s=0,
+                 selected=None):
         super().__init__(parent)
-        self.setWindowTitle("NG - add master / template")
+        self.flow = flow
+        self.rows = rows
+        self.setWindowTitle("NG - check the part")
         self.setModal(True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setMinimumWidth(min(820, fit_size(820, 400)[0]))
+        scr = (parent.screen() if parent is not None else None) or \
+            QApplication.primaryScreen()
+        ag = scr.availableGeometry()
+        self.resize(int(ag.width() * 0.94), int(ag.height() * 0.92))
+        self.move(ag.x() + int(ag.width() * 0.03),
+                  ag.y() + int(ag.height() * 0.04))
         _premium_dialog(self, C_NG)
         self.choice = ("finish",)
         self.timed_out = False
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-        lay.addWidget(_band("PART NG — ADD MASTER / TEMPLATE?" if not n_ops
-                            else "STILL NG — ANOTHER CHANGE?", C_NG, pt=18))
-        inner = QVBoxLayout()
-        inner.setContentsMargins(22, 16, 22, 16)
-        inner.setSpacing(10)
-        t = QLabel("The part was NG twice. An authorised operator (ID badge "
-                   "+ password) can add a master or a template; the part is "
-                   "then checked again." if not n_ops else
-                   f"{n_ops} change(s) made. These areas are still NG.")
-        t.setWordWrap(True)
-        t.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;")
-        inner.addWidget(t)
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(8)
-        for i, r in enumerate(rows):
-            name = QLabel(f"{r['scene']} / {r['area']}")
-            name.setStyleSheet(f"color: {C_TEXT}; font-size: 12pt;"
-                               " font-weight: 700;")
-            tech = QLabel(r["technique"]
-                          + (f"\n{r['reason']}" if r.get("reason") else ""))
-            tech.setWordWrap(True)
-            tech.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
-            grid.addWidget(name, i, 0)
-            grid.addWidget(tech, i, 1)
-            if r["actions"]:
-                b = QPushButton(ngr.ACTION_LABEL[r["actions"][0]])
-                apply_btn_color(b, C_ACCENT)
-                b.clicked.connect(lambda _=False, s=r["scene"], a=r["area"]:
-                                  self._pick(("fix", s, a)))
-            else:
-                b = QPushButton(r.get("why_not") or "Not possible here")
-                apply_btn_color(b, "#44444e")
-                b.setEnabled(False)
-            b.setMinimumHeight(42)
+        self.view_key = "proc"
+        self.sel = None
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(_band("PART NG - PLEASE CHECK" if not n_ops else
+                             f"STILL NG AFTER {n_ops} CHANGE(S)", C_NG, pt=18))
+        body = QHBoxLayout()
+        body.setContentsMargins(14, 10, 14, 6)
+        body.setSpacing(14)
+
+        # ---- left: the picture
+        left = QVBoxLayout()
+        left.setSpacing(6)
+        tabs = QHBoxLayout()
+        tabs.setSpacing(6)
+        self.view_btns = {}
+        for key, txt in self.VIEWS:
+            b = QPushButton(txt)
+            b.setCheckable(True)
+            b.setMinimumHeight(40)
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            grid.addWidget(b, i, 2)
-        grid.setColumnStretch(1, 1)
-        inner.addLayout(grid)
+            b.clicked.connect(lambda _=False, k=key: self._set_view(k))
+            tabs.addWidget(b, 1)
+            self.view_btns[key] = b
+        left.addLayout(tabs)
+        self.view_note = QLabel("")
+        self.view_note.setWordWrap(True)
+        self.view_note.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+        left.addWidget(self.view_note)
+        self.canvas = VideoCanvas(self)
+        self.canvas.setMinimumSize(480, 320)
+        self.canvas.installEventFilter(self)
+        left.addWidget(self.canvas, 1)
+        left.addWidget(zoom_controls(self, self.canvas))
+        body.addLayout(left, 3)
+
+        # ---- right: what is wrong + what to do
+        right_w = QWidget()
+        right_w.setObjectName("ngright")
+        right_w.setStyleSheet(f"QWidget#ngright {{ background: {C_PANEL}; }}")
+        right = QVBoxLayout(right_w)
+        right.setContentsMargins(12, 10, 12, 10)
+        right.setSpacing(8)
+        intro = QLabel("The part was NG two times.  Look at the picture.  If "
+                       "the part is GOOD, an allowed person can teach the "
+                       "program (ID badge + password).  If the part is really "
+                       "bad, press the grey button at the bottom.")
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {C_TEXT}; font-size: 11pt;")
+        right.addWidget(intro)
+        lt = QLabel("NG AREAS  (press one to see it)")
+        lt.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;"
+                         " font-weight: 700;")
+        right.addWidget(lt)
+        self.area_btns = []
+        for i, r in enumerate(rows):
+            b = QPushButton(f"{r['scene']} / {r['area']}")
+            b.setCheckable(True)
+            b.setMinimumHeight(38)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            b.clicked.connect(lambda _=False, j=i: self._select(j))
+            right.addWidget(b)
+            self.area_btns.append(b)
+        self.detail = QVBoxLayout()
+        self.detail.setSpacing(8)
+        holder = QWidget()
+        holder.setLayout(self.detail)
+        right.addWidget(holder)
+        right.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(right_w)
+        scroll.viewport().setStyleSheet(f"background: {C_PANEL};")
+        scroll.setStyleSheet(f"QScrollArea {{ background: {C_PANEL};"
+                             f" border: 1px solid {C_LINE};"
+                             " border-radius: 10px; }")
+        scroll.setMinimumWidth(420)
+        body.addWidget(scroll, 2)
+        root.addLayout(body, 1)
+
+        # ---- bottom
+        bot = QHBoxLayout()
+        bot.setContentsMargins(14, 4, 14, 12)
         self.count_lbl = QLabel("")
-        self.count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.count_lbl.setStyleSheet(f"color: {C_WARN}; font-size: 10pt;")
-        inner.addWidget(self.count_lbl)
-        bf = QPushButton(("Report NG and continue" if not part_ok else
-                          "Report result and continue"))
-        bf.setMinimumHeight(48)
+        self.count_lbl.setWordWrap(True)
+        self.count_lbl.setStyleSheet(f"color: {C_WARN}; font-size: 11pt;")
+        bot.addWidget(self.count_lbl, 1)
+        bf = QPushButton("The part is really bad - report NG and continue"
+                         if not part_ok else "Report the result and continue")
+        bf.setMinimumHeight(50)
         bf.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         apply_btn_color(bf, C_NEUTRAL)
-        bf.setStyleSheet(bf.styleSheet() + " QPushButton { font-size: 13pt; }")
+        bf.setStyleSheet(bf.styleSheet() + " QPushButton { font-size: 12pt;"
+                         " padding: 0 22px; }")
         bf.clicked.connect(lambda: self._pick(("finish",)))
-        inner.addWidget(bf)
-        lay.addLayout(inner)
+        bot.addWidget(bf)
+        root.addLayout(bot)
+
         self._left = int(timeout_s or 0)
         self._timer = QTimer(self)
         if self._left > 0:
             self._timer.timeout.connect(self._tick)
             self._timer.start(1000)
             self._tick(first=True)
+        start = 0
+        for i, r in enumerate(rows):
+            if (r["scene"], r["area"]) == selected:
+                start = i
+                break
+        else:                                  # first one that can be fixed
+            for i, r in enumerate(rows):
+                if r.get("actions") or (r.get("diag") or {}).get("limit"):
+                    start = i
+                    break
+        self._select(start, user=False)
+
+    # -- countdown: any use of the window stops it ---------------------------------
+    def _touch(self):
+        if self._timer.isActive():
+            self._timer.stop()
+            self.count_lbl.setText("")
+
+    def eventFilter(self, obj, ev):
+        if obj is self.canvas and ev.type() in (QEvent.Type.Wheel,
+                                                QEvent.Type.MouseButtonPress):
+            self._touch()
+        return False
 
     def _tick(self, first=False):
         if not first:
@@ -7740,8 +8106,197 @@ class NgRecoveryDialog(QDialog):
             self.timed_out = True
             self._pick(("finish",))
             return
-        self.count_lbl.setText(f"No answer: NG is reported by itself in "
+        self.count_lbl.setText(f"Nobody answers: NG is reported by itself in "
                                f"{self._left} s")
+
+    # -- picture -------------------------------------------------------------------
+    def _set_view(self, key, user=True):
+        if user:
+            self._touch()
+        r = self.rows[self.sel] if self.sel is not None else None
+        pics = self.flow.pictures(r) if r else {}
+        if pics.get(key) is None:
+            key = next((k for k, _ in self.VIEWS if pics.get(k) is not None),
+                       key)
+        self.view_key = key
+        for k, b in self.view_btns.items():
+            b.setChecked(k == key)
+            apply_btn_color(b, C_ACCENT if k == key else "#44444e")
+            b.setEnabled(pics.get(k) is not None)
+        notes = {"proc": "What the program found.  Yellow box = the area that "
+                         "is NG.  Green = OK, red = NG.",
+                 "raw": "The picture as the camera took it (nothing drawn). "
+                        "Yellow box = the area that is NG.",
+                 "ref": "The GOOD part the program learned: green boxes = "
+                        "the objects it must find, orange box = the "
+                        "template (what one object looks like)."}
+        self.view_note.setText(notes.get(key, ""))
+        img = pics.get(key)
+        self.canvas.fit()
+        if img is None:
+            self.canvas.show_message("No picture")
+        else:
+            self.canvas.show(img)
+
+    # -- one area ------------------------------------------------------------------
+    def _select(self, i, user=True):
+        if user:
+            self._touch()
+        self.sel = i
+        for j, b in enumerate(self.area_btns):
+            b.setChecked(j == i)
+            apply_btn_color(b, C_NG if j == i else "#44444e")
+        while self.detail.count():
+            it = self.detail.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.hide()                      # gone now, not only later
+                w.setParent(None)
+                w.deleteLater()
+        r = self.rows[i]
+        d = r.get("diag") or {}
+        self._head(f"{r['scene']} / {r['area']}",
+                   ngr.SIMPLE_TECH.get(r.get("method"), r["technique"]))
+        self._box("WHAT WENT WRONG", d.get("text") or r.get("reason") or
+                  "The check said NG.", C_NG)
+        n = r.get("n_objects", 0)
+        look = (f"Inside the YELLOW box the program looks for {n} object(s) "
+                "like the ORANGE box in 'What we look for'."
+                if n else "Inside the YELLOW box the program looks for the "
+                          "object of 'What we look for'.")
+        if r.get("inside"):
+            look += (f"  This area moves with object {r['inside'][1]} of "
+                     f"area '{r['inside'][0]}'.")
+        if r.get("inner"):
+            look += ("  Areas inside this one (checked again after a fix): "
+                     + ", ".join(r["inner"]) + ".")
+        self._box("WHAT THE PROGRAM LOOKS FOR", look, C_BLUE)
+        if r.get("templates"):
+            row = QHBoxLayout()
+            for t in r["templates"][:1]:
+                q = QLabel()
+                q.setPixmap(_small_pixmap(t, 110, 90))
+                q.setStyleSheet(f"border: 2px solid #ff8c00;")
+                row.addWidget(q)
+            row.addStretch()
+            w = QWidget()
+            w.setLayout(row)
+            self.detail.addWidget(w)
+        if d.get("kind") == "nested" and d.get("outer"):
+            j = next((k for k, x in enumerate(self.rows)
+                      if x["scene"] == r["scene"] and
+                      x["area"] == d["outer"]), None)
+            if j is not None:
+                b = QPushButton(f"Show area '{d['outer']}' (fix it first)")
+                apply_btn_color(b, C_WARN)
+                b.setMinimumHeight(44)
+                b.clicked.connect(lambda _=False, k=j: self._select(k))
+                self.detail.addWidget(b)
+        if d.get("limit") is not None:
+            self._limit_editor(r, d)
+        acts = list(r.get("actions") or [])
+        if acts:
+            t = QLabel("TEACH THE PROGRAM  (only if the part is GOOD)")
+            t.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;"
+                            " font-weight: 700; padding-top: 6px;")
+            self.detail.addWidget(t)
+        for k, act in enumerate(acts):
+            rec = k == 0 and len(acts) > 1
+            b = QPushButton(ngr.ACTION_LABEL[act]
+                            + ("   (recommended)" if rec else ""))
+            apply_btn_color(b, C_ACCENT if k == 0 else "#5c5f6e")
+            b.setMinimumHeight(48)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            b.setStyleSheet(b.styleSheet() + " QPushButton { font-size: 12pt; }")
+            b.clicked.connect(lambda _=False, a=act: self._pick(
+                ("fix", r["scene"], r["area"], a)))
+            self.detail.addWidget(b)
+            h = QLabel(ngr.ACTION_HELP.get(act, ""))
+            h.setWordWrap(True)
+            h.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;"
+                            " padding: 0 4px 4px 4px;")
+            self.detail.addWidget(h)
+        if not acts and d.get("limit") is None and d.get("kind") != "nested":
+            self._box("NOTHING TO CHANGE HERE", r.get("why_not") or
+                      "This NG cannot be fixed from here.", "#5c5f6e")
+        self._set_view(self.view_key if self.view_key else "proc", user=False)
+
+    def _head(self, title, sub):
+        t = QLabel(title)
+        t.setWordWrap(True)
+        t.setStyleSheet(f"color: {C_TEXT}; font-size: 15pt; font-weight: 800;")
+        self.detail.addWidget(t)
+        s = QLabel(sub)
+        s.setWordWrap(True)
+        s.setStyleSheet(f"color: {C_MUTED}; font-size: 10pt;")
+        self.detail.addWidget(s)
+
+    def _box(self, title, text, color):
+        f = QFrame()
+        f.setStyleSheet(f"QFrame {{ border: 2px solid {color};"
+                        " border-radius: 8px; } QLabel { border: none; }")
+        l = QVBoxLayout(f)
+        l.setContentsMargins(10, 6, 10, 8)
+        a = QLabel(title)
+        a.setStyleSheet(f"color: {color}; font-size: 9pt; font-weight: 800;")
+        b = QLabel(text)
+        b.setWordWrap(True)
+        b.setStyleSheet(f"color: {C_TEXT}; font-size: 11pt;")
+        l.addWidget(a)
+        l.addWidget(b)
+        self.detail.addWidget(f)
+
+    def _limit_editor(self, r, d):
+        f = QFrame()
+        f.setStyleSheet(f"QFrame {{ border: 2px solid {C_WARN};"
+                        " border-radius: 8px; } QLabel { border: none; }")
+        l = QVBoxLayout(f)
+        l.setContentsMargins(10, 6, 10, 10)
+        l.setSpacing(6)
+        what = {"pin_limit": "how far each object may be from its place",
+                "relation_limit": "how much the distance between objects may "
+                                  "change",
+                "scene_relation": "how much this area may move compared with "
+                                  "the other areas"}.get(d["limit_key"], "")
+        a = QLabel("ALLOWED DISTANCE  (pixels)")
+        a.setStyleSheet(f"color: {C_WARN}; font-size: 9pt; font-weight: 800;")
+        l.addWidget(a)
+        info = QLabel(f"Means: {what}.\nNow allowed: {d['limit']:g} px.   "
+                      f"This part is off by: {d['worst']:.0f} px.\nTo let "
+                      f"this part pass: at least {d['suggest']} px "
+                      f"(suggested).   You can choose {d['lo']} - {d['hi']} px.")
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color: {C_TEXT}; font-size: 10pt;")
+        l.addWidget(info)
+        row = QHBoxLayout()
+        sl = QSlider(Qt.Orientation.Horizontal)
+        sl.setRange(int(d["lo"]), int(d["hi"]))
+        sp = QSpinBox()
+        sp.setRange(int(d["lo"]), int(d["hi"]))
+        sp.setSuffix(" px")
+        sp.setMinimumWidth(110)
+        sp.setStyleSheet(f"background: {C_FIELD}; color: white;"
+                         " font-size: 13pt; padding: 4px;")
+        sl.valueChanged.connect(sp.setValue)
+        sp.valueChanged.connect(sl.setValue)
+        sl.valueChanged.connect(lambda _v: self._touch())
+        sp.setValue(int(d["suggest"]))
+        row.addWidget(sl, 1)
+        row.addWidget(sp)
+        l.addLayout(row)
+        warn = QLabel("A bigger number lets parts pass that are more out of "
+                      "place.  Only change it if this part is really GOOD.")
+        warn.setWordWrap(True)
+        warn.setStyleSheet(f"color: {C_MUTED}; font-size: 9pt;")
+        l.addWidget(warn)
+        b = QPushButton("Save new allowed distance")
+        apply_btn_color(b, C_WARN)
+        b.setMinimumHeight(44)
+        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        b.clicked.connect(lambda: self._pick(
+            ("limit", r["scene"], r["area"], d["limit_key"], int(sp.value()))))
+        l.addWidget(b)
+        self.detail.addWidget(f)
 
     def _pick(self, choice):
         self._timer.stop()
@@ -7871,6 +8426,9 @@ class NgRecoveryFlow:
         self.ops = 0
         self.last_operator = ""
         self.closed = False
+        self._placer = None             # keeps popups off the camera view
+        self._pics = {}                 # pictures shown in the NG window
+        self._selected = None           # area last looked at
         self._dlg = None
         self._wait = None
         self._touched = False
@@ -7895,11 +8453,21 @@ class NgRecoveryFlow:
             actions, why_not = [], "AI Image Processing not installed"
         elif method == METHOD_AI and not ai_available()[0]:
             actions, why_not = [], "AI detection not installed"
+        try:
+            loaded = self.s.parent_store.load_all_children(scene)
+            inner = sorted(descendants(loaded, area))
+        except Exception:
+            inner = []
         return {"scene": scene, "area": area, "cfg": cfg, "dir": p["dir"],
                 "config_path": p["config"], "method": method,
                 "technique": ngr.technique_label(method),
                 "actions": actions, "why_not": why_not,
-                "key": f"{self.s.head}/{scene}/{area}"}
+                "key": f"{self.s.head}/{scene}/{area}",
+                "inside": inside_of(cfg), "inner": inner,
+                # only the main template is shown to the operator
+                "templates": [t for t in data["templates"][:1]
+                              if t is not None],
+                "n_objects": len(cfg.get("matches") or [])}
 
     def rows(self):
         out = []
@@ -7911,11 +8479,49 @@ class NgRecoveryFlow:
                         else "-", "actions": [],
                         "why_not": "Not an area"}
             info["reason"] = res.get("reason", "")
+            g = self.R.get("geo", {}).get((scene, area)) or {}
+            try:
+                slim = get_scene_relation(self.s.parent_store,
+                                          scene)["limit"]
+            except Exception:
+                slim = None
+            info["diag"] = ngr.diagnose(g.get("diag"), slim)
             out.append(info)
         return out
 
     def fixable(self):
-        return any(r["actions"] for r in self.rows())
+        return any(r["actions"] or r["diag"].get("limit") is not None
+                   for r in self.rows())
+
+    # -- pictures for the NG window ---------------------------------------------
+    def pictures(self, row):
+        """{'proc', 'raw', 'ref'} for one NG area: the scene's result and
+        raw picture with the area in a yellow box, and the reference."""
+        key = (id(self.R), row["scene"], row["area"])
+        hit = self._pics.get(key)
+        if hit is not None:
+            return hit
+        views = self.R.get("views") or {}
+        sv = (views.get("scenes") or {}).get(row["scene"]) or {}
+        g = self.R.get("geo", {}).get((row["scene"], row["area"]))
+        label = f"NG: {row['scene']} / {row['area']}"
+        out = {"proc": None, "raw": None, "ref": None}
+        proc = sv.get("proc") if sv else views.get("result")
+        raw = sv.get("raw") if sv else views.get("camera")
+        if raw is not None:
+            out["raw"] = ngr.highlight_area(raw, g, label)
+        if proc is not None:
+            top = proc.shape[0] - raw.shape[0] if raw is not None else 0
+            out["proc"] = ngr.highlight_area(proc, g, label, top=max(0, top))
+        try:
+            cm = self.s.parent_store.get_child_manager(row["scene"])
+            out["ref"] = ngr.reference_picture(cm, row["area"])[0]
+        except Exception:
+            out["ref"] = None
+        if len(self._pics) > 40:
+            self._pics.clear()
+        self._pics[key] = out
+        return out
 
     # -- life cycle -----------------------------------------------------------
     def start(self):
@@ -7924,6 +8530,8 @@ class NgRecoveryFlow:
                    "part is reported when it closes")
         self.app.comm_log.add("EVT", f"NG recovery popup opened on model "
                                      f"'{self.s.head}' ({n} NG area(s))")
+        self._placer = _NgPlacer(self.s.canvas)
+        QApplication.instance().installEventFilter(self._placer)
         QTimer.singleShot(0, self._menu)
 
     def raise_popup(self):
@@ -7945,6 +8553,9 @@ class NgRecoveryFlow:
                                      f" {why}")
 
     def _close_dialogs(self):
+        if self._placer is not None:
+            QApplication.instance().removeEventFilter(self._placer)
+            self._placer = None
         if self._dlg is not None:
             try:
                 self._dlg.reject()
@@ -8000,29 +8611,37 @@ class NgRecoveryFlow:
         if self.R["all_ok"]:
             return self._finish("all areas OK")
         rows = self.rows()
-        if not any(r["actions"] for r in rows):
+        if not any(r["actions"] or r["diag"].get("limit") is not None
+                   for r in rows):
             return self._finish("nothing more can be added")
         timeout = (self.settings["popup_timeout_s"]
                    if not self._touched else 0)
-        dlg = NgRecoveryDialog(self.s, rows, self.R["all_ok"], self.ops,
-                               timeout)
+        dlg = NgRecoveryDialog(self.s, self, rows, self.R["all_ok"],
+                               self.ops, timeout, selected=self._selected)
         self._dlg = dlg
         dlg.exec()
         self._dlg = None
         if self.closed:
             return
         ch = dlg.choice
-        if ch[0] != "fix":
+        if ch[0] not in ("fix", "limit"):
             return self._finish("no answer in time" if dlg.timed_out else
                                 ("skipped by the operator" if not self.ops
                                  else "operator finished"))
         self._touched = True
+        self._selected = (ch[1], ch[2])
         info = self._area(ch[1], ch[2])
-        if info is None or not info["actions"]:
+        if info is None:
             Message.warn(self.s, "CANNOT CHANGE THIS AREA",
-                         "Nothing can be added to this area.")
+                         "Nothing can be changed in this area.")
             return self._menu()
-        act = info["actions"][0]
+        if ch[0] == "limit":
+            return self._change_limit(info, ch[3], ch[4])
+        act = ch[3] if len(ch) > 3 else (info["actions"] or [None])[0]
+        if act not in info["actions"]:
+            Message.warn(self.s, "CANNOT CHANGE THIS AREA",
+                         "This cannot be added to this area.")
+            return self._menu()
         if act == "master":
             self._add_master(info)
         else:
@@ -8309,13 +8928,15 @@ class NgRecoveryFlow:
                          f"fail ({res['regression']})")
             Message.error(
                 self.s, "CHANGE NOT KEPT",
-                f"{where}: with this {ngr.ACTION_LABEL[op].lower()[4:]} the "
-                f"area no longer finds its own master part "
-                f"({res['regression']}).\nThe change was taken back.")
+                f"{where}: with this change ({ngr.ACTION_LABEL[op].lower()})"
+                " the area no longer passes its own GOOD master part "
+                f"({res['regression']}).\nThe change was taken back - "
+                "nothing was changed.")
             return self._menu()
         rep, stored, R2 = res["rep"], res["stored"], res["R2"]
+        trained = trained and op != "limit"
         train_status = ("OK" + ("" if stored else " (file not stored)")
-                        if trained else
+                        if trained else "not needed" if op == "limit" else
                         "rebuilt at recheck" if info["method"] == METHOD_AI
                         else "not needed")
         if R2 is not None and R2["results"]:
@@ -8350,6 +8971,49 @@ class NgRecoveryFlow:
             Message.ok(self.s, "AREA OK NOW", f"{where} is OK now.",
                        auto_ms=2500)
         return self._menu()
+
+    # -- allowed distance (pixel limit) -----------------------------------------
+    def _change_limit(self, info, key, value):
+        where = f"{info['scene']} / {info['area']}"
+        op_id = self._authorize(info, "limit")
+        if op_id is None:
+            return self._cancelled(info, "limit")
+        before = ngr.area_ok(self.R["results"], info["scene"], info["area"])
+        if key == "scene_relation":            # between areas: scene setting
+            old = get_scene_relation(self.s.parent_store,
+                                     info["scene"])["limit"]
+            try:
+                set_scene_relation(self.s.parent_store, info["scene"],
+                                   limit=float(value))
+            except OSError as e:
+                self._op_row(info, "limit", op_id, before, "-", None,
+                             "Failed", f"not saved: {e}")
+                Message.error(self.s, "NOT SAVED", str(e))
+                return self._menu()
+            details = (f"scene '{info['scene']}' distance between areas "
+                       f"{old:g} -> {value} px")
+            inspect = self._inspect_job()
+
+            def job():
+                return {"rep": None, "stored": None, "regression": None,
+                        "check": "", "R2": inspect(), "details": details}
+        else:
+            name = {"pin_limit": "allowed distance from the place",
+                    "relation_limit": "allowed change of distance between "
+                                      "objects"}.get(key, key)
+            box = {}
+
+            def apply_change():
+                old = ngr.set_area_value(info["config_path"], key,
+                                         float(value))
+                box["old"] = old
+                return (f"{name}: {old if old is not None else 'model value'}"
+                        f" -> {value} px")
+            job = self._change_job(info, apply_change, train=False)
+        self._run_bg("CHECKING", f"Saving the new allowed distance for {where}"
+                     " and checking the part again…", job,
+                     lambda res, err: self._after_change(
+                         info, "limit", op_id, before, res, err))
 
     def _op_row(self, info, op, op_id, before, training, final, status,
                 details):
@@ -8474,6 +9138,57 @@ class _Trend(QWidget):
                    Qt.AlignmentFlag.AlignRight, "latest")
 
 
+class _HourBars(QWidget):
+    """Parts per hour (today): green = good, red = bad, stacked."""
+    def __init__(self, per_hour):
+        super().__init__()
+        self.per_hour = per_hour          # {hour: [ok, ng]}
+        self.setMinimumHeight(170)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H = self.width(), self.height()
+        L, R, T, B = 30, 8, 10, 26
+        pw, ph = W - L - R, H - T - B
+        f = p.font()
+        f.setPointSize(8)
+        p.setFont(f)
+        if not self.per_hour:
+            p.setPen(QColor("#9aa0ad"))
+            p.drawText(QRectF(L, T, pw, ph), Qt.AlignmentFlag.AlignCenter,
+                       "no part finished today yet")
+            return
+        h0 = min(self.per_hour)
+        h1 = max(max(self.per_hour), h0 + 5)
+        hours = list(range(h0, h1 + 1))
+        top = max(sum(v) for v in self.per_hour.values()) or 1
+        step = max(1, int(math.ceil(top / 4.0)))
+        top = step * 4
+        for i in range(5):
+            y = T + ph * (1 - i / 4.0)
+            p.setPen(QPen(QColor("#ece9f2"), 1))
+            p.drawLine(int(L), int(y), int(W - R), int(y))
+            p.setPen(QColor("#9aa0ad"))
+            p.drawText(0, int(y) - 7, L - 6, 14, Qt.AlignmentFlag.AlignRight
+                       | Qt.AlignmentFlag.AlignVCenter, str(step * i))
+        bw = pw / float(len(hours))
+        for i, h in enumerate(hours):
+            ok, ng = self.per_hour.get(h, [0, 0])
+            x = L + i * bw + bw * 0.18
+            w = bw * 0.64
+            y_ok = T + ph * (1 - ok / float(top))
+            y_ng = T + ph * (1 - (ok + ng) / float(top))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#2f9e44"))
+            p.drawRect(QRectF(x, y_ok, w, T + ph - y_ok))
+            p.setBrush(QColor("#e03131"))
+            p.drawRect(QRectF(x, y_ng, w, y_ok - y_ng))
+            p.setPen(QColor("#6b7280"))
+            p.drawText(QRectF(x - 6, T + ph + 4, w + 12, 16),
+                       Qt.AlignmentFlag.AlignCenter, f"{h:02d}")
+
+
 _DASH_QSS = """
 QDialog { background: #f4f1f8; }
 QWidget { color: #2b2f3a; }
@@ -8485,27 +9200,46 @@ QScrollBar:vertical { background: transparent; width: 10px; }
 QScrollBar::handle:vertical { background: #d6d0e2; border-radius: 5px; }
 """
 
+_MES_WORD = {"sent": ("Sent", True), "failed": ("Failed", False),
+             "offline": ("No MES", None), "sending": ("Sending", None),
+             "off": ("MES off", None), "validation": ("Test part", None),
+             "not sent": ("Not sent", None)}
+
+
+def _secs_text(s):
+    if s is None:
+        return "-"
+    s = float(s)
+    return f"{s:.0f} s" if s < 90 else f"{int(s // 60)} min {int(s % 60)} s"
+
 
 class CycleDashboard(QDialog):
-    """One page with everything, in a light dashboard style: totals, yield
-    trend, OK/NG share, this / previous cycle, scene + area results and the
-    latest cycles."""
+    """Everything about this model on one page, in plain words: how many
+    parts, how many good / bad, today, speed, the most common problems, the
+    second check, MES, every scene and area, and the latest parts."""
     N_TREND = 40
 
     def __init__(self, hs):
         super().__init__(hs)
         self.hs = hs
         self.setWindowTitle(f"Dashboard - {hs.head}")
-        w, h = fit_size(1120, 740)
+        w, h = fit_size(1180, 780)
         self.resize(w, h)
         self.setStyleSheet(_DASH_QSS)
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 12, 14, 12)
         root.setSpacing(10)
         top = QHBoxLayout()
+        tc = QVBoxLayout()
+        tc.setSpacing(0)
         self.title = QLabel(f"Dashboard  -  {hs.head}")
         self.title.setStyleSheet("font-size: 16pt; font-weight: 800;")
-        top.addWidget(self.title, stretch=1)
+        tc.addWidget(self.title)
+        hint = QLabel("How this model is doing. Good = OK part, bad = NG "
+                      "part. It updates by itself every 2 seconds.")
+        hint.setStyleSheet("color: #8a90a0; font-size: 9pt;")
+        tc.addWidget(hint)
+        top.addLayout(tc, stretch=1)
         self.stamp = QLabel("")
         self.stamp.setStyleSheet("color: #8a90a0; font-size: 9pt;")
         top.addWidget(self.stamp)
@@ -8543,10 +9277,11 @@ class CycleDashboard(QDialog):
         lay.setContentsMargins(16, 12, 16, 14)
         lay.setSpacing(6)
         t = QLabel(title)
-        t.setStyleSheet("font-size: 10pt; font-weight: 700;")
+        t.setStyleSheet("font-size: 11pt; font-weight: 700;")
         lay.addWidget(t)
         if sub:
             s = QLabel(sub)
+            s.setWordWrap(True)
             s.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
             lay.addWidget(s)
         return f, lay
@@ -8554,7 +9289,7 @@ class CycleDashboard(QDialog):
     def _tile(self, label, value, note, c1, c2):
         f = QFrame()
         f.setObjectName("tile")
-        f.setMinimumHeight(96)
+        f.setMinimumHeight(92)
         f.setStyleSheet(
             "QFrame#tile { border-radius: 10px; background: qlineargradient("
             f"x1:0,y1:0,x2:1,y2:1, stop:0 {c1}, stop:1 {c2}); }}"
@@ -8563,10 +9298,11 @@ class CycleDashboard(QDialog):
         l.setContentsMargins(16, 10, 16, 10)
         l.setSpacing(0)
         k = QLabel(label)
-        k.setStyleSheet("font-size: 9pt;")
+        k.setStyleSheet("font-size: 9pt; font-weight: 700;")
         v = QLabel(str(value))
-        v.setStyleSheet("font-size: 24pt; font-weight: 800;")
+        v.setStyleSheet("font-size: 22pt; font-weight: 800;")
         n = QLabel(note)
+        n.setWordWrap(True)
         n.setStyleSheet("font-size: 8pt;")
         l.addWidget(k)
         l.addWidget(v)
@@ -8574,14 +9310,32 @@ class CycleDashboard(QDialog):
         return f
 
     @staticmethod
-    def _pill(text, ok):
+    def _pill(text, ok, width=70):
         col = {True: "#2f9e44", False: "#e03131", None: "#b8bcc8"}[ok]
         l = QLabel(text)
         l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        l.setFixedWidth(64)
+        l.setFixedWidth(width)
         l.setStyleSheet(f"background: {col}; color: white; font-size: 8pt;"
                         " font-weight: 700; padding: 2px 0; border-radius: 4px;")
         return l
+
+    def _row_widget(self, *items):
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(12)
+        for it, st in items:
+            lay.addWidget(it, stretch=st)
+        return w
+
+    @staticmethod
+    def _line(text, bold=False, muted=False, size=10):
+        q = QLabel(text)
+        q.setWordWrap(True)
+        q.setStyleSheet(f"font-size: {size}pt;"
+                        + (" font-weight: 700;" if bold else "")
+                        + (" color: #6b7280;" if muted else ""))
+        return q
 
     def _clear(self):
         while self.body.count():
@@ -8595,169 +9349,226 @@ class CycleDashboard(QDialog):
         if not hs._alive:
             self.close()
             return
-        c = hs.app.heads.get_counters(hs.head)
+        heads = hs.app.heads
+        c = heads.get_counters(hs.head)
         ok, ng = c["cycle"]["ok"], c["cycle"]["ng"]
         tot = ok + ng
         yld = f"{100.0 * ok / tot:.1f}%" if tot else "-"
-        hist = hs.app.heads.get_cycles(hs.head)
+        hist = heads.get_cycles(hs.head)
+        real = [r for r in hist if not r.get("validation")]
+        today = datetime.date.today().isoformat()
+        tod = [r for r in real if r.get("date") == today]
+        t_ok = sum(1 for r in tod if r.get("ok"))
+        t_ng = len(tod) - t_ok
+        secs = [float(r["seconds"]) for r in real[-50:]
+                if r.get("seconds") is not None]
+        avg = sum(secs) / len(secs) if secs else None
+        per_hour = {}
+        for r in tod:
+            try:
+                h = int(str(r.get("end") or r.get("time"))[:2])
+            except ValueError:
+                continue
+            per_hour.setdefault(h, [0, 0])[0 if r.get("ok") else 1] += 1
+        rech = heads.get_extra_counts(hs.head, "recheck")
+        mes = heads.get_extra_counts(hs.head, "mes")
         self.stamp.setText("updated " + datetime.datetime.now()
                            .strftime("%H:%M:%S"))
         self._clear()
 
-        # 1) four gradient tiles
-        tr = QHBoxLayout()
-        tr.setSpacing(10)
-        w = QWidget()
-        w.setLayout(tr)
-        tr.setContentsMargins(0, 0, 0, 0)
-        for args in (("CYCLES", tot, "all finished cycles", "#ec4899", "#f472b6"),
-                     ("OK", ok, "good parts", "#7c3aed", "#6366f1"),
-                     ("NG", ng, "bad parts", "#f59e0b", "#fb923c"),
-                     ("YIELD", yld, "OK share", "#0ea5e9", "#38bdf8")):
-            tr.addWidget(self._tile(*args), stretch=1)
-        self.body.addWidget(w)
+        # 1) all time
+        self.body.addWidget(self._line("ALL PARTS (since the counters were "
+                                       "last reset)", bold=True, size=9))
+        self.body.addWidget(self._row_widget(*[(self._tile(*a), 1) for a in (
+            ("PARTS CHECKED", tot, "every finished part", "#ec4899", "#f472b6"),
+            ("GOOD (OK)", ok, "parts that passed", "#2f9e44", "#51cf66"),
+            ("BAD (NG)", ng, "parts that failed", "#e03131", "#ff6b6b"),
+            ("GOOD RATE", yld, "good parts out of all parts", "#0ea5e9",
+             "#38bdf8"))]))
 
-        # 2) trend + donut
-        mid = QHBoxLayout()
-        mid.setSpacing(12)
-        mw = QWidget()
-        mw.setLayout(mid)
-        mid.setContentsMargins(0, 0, 0, 0)
-        card, lay = self._card("Yield trend",
-                               f"rolling OK share over the last "
-                               f"{self.N_TREND} cycles")
+        # 2) today
+        t_y = f"{100.0 * t_ok / len(tod):.0f}%" if tod else "-"
+        self.body.addWidget(self._line("TODAY", bold=True, size=9))
+        self.body.addWidget(self._row_widget(*[(self._tile(*a), 1) for a in (
+            ("CHECKED TODAY", len(tod), f"good rate today {t_y}",
+             "#7c3aed", "#6366f1"),
+            ("GOOD TODAY", t_ok, "passed today", "#2f9e44", "#51cf66"),
+            ("BAD TODAY", t_ng, "failed today", "#e03131", "#ff6b6b"),
+            ("TIME PER PART", _secs_text(avg),
+             "average of the last 50 parts (first to last scene)",
+             "#f59e0b", "#fb923c"))]))
+
+        # 3) trend + share + per hour
+        card1, lay = self._card("Good rate over the last parts",
+                                f"line = share of good parts over the last "
+                                f"{self.N_TREND} parts; dots: green good, "
+                                "red bad")
         lay.addWidget(_Trend([bool(r.get("ok")) for r in
-                              hist[-self.N_TREND:]]), stretch=1)
-        mid.addWidget(card, stretch=3)
-        card, lay = self._card("OK / NG share", "all finished cycles")
-        lay.addWidget(_Donut([(ok, "#7c3aed"), (ng, "#f59e0b")],
-                             yld, "yield"), stretch=1)
+                              real[-self.N_TREND:]]), stretch=1)
+        card2, lay = self._card("Good and bad", "all finished parts")
+        lay.addWidget(_Donut([(ok, "#2f9e44"), (ng, "#e03131")],
+                             yld, "good"), stretch=1)
         leg = QHBoxLayout()
-        for txt, col, val in (("OK", "#7c3aed", ok), ("NG", "#f59e0b", ng)):
-            l = QLabel(f"<span style='color:{col}; font-size:14pt;'>&#9679;"
-                       f"</span> <b>{val}</b> {txt}")
-            leg.addWidget(l)
+        for txt, col, val in (("good", "#2f9e44", ok), ("bad", "#e03131", ng)):
+            leg.addWidget(QLabel(f"<span style='color:{col}; font-size:14pt;'>"
+                                 f"&#9679;</span> <b>{val}</b> {txt}"))
         lay.addLayout(leg)
-        mid.addWidget(card, stretch=2)
-        self.body.addWidget(mw)
+        card3, lay = self._card("Parts per hour (today)",
+                                "green = good, red = bad")
+        lay.addWidget(_HourBars(per_hour), stretch=1)
+        self.body.addWidget(self._row_widget((card1, 3), (card2, 2),
+                                             (card3, 3)))
 
-        # 3) this / previous cycle
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        rw = QWidget()
-        rw.setLayout(row)
-        row.setContentsMargins(0, 0, 0, 0)
-        for title, rec in (("This cycle", hs._current_cycle_view()),
-                           ("Previous cycle", hs.prev_cycle)):
+        # 4) problems + second check / MES
+        card1, lay = self._card("Most common problems",
+                                "areas that failed most often (every check "
+                                "counts)")
+        bad = sorted(((v["ng"], v["ok"] + v["ng"], a)
+                      for a, v in c["areas"].items() if v.get("ng")),
+                     reverse=True)[:8]
+        if not bad:
+            lay.addWidget(self._line("No problems so far.", muted=True))
+        for n_ng, n_all, a in bad:
+            self._problem_row(lay, a, n_ng, n_all, bad[0][0])
+        lay.addStretch()
+        card2, lay = self._card("Second check and MES",
+                                "what happened after a first NG, and the "
+                                "uploads to MES")
+        saved, still = int(rech.get("saved", 0)), int(rech.get("still_ng", 0))
+        for txt in (
+                f"Second check made a part good:  <b>{saved}</b>  "
+                "(NG on the first picture, OK on the second)",
+                f"Still bad after the second check:  <b>{still}</b>",
+                f"Sent to MES:  <b>{int(mes.get('sent', 0))}</b>",
+                f"MES upload failed:  <b>{int(mes.get('failed', 0))}</b>",
+                f"MES not connected:  <b>{int(mes.get('offline', 0))}</b>"):
+            lay.addWidget(self._line(txt))
+        lay.addStretch()
+        self.body.addWidget(self._row_widget((card1, 3), (card2, 2)))
+
+        # 5) this / last part
+        cards = []
+        for title, rec in (("This part (now)", hs._current_cycle_view()),
+                           ("Last finished part", hs.prev_cycle)):
             card, lay = self._card(title)
             if rec:
                 self._cycle_rows(lay, rec)
             else:
-                lay.addWidget(QLabel("no cycle yet"))
+                lay.addWidget(self._line("no part yet", muted=True))
             lay.addStretch()
-            row.addWidget(card, stretch=1)
-        self.body.addWidget(rw)
+            cards.append((card, 1))
+        self.body.addWidget(self._row_widget(*cards))
 
-        # 4) scenes / areas yield bars
-        card, lay = self._card("Scenes and areas", "every run, OK share")
+        # 6) scenes / areas
+        card, lay = self._card("Every scene and area",
+                               "how often each one passed (every check "
+                               "counts, also re-runs)")
         if not c["scenes"]:
-            lay.addWidget(QLabel("no runs yet"))
-        for sc, v in sorted(c["scenes"].items()):
+            lay.addWidget(self._line("no checks yet", muted=True))
+        order = heads.list_parents(hs.head)
+        for sc, v in sorted(c["scenes"].items(), key=lambda kv: (
+                order.index(kv[0]) if kv[0] in order else 999, kv[0])):
             self._perf_row(lay, sc, v, bold=True)
             for a, av in sorted(c["areas"].items()):
                 if a.startswith(sc + "/"):
                     self._perf_row(lay, a.split("/", 1)[1], av, indent=22)
         self.body.addWidget(card)
 
-        # 5) recent activity + table
-        bot = QHBoxLayout()
-        bot.setSpacing(12)
-        bw = QWidget()
-        bw.setLayout(bot)
-        bot.setContentsMargins(0, 0, 0, 0)
-        recent = hist[-8:][::-1]
-        card, lay = self._card("Recent activity", "latest finished cycles")
-        if not recent:
-            lay.addWidget(QLabel("nothing yet"))
-        for r in recent:
-            line = QHBoxLayout()
-            dot = QLabel("●")
-            dot.setStyleSheet("color: "
-                              + ("#2f9e44" if r.get("ok") else "#e03131")
-                              + "; font-size: 14pt;")
-            line.addWidget(dot)
-            col = QVBoxLayout()
-            col.setSpacing(0)
-            a = QLabel(f"{r.get('serial') or 'no serial'}  "
-                       f"{'OK' if r.get('ok') else 'NG'}")
-            a.setStyleSheet("font-weight: 700; font-size: 9pt;")
-            a.setWordWrap(True)
-            b2 = QLabel(f"{r.get('date', '')} {r.get('time', '')}"
-                        + (f"  {r['operator']}" if r.get("operator") else ""))
-            b2.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
-            col.addWidget(a)
-            col.addWidget(b2)
-            line.addLayout(col, stretch=1)
-            lay.addLayout(line)
-        lay.addStretch()
-        bot.addWidget(card, stretch=2)
-
-        card, lay = self._card("Cycle table", "latest 12, newest first")
+        # 7) latest parts table
+        card, lay = self._card("Latest parts", "newest first (last 20)")
         head = QFrame()
         head.setStyleSheet("QFrame { background: #2f3a4c; border-radius: 4px; }"
                            " QLabel { color: white; font-size: 8pt;"
                            " font-weight: 700; }")
         hl = QHBoxLayout(head)
         hl.setContentsMargins(8, 4, 8, 4)
-        for txt, st in (("TIME", 2), ("SERIAL", 3), ("OPERATOR", 2),
-                        ("FAILED", 3), ("RESULT", 1)):
-            q = QLabel(txt)
-            hl.addWidget(q, stretch=st)
+        cols = (("DATE / TIME", 2), ("SERIAL", 3), ("OPERATOR", 2),
+                ("TIME TAKEN", 1), ("SECOND CHECK", 1), ("FAILED AREAS", 3),
+                ("MES", 1), ("RESULT", 1))
+        for txt, st in cols:
+            hl.addWidget(QLabel(txt), stretch=st)
         lay.addWidget(head)
         if not hist:
-            lay.addWidget(QLabel("no finished cycle yet"))
-        for r in hist[-12:][::-1]:
+            lay.addWidget(self._line("no finished part yet", muted=True))
+        for r in hist[-20:][::-1]:
             failed = [f"{sc}/{a}" for sc, ar in (r.get("scenes") or {}).items()
                       for a, v in ar.items() if v is False]
+            rc = []
+            if r.get("rechecked_ok"):
+                rc.append(f"{r['rechecked_ok']} saved")
+            if r.get("rechecked_ng"):
+                rc.append(f"{r['rechecked_ng']} still NG")
             line = QWidget()
             ll = QHBoxLayout(line)
             ll.setContentsMargins(8, 2, 8, 2)
-            cells = (f"{r.get('time', '')}", r.get("serial") or "-",
+            cells = (f"{r.get('date', '')[5:]} {r.get('time', '')}",
+                     (r.get("serial") or "-")
+                     + ("  (test)" if r.get("validation") else ""),
                      r.get("operator") or "-",
+                     _secs_text(r.get("seconds")),
+                     ", ".join(rc) or "-",
                      ", ".join(failed) or "-")
-            for txt, st in zip(cells, (2, 3, 2, 3)):
+            for txt, (_, st) in zip(cells, cols[:6]):
                 q = QLabel(txt)
                 q.setWordWrap(True)
                 q.setStyleSheet("font-size: 9pt;")
                 q.setSizePolicy(QSizePolicy.Policy.Ignored,
                                 QSizePolicy.Policy.Preferred)
                 ll.addWidget(q, stretch=st)
-            pill = self._pill("OK" if r.get("ok") else "NG",
-                              bool(r.get("ok")))
-            ll.addWidget(pill, stretch=1)
+            mw, mok = _MES_WORD.get(r.get("mes"), ("-", None))
+            ll.addWidget(self._pill(mw, mok, 64), stretch=1)
+            ll.addWidget(self._pill("OK" if r.get("ok") else "NG",
+                                    bool(r.get("ok")), 50), stretch=1)
             line.setStyleSheet("QWidget { border-bottom: 1px solid #f0edf5; }")
             lay.addWidget(line)
-        lay.addStretch()
-        bot.addWidget(card, stretch=5)
-        self.body.addWidget(bw)
+        self.body.addWidget(card)
         self.body.addStretch()
+
+    def _problem_row(self, lay, name, n_ng, n_all, most):
+        row = QHBoxLayout()
+        nm = QLabel(name)
+        nm.setMinimumWidth(150)
+        nm.setStyleSheet("font-size: 10pt; font-weight: 700;")
+        row.addWidget(nm)
+        bar = QFrame()
+        bar.setFixedHeight(10)
+        stop = n_ng / float(most or 1)
+        bar.setStyleSheet(
+            "QFrame { border-radius: 5px; background: qlineargradient("
+            "x1:0,y1:0,x2:1,y2:0, "
+            f"stop:0 #e03131, stop:{max(0.0, stop - 0.001):.3f} #ff6b6b, "
+            f"stop:{min(1.0, stop):.3f} #f1ecf7, stop:1 #f1ecf7); }}")
+        row.addWidget(bar, stretch=1)
+        t = QLabel(f"failed {n_ng} of {n_all} checks "
+                   f"({100.0 * n_ng / n_all:.0f}%)")
+        t.setMinimumWidth(190)
+        t.setStyleSheet("color: #6b7280; font-size: 9pt;")
+        row.addWidget(t)
+        lay.addLayout(row)
 
     def _cycle_rows(self, lay, rec):
         ok = rec.get("ok")
         word = ("running" if rec.get("running") and ok is None
                 else "OK" if ok else "NG" if ok is False else "waiting")
         head = QHBoxLayout()
-        who = (rec.get("serial") or "no serial")
-        t = QLabel(who)
+        t = QLabel(rec.get("serial") or "no serial")
         t.setWordWrap(True)
         t.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         t.setStyleSheet("font-weight: 700; font-size: 10pt;")
         head.addWidget(t, stretch=1)
         head.addWidget(self._pill(word.upper(), ok))
         lay.addLayout(head)
-        sub = "  ".join(x for x in (rec.get("operator"), rec.get("time")) if x)
-        if sub:
-            s = QLabel(sub)
+        bits = [x for x in (rec.get("operator") and
+                            f"operator {rec['operator']}",
+                            rec.get("time") and f"started {rec['time']}",
+                            rec.get("seconds") is not None and
+                            f"took {_secs_text(rec['seconds'])}",
+                            rec.get("mes") and
+                            f"MES: {_MES_WORD.get(rec['mes'], (rec['mes'],))[0]}")
+                if x]
+        if bits:
+            s = QLabel("   ·   ".join(bits))
+            s.setWordWrap(True)
             s.setStyleSheet("color: #9aa0ad; font-size: 8pt;")
             lay.addWidget(s)
         for sc, areas in sorted((rec.get("scenes") or {}).items()):
@@ -8770,7 +9581,7 @@ class CycleDashboard(QDialog):
             n1.setStyleSheet("font-weight: 700; font-size: 9pt;")
             r1.addWidget(n1, stretch=1)
             r1.addWidget(self._pill("OK" if sok else "NG" if sok is False
-                                    else "-", sok))
+                                    else "not yet", sok))
             lay.addLayout(r1)
             for a, v in sorted(areas.items()):
                 r2 = QHBoxLayout()
@@ -8779,7 +9590,7 @@ class CycleDashboard(QDialog):
                 n2.setStyleSheet("color: #6b7280; font-size: 8pt;")
                 r2.addWidget(n2, stretch=1)
                 r2.addWidget(self._pill("OK" if v else "NG" if v is False
-                                        else "-", v))
+                                        else "not yet", v))
                 lay.addLayout(r2)
 
     def _perf_row(self, lay, name, v, indent=0, bold=False):
@@ -8799,11 +9610,12 @@ class CycleDashboard(QDialog):
         bar.setStyleSheet(
             "QFrame { border-radius: 5px; background: qlineargradient("
             "x1:0,y1:0,x2:1,y2:0, "
-            f"stop:0 #7c3aed, stop:{max(0.0, stop - 0.001):.3f} #ec4899, "
+            f"stop:0 #2f9e44, stop:{max(0.0, stop - 0.001):.3f} #51cf66, "
             f"stop:{stop:.3f} #f1ecf7, stop:1 #f1ecf7); }}")
         row.addWidget(bar, stretch=1)
-        t = QLabel(f"OK {v['ok']}   NG {v['ng']}   {pct:.0f}%" if n else "-")
-        t.setMinimumWidth(150)
+        t = QLabel(f"good {v['ok']}   bad {v['ng']}   {pct:.0f}% good"
+                   if n else "-")
+        t.setMinimumWidth(170)
         t.setStyleSheet("color: #6b7280; font-size: 9pt;")
         row.addWidget(t)
         lay.addLayout(row)
@@ -9197,6 +10009,11 @@ class CommScreen(BaseScreen):
             self.form_vars["WARN_PREFIX"] = self._add_field(
                 f, "Warning message starts with:", d["events"].get("WARN_PREFIX", ""),
                 "e.g. warning  -> shows a WARNING popup with the text")
+            self.form_vars["MES_FAIL"] = self._add_field(
+                f, "MES upload failed signal:", d["events"].get("MES_FAIL", ""),
+                "we SEND this instead of the last scene's result when the\n"
+                "part could not be uploaded to MES (MES on and connected).\n"
+                "Empty: the result is sent as usual.")
             note("In every popup the operator can press  Go back to models  or\n"
                  "Continue.  Continue - or no answer for 10 seconds - sends\n"
                  "this model's Select signal back to the client.\n"
